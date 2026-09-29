@@ -155,7 +155,8 @@ function hkPaint() {
   const edits = editSet(() => bar.paint());
   const bar = editBar(edits, {
     onApply: async (b) => {
-      await applyActions(edits, b);
+      // POSITIONAL writes: after one refusal the rest would hit the wrong part.
+      await applyActions(edits, b, { stopOnFail: true, stoppedText: (n) => t("hookui.notSent", { n }) });
       HK_OPS = [];
       HK_COMPARE_DATA = null;
       await hkReload();
@@ -383,8 +384,29 @@ function gateCard(show, cat) {
   const row = el("div", "row-actions");
   row.append(chip(show.enabled ? t("hookui.on") : t("hookui.off"), show.enabled ? "ok" : null));
   if (show.saved) row.append(chip(t("hookui.saved"), null));
-  c.append(row);
-  c.append(el("div", "note", show.enabled ? t("hookui.gateOnNote") : t("hookui.gateOffNote")));
+  // ON IS NOT "SHOWING". The installed hook can be a different ORC, or it
+  // fell back to the built-in lines; the CLI says which, and the fix.
+  const h = show.hook;
+  if (show.enabled && h && (!h.match || h.fallback)) {
+    row.append(chip(t("hookui.notInTerminal"), "bad"));
+    c.append(row);
+    let s = t("hookui.hookSkew", { version: h.version || "?", cli: h.cli_version || "?" });
+    if (h.fallback) s += " " + t("hookui.hookFallback", { finding: h.fallback.finding || "" });
+    c.append(el("div", "note note-warn", s));
+    if (h.fix) {
+      // Same row as the global-install banner: command, then Copy.
+      const fx = el("div", "banner-fix");
+      fx.append(el("code", "action-cmd", h.fix));
+      const cp = el("button", "btn btn-ghost btn-sm", t("common.copy"));
+      cp.type = "button";
+      cp.addEventListener("click", () => copy(h.fix, t("common.copied")));
+      fx.append(cp);
+      c.append(fx);
+    }
+  } else {
+    c.append(row);
+    c.append(el("div", "note", show.enabled ? t("hookui.gateOnNote") : t("hookui.gateOffNote")));
+  }
 
   const b = el("button", "btn btn-sm" + (show.enabled ? " btn-ghost" : " btn-primary"),
     show.enabled ? t("hookui.turnOff") : t("hookui.turnOn"));
@@ -910,6 +932,8 @@ function chipEl(item, line, plan, cat) {
 // no rendered sample from the CLI yet, so it borrows its component's default —
 // which is exactly what it will render as until somebody changes its shape.
 function chipSample(item, comp) {
+  // Nothing staged: the CLI's own render of THIS item with its saved design.
+  if (Object.keys(item.over).length === 0 && item.src && item.src.sample) return item.src.sample;
   if (!comp) return item.type;
   const render = item.over.render || (item.src ? item.src.render : (comp.defaults && comp.defaults.render) || comp.renderers[0]);
   const s = comp.previews ? comp.previews[render] : null;
@@ -1216,7 +1240,14 @@ function editModal(item0, line0, comp, cat) {
   // catalogue, the colour set or the file. A control that cannot tell those
   // apart cannot say what it is about to change.
   const mine = (field) => field in item.over || !!(item.src && item.src.authored && field in item.src.authored);
-  const stage = (field, value, label) => hkOp({ op: "set", ref, field, value, label });
+  // An emptied box, a "shared" pick: the write DELETES the key (inherit), so
+  // the pending list says that instead of "set to nothing".
+  const cleared = (v) => v === "" || v === null || v === cat.inherit_token;
+  const stage = (field, value, label) =>
+    hkOp({ op: "set", ref, field, value, label: cleared(value) ? t("hookui.clearChange", { id: comp.id, field }) : label });
+  // The leading "shared" option: on while the field is not the user's own.
+  const shared = (field, value) => ({ label: t("hookui.shared"), value, on: !mine(field) || cleared(val(field, null)) });
+  const own = (field) => (shared(field).on ? null : val(field, null));
   // A field name, plus a mark when the value is the user's own.
   const fieldName = (name, field) => (mine(field) ? name + " \u2022" : name);
 
@@ -1319,8 +1350,8 @@ function editModal(item0, line0, comp, cat) {
     pane.append(labelled(fieldName(t("hookui.after"), "suffix"), gated("suffix", textField(val("suffix", ""), (v) => stage("suffix", v, t("hookui.afterChange", { id: comp.id, v })))), t("hookui.afterAbout")));
 
     pane.append(sectionHead(t("hookui.colour"), t("hookui.colourAbout")));
-    pane.append(labelled(fieldName(t("hookui.labelColour"), "label_color"), pickRow(cat.colors, val("label_color", null), (v) => stage("label_color", v, t("hookui.colourChange", { id: comp.id, v }))), t("hookui.labelColourAbout")));
-    pane.append(labelled(fieldName(t("hookui.valueColour"), "value_color"), pickRow(cat.colors, val("value_color", null), (v) => stage("value_color", v, t("hookui.colourChange", { id: comp.id, v }))), t("hookui.valueColourAbout")));
+    pane.append(labelled(fieldName(t("hookui.labelColour"), "label_color"), pickRow(cat.colors, own("label_color"), (v) => stage("label_color", v, t("hookui.colourChange", { id: comp.id, v })), shared("label_color", cat.inherit_token)), t("hookui.labelColourAbout")));
+    pane.append(labelled(fieldName(t("hookui.valueColour"), "value_color"), pickRow(cat.colors, own("value_color"), (v) => stage("value_color", v, t("hookui.colourChange", { id: comp.id, v })), shared("value_color", cat.inherit_token)), t("hookui.valueColourAbout")));
     if (comp.bounded)
       pane.append(labelled(fieldName(t("hookui.ramp"), "ramp"), pickRow(Object.keys(cat.ramps), val("ramp", null), (v) => stage("ramp", v, t("hookui.rampChange", { id: comp.id, v }))), t("hookui.rampAbout")));
     // R3, AT THE CONTROL, at the moment the choice is made - never in a
@@ -1329,7 +1360,7 @@ function editModal(item0, line0, comp, cat) {
 
     // "Weight", never "font size". A terminal owns its font, and a picker that
     // did nothing would be worse than not offering one.
-    pane.append(labelled(fieldName(t("hookui.emphasis"), "emphasis"), pickRow((cat.emphasis || []).filter((e) => !(cat.refused_emphasis || []).includes(e)), (val("emphasis", []) || [])[0], (v) => stage("emphasis", v, t("hookui.emphasisChange", { id: comp.id, v }))), t("hookui.emphasisAbout")));
+    pane.append(labelled(fieldName(t("hookui.emphasis"), "emphasis"), pickRow((cat.emphasis || []).filter((e) => !(cat.refused_emphasis || []).includes(e)), shared("emphasis").on ? null : (val("emphasis", []) || [])[0], (v) => stage("emphasis", v, t("hookui.emphasisChange", { id: comp.id, v })), shared("emphasis", "")), t("hookui.emphasisAbout")));
     pane.append(el("div", "note", t("hookui.fontWhy")));
 
     if (comp.bounded || (comp.defaults && comp.defaults.format)) {
@@ -1496,8 +1527,16 @@ function labelled(name, node, about) {
 
 // A row of options. The VALUES are the CLI's and are printed verbatim — a
 // translated renderer name is a renderer that does not exist.
-function pickRow(options, current, onPick) {
+// `lead` ({label, value, on}) is an optional first button that is not a CLI
+// value by name — the "shared" pick, whose value is the CLI's inherit token.
+function pickRow(options, current, onPick, lead) {
   const row = el("div", "hk-picks");
+  if (lead) {
+    const b = el("button", "hk-pick" + (lead.on ? " hk-pick-on" : ""), lead.label);
+    b.type = "button";
+    b.addEventListener("click", () => onPick(lead.value));
+    row.append(b);
+  }
   for (const o of options || []) {
     const b = el("button", "hk-pick" + (String(current) === String(o) ? " hk-pick-on" : ""), String(o));
     b.type = "button";

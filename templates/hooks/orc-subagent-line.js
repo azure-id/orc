@@ -151,7 +151,7 @@ function render(d, tasks) {
     let on = false;
     try {
       const cfg = fs.readFileSync(path.join(projectDir, ".claude", "orc.config.yaml"), "utf8");
-      on = /^[ \t]*subagent_line_custom:[ \t]*["']?on["']?[ \t]*\r?$/m.test(cfg);
+      on = /^[ \t]*subagent_line_custom:[ \t]*["']?on["']?[ \t]*(?:#.*)?\r?$/m.test(cfg);
     } catch (_) {}
     if (!on) return null;
 
@@ -167,11 +167,12 @@ function render(d, tasks) {
     try {
       lock = JSON.parse(fs.readFileSync(path.join(orcDir, "subagent.lock.json"), "utf8"));
     } catch (_) {}
-    let installed = null;
+    // The catalogue hash decides when the install carries one.
+    let inst = {};
     try {
-      installed = JSON.parse(fs.readFileSync(path.join(__dirname, "orc-version.json"), "utf8")).version;
+      inst = JSON.parse(fs.readFileSync(path.join(__dirname, "orc-version.json"), "utf8")) || {};
     } catch (_) {}
-    if (!lock || (installed && lock.orc_version !== installed)) return null;
+    if (!lock || (inst.catalog_hash ? lock.catalog_hash !== inst.catalog_hash : (inst.version && lock.orc_version !== inst.version))) return null;
 
     const engine = require("./orc-statusline-render.js");
 
@@ -179,6 +180,7 @@ function render(d, tasks) {
     for (const b of lock.bindings || []) {
       if (!engine.BINDINGS[b]) return null;
     }
+    if (engine.OPS && !opsKnown(prog.lines, engine.OPS)) return null;
 
     // Rung 5. A subagent row is ONE line by construction — Claude Code renders
     // one row per task — so the board's three-line shape does not apply and the
@@ -202,7 +204,7 @@ function render(d, tasks) {
             payload: d,
             ledger: {},
             scan: {},
-            derived: { verdict: null, reasons: [], version: installed },
+            derived: { verdict: null, reasons: [], version: inst.version || null },
             task,
             now,
             cols: Number(process.env.COLUMNS) || 0,
@@ -219,4 +221,19 @@ function render(d, tasks) {
   } catch (_) {
     return null;
   }
+}
+
+// Every compiled op must be one the engine walks. A plain stack, no copies.
+function opsKnown(lines, OPS) {
+  const st = [];
+  for (const l of lines || []) st.push(l.ops || []);
+  while (st.length) {
+    const list = st.pop();
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      if (!o || !OPS[o.op]) return false;
+      if (o.children) st.push(o.children);
+    }
+  }
+  return true;
 }

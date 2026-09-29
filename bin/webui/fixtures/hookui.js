@@ -83,6 +83,7 @@ const components = {
   schema: 1,
   catalog_hash: "b7c1d2e3f4a5968708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f",
   count: 6,
+  inherit_token: "inherit",
   groups: { A: "Session and tier", B: "Quota and spend", D: "Knowledge", H: "Project and VCS" },
   components: [
     {
@@ -323,6 +324,7 @@ const subComponents = {
   schema: 1,
   catalog_hash: components.catalog_hash,
   count: 4,
+  inherit_token: components.inherit_token,
   board: "subagent",
   boards: ["status", "subagent"],
   config_key: "subagent_line_custom",
@@ -427,5 +429,12 @@ const subPresets = {
     { name: "agent-tier", board: "subagent", summary: "The downgrade check, made visible: the model and effort ORC actually got, per agent.", active: false, preview: "orc-executor-opus-5-low · claude-opus-5-5 · low · " + amber("running") },
   ],
 };
+
+// v2.0.3 — the hook block (C7) and one `sample` per item: that item rendered
+// alone with its SAVED design. Both boards run this layout, so `match` is true.
+for (const s of [show, subShow]) {
+  s.hook = { path: ".claude/hooks/orc-statusline.js", version: "2.0.3", catalog_hash: components.catalog_hash, cli_version: "2.0.3", match: true, fallback: null, fix: null };
+  for (const l of s.lines) for (const it of l.items) it.sample = it.label ? dim(it.label + " ") + it.type : it.type;
+}
 
 module.exports = { show, components, presets, preview, explain, subShow, subComponents, subPresets };

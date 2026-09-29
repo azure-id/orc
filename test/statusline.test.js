@@ -681,7 +681,8 @@ test("statusline: the hook falls back — every gate rung, and none of them thro
     // Rung 3 — a lock from another version.
     const lockPath = path.join(orc, "statusline.lock.json");
     const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
-    fs.writeFileSync(lockPath, JSON.stringify(Object.assign({}, lock, { orc_version: "0.0.1" })));
+    // Stale now means a different catalogue hash; a version-only change with the same catalogue is not stale.
+    fs.writeFileSync(lockPath, JSON.stringify(Object.assign({}, lock, { orc_version: "0.0.1", catalog_hash: "x" })));
     r = runHook(claudeDir, "orc-statusline.js", payload);
     assert.strictEqual(r.status, 0, "a stale lock never throws");
     assert.match(r.stdout, /ORC v/, "it fell back to the shipped lines");

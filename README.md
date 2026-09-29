@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.0.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.3-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v2.0.2** · updated 28-09-2026 · [full changelog](CHANGELOG.md)
+**Latest: v2.0.3** · updated 30-09-2026 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -730,25 +730,27 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v2.0.2 — the lanes record what you answered, and the reviewer always gets the card _(2026-09-28)_
+### v2.0.3 — the status line you designed is the status line you see _(2026-09-30)_
 
-**A patch from the live evals.** Habits now really work in a live run, and the reviewer
-always gets its card:
+**A patch for `orc ui` ▸ CLI Hook Interface.** The panel said "Your lines are showing",
+but the terminal showed ORC's built-in lines. Now:
 
-- **Your answers are recorded correctly.** `orc trace write` checks every answer as it
-  arrives and hands a wrong one back with the right ids. At the end of a run it names
-  any question nobody recorded.
-- **The reviewer always gets the gotcha card.** A hook hands it to every reviewer,
-  verifier and judge, so a lane that forgets it cannot lose it.
-- **A run that writes no trace is stopped once** and told how to fix it.
-- **`/orc-quick` always takes the undo snapshot.**
-- **The compact rules card is on by default for `/orc-mini` and `/orc-fast`** (eval E4 passed).
+- **The hook checks the parts, not the version number.** A different ORC version with
+  the same parts renders your layout, and `orc update` recompiles your layout for you.
+- **The panel tells you when your terminal does not show your layout**, and gives the
+  command that fixes it. `orc doctor` says the same.
+- **Every setting applies.** You can clear a field, pick the "shared" colour, swap a
+  part to one with other shapes, and put your own colour and weight on a bar. Apply
+  stops at the first refused change.
+- **Six parts drew the wrong text** (`api-time`, `wall-time`, `clock`, `pill`, `effort`
+  dots, `lines-added`). They are correct now.
 
 **What you have to do:** `orc update`.
 
 <details>
-<summary><strong>Earlier releases</strong> — 124 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 125 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.0.2** — the lanes record what you answered, and the reviewer always gets the card · _2026-09-28_
 - **v2.0.1** — the trace keeps the gate name, and the lanes find the habits rule · _2026-09-27_
 - **v2.0.0** — the coding lanes remember what you fixed and how you work · _2026-09-27_
 - **v1.9.2** — the code graph gets its own tab, and Opus 5 becomes Opus 5.5 · _2026-09-23_

@@ -528,7 +528,11 @@ const WRITES = {
       ["min_width", "--min-width"], ["min_cols", "--min-cols"],
       ["max_cols", "--max-cols"], ["priority", "--priority"],
     ]) {
-      if (b[k] !== undefined && b[k] !== null && b[k] !== "") argv.push(f, String(b[k]));
+      // An absent key sends nothing; a PRESENT "" or null sends `<flag> ""`,
+      // which the CLI reads as "delete the key" (inherit). Dropping it made a
+      // clear "succeed" while it changed nothing.
+      if (b[k] === undefined) continue;
+      argv.push(f, b[k] === null ? "" : String(b[k]));
     }
     if (b.draw_empty) argv.push("--draw-empty");
     return argv.concat(slBoard(b));

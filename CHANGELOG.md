@@ -10,6 +10,80 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v2.0.3 — the status line you designed is the status line you see _(2026-09-30)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+A patch for `orc ui` ▸ CLI Hook Interface. You designed a status line, the panel said
+"Your lines are showing", and the terminal showed ORC's built-in lines. Some settings
+also did nothing when you applied them. Each fix is below.
+
+**Why your design fell back to the built-in lines**
+
+- **The hook compared version numbers, not the parts it can draw.** It refused a
+  compiled layout when the ORC version that compiled it was not the version of the
+  installed hooks. A CLI one patch newer than the hooks, or any upgrade, sent the bar
+  back to the built-in lines. Now `orc init` and `orc update` write `catalog_hash` into
+  `hooks/orc-version.json`, and the hook compares that hash with the lock. A different
+  version with the same parts renders your layout. An install with no hash keeps the
+  old version check.
+- **`orc update` recompiles your layout.** Before, nothing recompiled it after an
+  upgrade. Both boards are recompiled when their layout exists and validates. A layout
+  that does not validate is not touched, and the output says so.
+- **The panel tells you when your terminal does not show your layout.** `statusline
+  show --json` now carries `hook` (the installed hook, its version, whether it matches,
+  the recorded fallback and the fix). The status card shows "NOT IN YOUR TERMINAL" and
+  the command to copy (`orc update`, `orc update --global` or `orc statusline compile`).
+  `orc doctor` reports the same as `statusline-hook-skew`, with `fix_command`.
+- **A good render and a compile both clear the old fallback record**, so `orc doctor`
+  does not report a problem that is already gone.
+- **`statusline_custom: on  # a comment` now arms the layout** (and the same for
+  `subagent_line_custom`).
+- **A compiled op the hook does not know** falls back as `statusline-layout-skew`.
+
+**Settings that did nothing**
+
+- **You can clear a field.** An empty Name, Before, After or number sets the field back
+  to the shared value, and the colour and weight pickers have a "shared" option
+  (`--value-color inherit`). Before, the write said "ok" and changed nothing.
+- **A value that starts with `-` is kept** (for example a `-` prefix).
+- **Change part (swap) works** when the old shape does not fit the new part. The CLI
+  drops the old shape, name and width instead of refusing the swap.
+- **Your own colour and weight reach a bar.** A default colour ramp won over the value
+  colour you set, and the emphasis was lost with it.
+- **`mono` has no colour.** A default ramp no longer colours a `mono` bar.
+- **Apply stops at the first refused change.** The writes use positions, so a write
+  after a refusal changed the wrong part. The message names the refused change and how
+  many changes were not sent.
+- **A chip on the board shows the part as you saved it** (your name, colours and theme),
+  not the catalogue sample.
+
+**Parts that drew the wrong text**
+
+- `api-time` and `wall-time` showed milliseconds as minutes (`api 960000m`).
+- `clock` showed a raw number (`1767225600000`). It shows `HH:mm` now.
+- `pill` put the value inside the brackets (`⟪ORC2.0.2⟫`). It is `⟪ORC⟫2.0.2` now.
+- `effort` with `dots` drew nothing.
+- `lines-added` showed `+ +412`.
+- Four part descriptions still said the limit is five parts. It is six.
+
+**Also in `orc ui`**
+
+- The global-install banner could show twice, and it offered the wrong command
+  (`orc wiki sync`). It shows once and offers `orc update --global`.
+
+**What you have to do:** `orc update`. Your layout is recompiled for you.
+
+---
+
 ### v2.0.2 — the lanes record what you answered, and the reviewer always gets the card _(2026-09-28)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

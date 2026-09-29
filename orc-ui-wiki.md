@@ -11,6 +11,7 @@ updated: 05-09-2026 (v1.4.1 — the hook board: staged ops, the three modals, dr
 updated: 05-09-2026 (v1.4.2 — the hook board: repaint not refetch, the live editor, six slots, the terminal preview)
 updated: 21-09-2026 (v1.9.0 — the lean lanes widened, and the panel needed no edit)
 updated: 27-09-2026 (v2.0.0 W7 — the Behaviour panel: habits, rhythm, gotchas, review quality, answer log)
+updated: 30-09-2026 (v2.0.3 — the hook board: the real hook state, clears, stop-on-refusal, saved chip samples, the banner race)
 -->
 
 > **LOCAL ONLY. Never `git add` this file.** It joins the untracked `*-plan.md`
@@ -820,6 +821,31 @@ template; that is what put a 250px ellipse on `.ex-tool`.
   for. The editor's own sample is labelled for what it is - `previews` is a
   per-renderer sample from the CLI's fixture, so it shows the SHAPE and never
   the words or numbers the part will carry at run time.
+
+### 4b.3 v2.0.3 — the panel said "showing" while the terminal showed the default
+
+- **ON IS NOT "SHOWING".** `gateCard` reads `show.hook` (`path · version ·
+  catalog_hash · cli_version · match · fallback · fix`, from `slHookInfo` in
+  `bin/cli.js`). When the board is on and `!match` or a `fallback` is recorded,
+  the card shows a `bad` chip "NOT IN YOUR TERMINAL", the reason, and
+  `show.hook.fix` in a `banner-fix` row (`code.action-cmd` + Copy). The panel
+  never decides WHICH fix — the CLI names it.
+- **A CLEAR IS A WRITE.** The API forwards `<flag> ""` for a body key that is
+  present with `""` or `null` (absent = nothing), and the CLI deletes that key,
+  so the field inherits again. The colour pickers lead with "shared", whose value
+  is `cat.inherit_token` (from `components --json` — the panel names no CLI word);
+  the emphasis "shared" stages `""`. `pickRow(options, current, onPick, lead)`.
+- **APPLY STOPS AT THE FIRST REFUSAL ON THIS BOARD.** `applyActions(edits,
+  button, { stopOnFail: true, stoppedText })` — the hook board's writes are
+  POSITIONAL, so a write after a refusal lands on the wrong part. Every other
+  panel keeps "a refused write never aborts the rest".
+- **A CHIP WITH NOTHING STAGED SHOWS `item.src.sample`** — the CLI's render of
+  that one item with its SAVED design. A staged chip still shows the renderer's
+  catalogue sample, and the preview still says the staged changes are not in it.
+- **`renderBanners` has a generation guard** (`bannerGen`), checked after EVERY
+  await, the update banner's too: the router calls it on each route, and two
+  quick routes appended the banner twice. The global banner copies the global
+  finding's own `fix_command`, never the first command of any finding.
 
 ### Test (v1.5.0) — the panel for the lane that runs the test
 

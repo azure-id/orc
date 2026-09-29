@@ -95,6 +95,10 @@ const BINDINGS = {
   "cost.usd": (c) => num(c.payload.cost && c.payload.cost.total_cost_usd),
   "cost.rate_usd_h": (c) => ratePerHour(c),
   "cost.wall_ms": (c) => num(c.payload.cost && c.payload.cost.total_duration_ms),
+  // Whole minutes, for the api-time / wall-time parts. A raw ms count read
+  // as minutes is `api 960000m`.
+  "cost.api_min": (c) => mins(num(c.payload.cost && c.payload.cost.total_api_duration_ms)),
+  "cost.wall_min": (c) => mins(num(c.payload.cost && c.payload.cost.total_duration_ms)),
   "cost.api_ms": (c) => num(c.payload.cost && c.payload.cost.total_api_duration_ms),
   "cost.api_ratio": (c) => ratioPct(num(c.payload.cost && c.payload.cost.total_api_duration_ms), num(c.payload.cost && c.payload.cost.total_duration_ms)),
   "cost.lines_added": (c) => num(c.payload.cost && c.payload.cost.total_lines_added),
@@ -468,6 +472,20 @@ function trendOf(series) {
 }
 
 // ── Number formatting (design-language.md §4) ───────────────────────────────
+
+function mins(ms) {
+  return ms == null ? null : Math.round(ms / 60000);
+}
+// A `tf` on a val op reads the number as epoch ms and prints LOCAL time. The
+// raw epoch is never a clock.
+function formatTime(ms, tf) {
+  const d = new Date(ms);
+  const p = (n) => (n < 10 ? "0" : "") + n;
+  const h = d.getHours();
+  if (tf === "h:mm a") return (h % 12 || 12) + ":" + p(d.getMinutes()) + " " + (h < 12 ? "am" : "pm");
+  const s = p(h) + ":" + p(d.getMinutes());
+  return tf === "HH:mm:ss" ? s + ":" + p(d.getSeconds()) : s;
+}
 function formatValue(v, f) {
   if (v == null) return null;
   if (typeof v !== "number") return String(v);
@@ -779,7 +797,7 @@ function walkItem(op, prog, c, o, errors) {
 function renderVal(op, prog, c, o) {
   const f = prog.formats[op.f] || {};
   const v = bind(op.b, c);
-  let s = formatValue(v, f);
+  let s = op.tf && typeof v === "number" && isFinite(v) ? formatTime(v, op.tf) : formatValue(v, f);
   // UNKNOWN IS NOT ZERO. An em dash keeps the slot and says "not measured"; a
   // `0` would say the thing was free. And it carries NEITHER the prefix nor the
   // suffix — `Dur —m` reads as "minus minutes".
@@ -805,7 +823,13 @@ function renderVal(op, prog, c, o) {
 
 function renderBar(op, prog, c, o) {
   const g = glyphs(prog.glyphsets[op.g] || {}, o.ascii);
-  const v = bind(op.b, c);
+  let v = bind(op.b, c);
+  // An ordered state (`o`) becomes its rank as a percent; an unlisted state
+  // is unknown. Without this `effort` on `dots` draws nothing for "high".
+  if (Array.isArray(op.o) && typeof v === "string") {
+    const i = op.o.indexOf(v);
+    v = i < 0 ? null : ((i + 1) / op.o.length) * 100;
+  }
   const w = op.w || 10;
   const sgr = op.r != null ? rampSgr(prog.ramps[op.r], v, o.color) : "";
   let cells;
@@ -910,8 +934,13 @@ function renderSeries(op, prog, c, o) {
   }
 }
 
+// Every op the walker handles. The hooks check a compiled program against
+// this before running it, so an op from a newer compiler is a skew, not a dash.
+const OPS = { lit: 1, sgr: 1, reset: 1, item: 1, cond: 1, link: 1, flex: 1, val: 1, bar: 1, state: 1, motif: 1, series: 1 };
+
 module.exports = {
   BINDINGS,
+  OPS,
   render,
   formatValue,
   barCells,

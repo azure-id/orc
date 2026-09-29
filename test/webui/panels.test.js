@@ -255,9 +255,14 @@ test("edits: nothing is written until Apply, on Settings and on Flow alike", () 
   // Apply runs the staged writes one at a time and never aborts the rest — the
   // remaining writes are independent, and stopping halfway leaves a state
   // nobody chose.
-  const apply = js.slice(js.indexOf("async function applyEdits"), js.indexOf("function settingRow"));
+  const apply = js.slice(js.indexOf("async function applyEdits"), js.indexOf("async function applyActions"));
   assert.match(apply, /for \(const \[key, e\] of list\)/, "writes run in staged order");
   assert.ok(!/break;/.test(apply), "a refused write must not abort the remaining ones");
+  // applyActions may stop early ONLY when the caller asks (positional writes).
+  const actions = js.slice(js.indexOf("async function applyActions"), js.indexOf("function settingRow"));
+  const breaks = actions.match(/break;/g) || [];
+  assert.strictEqual(breaks.length, 1, "applyActions has one break");
+  assert.match(actions, /if \(o\.stopOnFail[^{]*\{[^}]*break;/, "the break sits inside the stopOnFail branch");
   assert.match(apply, /failed\.push/, "every failure is reported by key");
 
   // Cancel is offered ONLY when there is something to cancel.
@@ -906,7 +911,7 @@ test("docs: the house rules are a TEXT CONFIG, edited as text and staged like ev
   // Nothing is written until Apply, and the pending list is NAMED.
   assert.match(js, /const edits = editSet\(\(\) => bar\.paint\(\)\);/);
   assert.match(js, /await applyActions\(edits, btn\);/);
-  assert.match(js, /function applyActions\(edits, button\)/);
+  assert.match(js, /function applyActions\(edits, button(, opts)?\)/);
   // Typing the text back to what it was CLEARS the edit rather than staging a
   // no-op — the v0.44.1 rule, applied to a textarea.
   assert.match(js, /if \(ta\.value === original\) edits\.drop\("doc-house-rules\.md"\);/);

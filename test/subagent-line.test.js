@@ -173,7 +173,8 @@ test("subagent line: every gate rung falls back to the default row, and none thr
     // A lock from another version.
     const lp = path.join(orc, "subagent.lock.json");
     const lock = JSON.parse(fs.readFileSync(lp, "utf8"));
-    fs.writeFileSync(lp, JSON.stringify(Object.assign({}, lock, { orc_version: "0.0.1" })));
+    // Stale now means a different catalogue hash; a version-only change with the same catalogue is not stale.
+    fs.writeFileSync(lp, JSON.stringify(Object.assign({}, lock, { orc_version: "0.0.1", catalog_hash: "x" })));
     let r = runHook(claudeDir, "orc-subagent-line.js", payload);
     assert.strictEqual(r.status, 0);
     assert.strictEqual(r.stdout.trim(), "", "a stale lock must fall back to the default row");

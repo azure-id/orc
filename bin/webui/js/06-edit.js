@@ -156,7 +156,12 @@ async function applyEdits(edits, routes, button) {
 // runs them one at a time in staged order. Every other rule of `applyEdits`
 // holds exactly: a refused write NEVER aborts the rest, and every failure is
 // reported by the key it was staged under.
-async function applyActions(edits, button) {
+// `opts.stopOnFail` is the exception: POSITIONAL writes (the hook board) were
+// each computed assuming every earlier one succeeded, so after a refusal the
+// rest would hit the wrong part. It stops at the first failure; the panel
+// passes `opts.stoppedText(n)` to name the n writes that were NOT sent.
+async function applyActions(edits, button, opts) {
+  const o = opts || {};
   const list = edits.entries();
   if (!list.length) return { ok: true, failed: [] };
   const label = button && button.textContent;
@@ -172,12 +177,17 @@ async function applyActions(edits, button) {
     } catch (err) {
       failed.push(`${key}: ${err.message}`);
     }
+    if (o.stopOnFail && failed.length) {
+      const left = list.length - list.findIndex((x) => x[0] === key) - 1;
+      if (left > 0) failed.push(o.stoppedText ? o.stoppedText(left) : String(left));
+      break;
+    }
   }
   if (button) {
     button.disabled = false;
     if (label) button.textContent = label;
   }
-  if (failed.length) toast(t("edits.someFailed", { n: failed.length }), "bad", failed.join("\n"));
+  if (failed.length) toast(t("edits.someFailed", { n: o.stopOnFail ? 1 : failed.length }), "bad", failed.join("\n"));
   else toast(t("edits.applied", { n: list.length }), "ok");
   return { ok: !failed.length, failed };
 }

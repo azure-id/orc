@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.0.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.3-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v2.0.2** · diperbarui 28-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v2.0.3** · diperbarui 30-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -786,25 +786,28 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v2.0.2 - lane mencatat jawaban Anda, dan reviewer selalu mendapat kartunya _(28-09-2026)_
+### v2.0.3 - status line yang Anda desain adalah status line yang Anda lihat _(30-09-2026)_
 
-**Patch dari eval langsung.** Habits sekarang benar-benar bekerja di run langsung, dan
-reviewer selalu mendapat kartunya:
+**Patch untuk `orc ui` ▸ CLI Hook Interface.** Panel berkata "Your lines are showing",
+tetapi terminal menampilkan baris bawaan ORC. Sekarang:
 
-- **Jawaban Anda dicatat dengan benar.** `orc trace write` memeriksa setiap jawaban saat
-  masuk dan mengembalikan jawaban yang salah bersama id yang benar. Di akhir run, ia
-  menyebut pertanyaan yang belum dicatat.
-- **Reviewer selalu mendapat kartu gotcha.** Sebuah hook memberikannya ke setiap
-  reviewer, verifier dan judge.
-- **Run yang tidak menulis trace dihentikan sekali** dan diberi tahu cara memperbaikinya.
-- **`/orc-quick` selalu mengambil snapshot undo.**
-- **Kartu aturan ringkas menyala secara default untuk `/orc-mini` dan `/orc-fast`** (eval E4 lulus).
+- **Hook memeriksa bagian-bagiannya, bukan nomor versi.** Versi ORC yang berbeda dengan
+  bagian yang sama tetap menampilkan layout Anda, dan `orc update` meng-compile ulang
+  layout Anda secara otomatis.
+- **Panel memberi tahu jika terminal Anda tidak menampilkan layout Anda**, dan memberi
+  perintah untuk memperbaikinya. `orc doctor` mengatakan hal yang sama.
+- **Setiap pengaturan diterapkan.** Anda bisa mengosongkan field, memilih warna
+  "shared", mengganti bagian ke bagian dengan bentuk lain, dan memberi warna serta
+  ketebalan sendiri pada bar. Apply berhenti di perubahan pertama yang ditolak.
+- **Enam bagian menampilkan teks yang salah** (`api-time`, `wall-time`, `clock`, `pill`,
+  `effort` dots, `lines-added`). Sekarang sudah benar.
 
 **Yang harus Anda lakukan:** `orc update`.
 
 <details>
-<summary><strong>Rilis sebelumnya</strong> — 124 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Rilis sebelumnya</strong> — 125 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.0.2** — the lanes record what you answered, and the reviewer always gets the card · _2026-09-28_
 - **v2.0.1** — the trace keeps the gate name, and the lanes find the habits rule · _2026-09-27_
 - **v2.0.0** — the coding lanes remember what you fixed and how you work · _2026-09-27_
 - **v1.9.2** — the code graph gets its own tab, and Opus 5 becomes Opus 5.5 · _2026-09-23_

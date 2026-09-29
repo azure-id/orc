@@ -97,6 +97,16 @@ const SL_VALUE_FLAGS = new Set([
   "--max-width", "--theme", "--state", "--set",
 ]);
 
+// `orc statusline` value flags: "" and "-x" are real values here ("" clears).
+function slFlag(name) {
+  const i = args.indexOf(name);
+  if (i === -1) return undefined;
+  if (i + 1 >= args.length) return true;
+  const val = args[i + 1];
+  if (SL_VALUE_FLAGS.has(val) || ["--json", "--board", "--draw-empty", "--global", "--dir", "--ansi", "--align-columns"].includes(val)) return true;
+  return val;
+}
+
 function flag(name) {
   const i = args.indexOf(name);
   if (i === -1) return undefined;
@@ -248,7 +258,7 @@ function installGuards(claudeDir) {
       // EW3: the graph hook shells `orc graph update`, and a hook must never
       // guess at PATH — the installer is the one place that knows for certain
       // which cli.js this payload came from.
-      JSON.stringify({ version: currentVersion(), cli: path.resolve(__dirname, "cli.js") }) + "\n"
+      JSON.stringify({ version: currentVersion(), cli: path.resolve(__dirname, "cli.js"), catalog_hash: slCatalogHash() }) + "\n"
     );
   } catch (_) {}
   // The statusline's phase rail (v1.2.1). Regenerated every install from the
@@ -759,6 +769,7 @@ function install({ overwrite, forcePrune }) {
   }
 
   installGuards(claudeDir);
+  slRecompileInstalled(claudeDir);
 
   // Record ORC's footprint, then (on update only) prune files that left the
   // payload. A fresh init has nothing to prune; update diffs against the
@@ -34844,7 +34855,7 @@ function doctor() {
           "global-skew",
           `GLOBAL install ~/.claude is ${globalV} but this project is ${localV} — ` +
             "the global copy can win skill resolution; run `orc update --global`",
-          { global_version: globalV, local_version: localV }
+          { global_version: globalV, local_version: localV, fix_command: "orc update --global" }
         );
       } else ok(`global install ~/.claude matches (${globalV})`);
       // Agent files the global install still carries that this payload no
@@ -34994,6 +35005,10 @@ function doctor() {
         }
       })();
       const v = slValidate(slLoadOrDefault(claudeDir));
+      const hk = slHookInfo(claudeDir, SL_BOARDS.status);
+      const skew = !hk.match && hk.fix;
+      if (skew)
+        warn("statusline-hook-skew", slHookSentence(hk), { fix: hk.fix, fix_command: hk.fix });
       // An ORPHANED component — a layout naming an id this ORC no longer ships
       // — is REPORTED, NEVER AUTO-REPAIRED, and the fix names the item. Which
       // component replaces a retired one is a design decision, not a repair.
@@ -35008,9 +35023,10 @@ function doctor() {
         });
       else if (st && st.finding && Date.now() - (st.at || 0) < 24 * 60 * 60 * 1000)
         warn("statusline-layout-unreadable", `status line: the hook fell back to ORC's built-in lines (${st.finding})`, {
-          fix: "orc statusline compile",
+          fix: hk.fix || "orc statusline compile",
+          fix_command: hk.fix || "orc statusline compile",
         });
-      else ok("custom status line armed and valid");
+      else if (!skew) ok("custom status line armed and valid");
     }
   } catch (_) {}
 
@@ -42917,9 +42933,9 @@ const STATUSLINE_COMPONENTS = [
   slRow({ id: "quota-spend-reset", group: "B", label: "reset", summary: "Minutes until the spend limit resets.", renderers: ["bare", "plain", "paren"], defaults: { render: "paren", suffix: "m" }, unknown: "hide", binding: "quota.spend.reset", time_based: true }),
   slRow({ id: "cost-usd", group: "B", summary: "Session cost in dollars, straight from the payload. No price table, no join.", renderers: ["bare", "plain", "label-value", "spark"], defaults: { render: "bare", prefix: "$", precision: 2 }, series: "cost", binding: "cost.usd" }),
   slRow({ id: "cost-rate", group: "B", label: "/h", summary: "Dollars per hour of session.", renderers: ["bare", "plain", "label-value"], defaults: { render: "plain", prefix: "$", precision: 2 }, binding: "cost.rate_usd_h" }),
-  slRow({ id: "api-time", group: "B", label: "api", summary: "Time spent waiting on the API.", renderers: ["bare", "plain", "label-value"], defaults: { render: "plain", suffix: "m" }, binding: "cost.api_ms" }),
+  slRow({ id: "api-time", group: "B", label: "api", summary: "Time spent waiting on the API.", renderers: ["bare", "plain", "label-value"], defaults: { render: "plain", suffix: "m" }, binding: "cost.api_min" }),
   slRow({ id: "api-ratio", group: "B", label: "api", summary: "How much of this session was waiting rather than thinking.", renderers: ["bar", "blocks", "gauge", "ring", "plain", "fine", "dots"], defaults: { render: "gauge" }, bounded: true, binding: "cost.api_ratio" }),
-  slRow({ id: "wall-time", group: "B", label: "wall", summary: "Total session wall time.", renderers: ["bare", "plain", "label-value"], defaults: { render: "plain", suffix: "m" }, binding: "cost.wall_ms", time_based: true }),
+  slRow({ id: "wall-time", group: "B", label: "wall", summary: "Total session wall time.", renderers: ["bare", "plain", "label-value"], defaults: { render: "plain", suffix: "m" }, binding: "cost.wall_min", time_based: true }),
   slRow({ id: "tok-speed", group: "B", label: "tok/s", summary: "Main tokens per second of session.", renderers: ["bare", "plain", "label-value", "spark"], defaults: { render: "plain" }, series: "speed", cost: "scan", binding: "mtok.speed" }),
 
   // ── Group C — Run state. From the ONE throttled scan. ────────────────────
@@ -42970,7 +42986,7 @@ const STATUSLINE_COMPONENTS = [
   slRow({ id: "worktree", group: "H", summary: "Whether this is a worktree, and which kind.", renderers: ["bare", "shape", "badge", "word"], defaults: { render: "shape" }, states: ["main", "worktree", "detached"], shapes: { main: "·", worktree: "⑂", detached: "!" }, unknown: "hide", binding: "worktree.state", state_binding: "worktree.state" }),
   slRow({ id: "worktree-branch", group: "H", summary: "The worktree's branch.", renderers: ["bare", "plain", "paren"], defaults: { render: "bare" }, unknown: "hide", binding: "worktree.branch" }),
   slRow({ id: "worktree-origin", group: "H", label: "from", summary: "The branch the worktree came from.", renderers: ["bare", "plain", "paren"], defaults: { render: "paren" }, unknown: "hide", binding: "worktree.origin" }),
-  slRow({ id: "lines-added", group: "H", label: "+", summary: "Lines added this session — a diff size with no subprocess.", renderers: ["bare", "plain", "label-value"], defaults: { render: "plain", sign: "always" }, binding: "cost.lines_added" }),
+  slRow({ id: "lines-added", group: "H", label: "+", summary: "Lines added this session — a diff size with no subprocess.", renderers: ["bare", "plain", "label-value"], defaults: { render: "plain", sign: "auto" }, binding: "cost.lines_added" }),
   slRow({ id: "lines-removed", group: "H", label: "−", summary: "Lines removed this session.", renderers: ["bare", "plain", "label-value"], defaults: { render: "plain" }, binding: "cost.lines_removed" }),
   slRow({ id: "lines-net", group: "H", label: "Δ", summary: "Net lines this session.", renderers: ["bare", "plain", "trend", "spark", "label-value"], defaults: { render: "plain", sign: "always" }, states: ["growing", "shrinking", "flat"], shapes: { growing: "▲", shrinking: "▼", flat: "▶" }, series: "lines", binding: "cost.lines_net", state_binding: "cost.lines_state" }),
   slRow({ id: "pr-number", group: "H", label: "PR", summary: "The pull request for this branch. The link is ALWAYS a decoration on text that reads fine without it — Terminal.app does not support OSC 8.", renderers: ["bare", "plain", "label-value", "badge", "link"], defaults: { render: "link", prefix: "#" }, unknown: "hide", binding: "pr.number" }),
@@ -42983,9 +42999,9 @@ const STATUSLINE_COMPONENTS = [
   slRow({ id: "text", group: "I", summary: "Any text you type. Also where a Nerd Font glyph goes, if you have one — ORC ships none, because it cannot detect the font.", renderers: ["bare", "badge", "pill", "bracket", "angle"], defaults: { render: "bare" }, unknown: "hide", params: { text: { free: true, dflt: "" } }, binding: "static.text" }),
   slRow({ id: "clock", group: "I", summary: "The wall clock. Needs `refreshInterval` to tick.", renderers: ["bare", "plain", "label-value"], defaults: { render: "bare" }, params: { format: { options: ["HH:mm", "HH:mm:ss", "h:mm a"], dflt: "HH:mm" } }, binding: "clock.now", time_based: true }),
   slRow({ id: "elapsed", group: "I", summary: "Minutes since this session opened.", renderers: ["bare", "plain", "label-value"], defaults: { render: "plain", suffix: "m" }, binding: "session.elapsed_min", time_based: true }),
-  slRow({ id: "spacer", group: "I", summary: "Literal spaces. Does not count against the 5-per-line limit.", renderers: ["bare"], defaults: { render: "bare" }, unknown: "hide", params: { width: { options: [1, 2, 3, 4, 6, 8], dflt: 1 } }, binding: "static.text" }),
-  slRow({ id: "divider", group: "I", summary: "A styled break between GROUPS of components — the second separator kind. Does not count against the 5-per-line limit.", renderers: ["bare"], defaults: { render: "bare" }, unknown: "hide", params: { text: { free: true, dflt: " │ " } }, binding: "static.text" }),
-  slRow({ id: "fill", group: "I", summary: "Pushes everything after it to the right edge. Exact, because Claude Code sets COLUMNS before the script runs. Does not count against the 5-per-line limit.", renderers: ["bare"], defaults: { render: "bare" }, unknown: "hide", params: { weight: { options: [1, 2, 3], dflt: 1 } }, binding: "static.text" }),
+  slRow({ id: "spacer", group: "I", summary: "Literal spaces. Does not count against the per-line limit.", renderers: ["bare"], defaults: { render: "bare" }, unknown: "hide", params: { width: { options: [1, 2, 3, 4, 6, 8], dflt: 1 } }, binding: "static.text" }),
+  slRow({ id: "divider", group: "I", summary: "A styled break between GROUPS of components — the second separator kind. Does not count against the per-line limit.", renderers: ["bare"], defaults: { render: "bare" }, unknown: "hide", params: { text: { free: true, dflt: " │ " } }, binding: "static.text" }),
+  slRow({ id: "fill", group: "I", summary: "Pushes everything after it to the right edge. Exact, because Claude Code sets COLUMNS before the script runs. Does not count against the per-line limit.", renderers: ["bare"], defaults: { render: "bare" }, unknown: "hide", params: { weight: { options: [1, 2, 3], dflt: 1 } }, binding: "static.text" }),
 
 
   // ── Group D — Knowledge. Every row here comes out of wiki-meta.json, the
@@ -43043,7 +43059,7 @@ const STATUSLINE_COMPONENTS = [
 
   // ── Group I remainder ───────────────────────────────────────────────────
   slRow({ id: "config", group: "I", summary: "Any ORC config key, as a component. It shows what is IN THE FILE — a hook has no lane, so it cannot resolve a key the way a lane would.", renderers: ["plain", "label-value", "bare", "badge"], defaults: { render: "label-value" }, cost: "new-read", params: { key: { free: true, dflt: "extra_enabled" } }, binding: "config.value" }),
-  slRow({ id: "group", group: "I", summary: "Two to four parts drawn as ONE object — shared brackets, one background, one emphasis. It counts as ONE slot against the five, because the limit is about how much a line SAYS and a group says one thing.", renderers: ["bracket", "badge", "pill", "angle"], defaults: { render: "pill" }, unknown: "hide", children: [2, 4], binding: "static.text" }),
+  slRow({ id: "group", group: "I", summary: "Two to four parts drawn as ONE object — shared brackets, one background, one emphasis. It counts as ONE slot against the per-line limit, because the limit is about how much a line SAYS and a group says one thing.", renderers: ["bracket", "badge", "pill", "angle"], defaults: { render: "pill" }, unknown: "hide", children: [2, 4], binding: "static.text" }),
   slRow({ id: "icon-static", group: "I", summary: "One glyph you choose, from the shipped sets. Not an icon font — ORC ships none, because it cannot detect one.", renderers: ["bare"], defaults: { render: "bare" }, unknown: "hide", params: { glyph: { free: true, dflt: "●" } }, binding: "static.text" }),
 
   // ── REFUSED, with the measurement recorded ──────────────────────────────
@@ -43243,6 +43259,7 @@ function slResolveItem(item, layout, line) {
 
   out.id = item.id;
   out.type = item.type;
+  out._theme = themeName;
   out._comp = comp;
   out._from = from;
   return out;
@@ -43699,8 +43716,16 @@ function slLowerItem(r, comp, T) {
 
   const labelSgr = slSgr(r.label_color, r.emphasis, r.bg);
   const valueSgr = r.value_color && String(r.value_color).startsWith("ramp:") ? null : slSgr(r.value_color, r.emphasis, r.bg);
+  // Emphasis alone, for a value op that carries its own colour.
+  const emphSgr = slSgr(null, r.emphasis, r.bg);
   let ri = null;
-  const rampName = r.ramp || (String(r.value_color || "").startsWith("ramp:") ? String(r.value_color).slice(5) : null);
+  const vFrom = (r._from || {}).value_color || "";
+  const itemColor = (vFrom === "item" || vFrom === "item:color") && r.value_color && !String(r.value_color).startsWith("ramp:");
+  const rampFromItem = (r._from || {}).ramp === "item";
+  // A colour the user set beats a ramp the user did not set. Mono means no
+  // colour, so a default ramp does not apply there either.
+  let rampName = r.ramp && (rampFromItem || (!itemColor && r._theme !== "mono")) ? r.ramp : null;
+  if (!rampName && String(r.value_color || "").startsWith("ramp:")) rampName = String(r.value_color).slice(5);
   if (rampName && STATUSLINE_RAMPS[rampName] && rampName !== "state") {
     const rp = STATUSLINE_RAMPS[rampName];
     const stops = r.ramp_stops || rp.stops;
@@ -43756,11 +43781,15 @@ function slLowerItem(r, comp, T) {
     return ops;
   }
 
-  if (open) ops.push(slLit(open));
+  const isPill = r.render === "pill" && !!label;
+  if (open && !isPill) ops.push(slLit(open));
 
   const valueOp = () => {
     if (rend.kind === "bar") {
-      return { op: "bar", b: comp.binding, k: rend.sub, g: gi, w: r.width || rend.dflt_w || 10, r: ri, thr: r.threshold == null ? null : r.threshold };
+      const bop = { op: "bar", b: comp.binding, k: rend.sub, g: gi, w: r.width || rend.dflt_w || 10, r: ri, thr: r.threshold == null ? null : r.threshold };
+      // A state component on a bar: the engine maps the state to a percent.
+      if (comp.states && !comp.bounded) bop.o = comp.states.filter((s) => s !== "unknown");
+      return bop;
     }
     if (rend.kind === "series") {
       return { op: "series", b: comp.binding, s: comp.series, k: rend.sub, g: gi, w: r.width || rend.dflt_w || 8 };
@@ -43776,6 +43805,7 @@ function slLowerItem(r, comp, T) {
     // text
     const op = { op: "val", b: comp.binding, f: fi };
     if (r.render === "word" && comp.state_binding) op.b = comp.state_binding;
+    if (comp.id === "clock") op.tf = (r.params && r.params.format) || comp.params.format.dflt;
     // A ramp derives the colour FROM THE VALUE, so it applies to a number just
     // as much as to a bar — `context 38%` green and `context 94%` red is the
     // whole point of one.
@@ -43791,10 +43821,10 @@ function slLowerItem(r, comp, T) {
     // A state, a motif, a ramped bar and a ramped/state-coloured number all
     // carry their OWN colour. Wrapping them in the theme's value colour as well
     // emits two sequences for one glyph, and the outer one is the wrong answer.
+    const own = inner.op === "state" || inner.op === "motif" || (inner.op === "bar" && inner.r != null) ||
+      (inner.op === "val" && (inner.r != null || inner.m != null));
+    if (own) return emphSgr ? [{ op: "sgr", s: emphSgr }, inner, { op: "reset" }] : [inner];
     if (!valueSgr) return [inner];
-    if (inner.op === "state" || inner.op === "motif") return [inner];
-    if (inner.op === "bar" && inner.r != null) return [inner];
-    if (inner.op === "val" && (inner.r != null || inner.m != null)) return [inner];
     return [{ op: "sgr", s: valueSgr }, inner, { op: "reset" }];
   };
 
@@ -43846,9 +43876,11 @@ function slLowerItem(r, comp, T) {
       // The two-tone chip: the label in reverse video, the value outside it.
       if (label) {
         const chip = slSgr(r.label_color, (r.emphasis || []).concat(["reverse"]), r.bg);
+        if (open) ops.push(slLit(open));
         if (chip) ops.push({ op: "sgr", s: chip });
         ops.push(slLit(applyCase(label)));
         if (chip) ops.push({ op: "reset" });
+        if (close) { ops.push(slLit(close)); }
       }
       for (const o of wrapValue(valueOp())) ops.push(o);
       break;
@@ -43876,7 +43908,7 @@ function slLowerItem(r, comp, T) {
       for (const o of wrapValue(valueOp())) ops.push(o);
   }
 
-  if (close) ops.push(slLit(close));
+  if (close && !isPill) ops.push(slLit(close));
   return ops;
 }
 
@@ -44461,7 +44493,9 @@ function slComponentsCmd() {
     renderers: Object.fromEntries(Object.entries(STATUSLINE_RENDERERS).map(([k, v]) => [k, { kind: v.kind, form: v.form || null, needs: v.needs, width: v.width || null, decoration: !!v.decoration, uses: slRendererUses(k) }])),
     // Which shapes DO draw a label, so a refusal can name them instead of
     // saying "not here".
-    label_renderers: [...SL_LABEL_RENDERERS],
+      label_renderers: [...SL_LABEL_RENDERERS],
+      // The value that clears a colour back to the shared one.
+      inherit_token: "inherit",
       glyph_sets: Object.keys(STATUSLINE_GLYPHSETS),
       ramps: Object.fromEntries(Object.entries(STATUSLINE_RAMPS).map(([k, v]) => [k, { stops: v.stops, colors: v.colors, why: v.why }])),
       themes: STATUSLINE_THEMES,
@@ -44576,6 +44610,18 @@ function slShowCmd(claudeDir) {
   try {
     preview = slPreview(slCompile(eff).compiled, "healthy", 120, {}).text;
   } catch (_) {}
+  const hook = slHookInfo(claudeDir, slBoard());
+  // ONE item alone, in its own saved design: what the chip looks like.
+  const sampleOf = (it, l) => {
+    try {
+      const copy = JSON.parse(JSON.stringify(eff));
+      copy.lines.forEach((x, i) => (x.items = []));
+      copy.lines[0] = Object.assign({}, l, { items: [JSON.parse(JSON.stringify(it))], prefix: "" });
+      return slPreview(slCompile(copy).compiled, "healthy", 120, {}).text;
+    } catch (_) {
+      return null;
+    }
+  };
   const lines = eff.lines.map((l, i) => ({
     line: i + 1,
     separator: l.separator,
@@ -44602,6 +44648,7 @@ function slShowCmd(claudeDir) {
         // cannot tell "you chose the theme's colour" from "you chose nothing"
         // cannot offer to clear it.
         authored: slAuthoredFields(it),
+        sample: sampleOf(it, l),
       };
       for (const k of SL_ITEM_FIELDS) row[k] = r && r[k] !== undefined && r[k] !== null ? r[k] : SL_ITEM_LIST_FIELDS.has(k) ? [] : null;
       if (it.children) row.children = it.children.map((k) => ({ id: k.id, type: k.type, authored: slAuthoredFields(k) }));
@@ -44622,11 +44669,13 @@ function slShowCmd(claudeDir) {
       errors: v.errors,
       warnings: v.warnings,
       preview,
+      hook,
       dense_prefix: "A line may hold a component only if every line above it holds at least one.",
     }, v.ok ? 0 : 1);
   console.log("");
   console.log(ui.header("Status line") + "  " + (on ? ui.mark.ok("custom layout ON") : ui.color.gray("custom layout off — the shipped two lines are rendering")));
   if (!layout) console.log(ui.color.gray("  nothing saved yet — this is the shipped default"));
+  if (!hook.match && hook.fix) console.log("  " + ui.mark.warn(slHookSentence(hook)));
   console.log("");
   for (const l of lines) {
     const cells = l.items.map((i) => ui.color.cyan(i.type) + ui.color.gray("/" + i.render)).join(ui.color.gray("  ·  "));
@@ -44792,19 +44841,39 @@ function slSetCmd(claudeDir, p) {
     process.exit(2);
   }
   const item = existing || { id: slNewId(layout), type };
+  // A SWAP drops what the new component cannot carry, so the swap never fails
+  // on the old shape.
+  if (type && existing && existing.type !== type) {
+    const nc = SL_BY_ID.get(type);
+    if (nc) {
+      if (item.render && !nc.renderers.includes(item.render)) delete item.render;
+      delete item.label;
+      delete item.params;
+      if (!nc.bounded) delete item.ramp;
+      const rn = item.render || (nc.defaults && nc.defaults.render) || nc.renderers[0];
+      if (!(STATUSLINE_RENDERERS[rn] && STATUSLINE_RENDERERS[rn].width)) delete item.width;
+    }
+  }
   if (type) item.type = type;
+  const COLOR_KEYS = new Set(["color", "label_color", "value_color", "bg"]);
   for (const [k, f] of [["render", "--render"], ["label", "--label"], ["color", "--color"], ["label_color", "--label-color"], ["value_color", "--value-color"], ["bg", "--bg"], ["ramp", "--ramp"], ["glyphs", "--glyphs"], ["format", "--format"], ["case", "--case"], ["truncate", "--truncate"], ["compact", "--compact"], ["prefix", "--prefix"], ["suffix", "--suffix"]]) {
-    const v = flag(f);
-    if (typeof v === "string") item[k] = v;
+    const v = slFlag(f);
+    if (typeof v !== "string") continue;
+    // "" clears the key (null = inherit); `inherit` clears a colour too.
+    if (v === "" || (COLOR_KEYS.has(k) && v === "inherit")) delete item[k];
+    else item[k] = v;
   }
   for (const [k, f] of [["width", "--width"], ["precision", "--precision"], ["min_width", "--min-width"], ["min_cols", "--min-cols"], ["max_cols", "--max-cols"], ["priority", "--priority"]]) {
-    const v = flag(f);
-    if (typeof v === "string" && v !== "") item[k] = Number(v);
+    const v = slFlag(f);
+    if (v === "") delete item[k];
+    else if (typeof v === "string") item[k] = Number(v);
   }
-  const emph = flag("--emphasis");
-  if (typeof emph === "string") item.emphasis = emph.split(",").map((s) => s.trim()).filter(Boolean);
-  const hide = flag("--hide-when");
-  if (typeof hide === "string") item.hide_when = hide === "never" ? [] : hide.split(",").map((s) => s.trim()).filter(Boolean);
+  const emph = slFlag("--emphasis");
+  if (emph === "") delete item.emphasis;
+  else if (typeof emph === "string") item.emphasis = emph.split(",").map((s) => s.trim()).filter(Boolean);
+  const hide = slFlag("--hide-when");
+  if (hide === "") delete item.hide_when;
+  else if (typeof hide === "string") item.hide_when = hide === "never" ? [] : hide.split(",").map((s) => s.trim()).filter(Boolean);
   if (flag("--draw-empty") === true) item.draw_empty = true;
   if (!existing) {
     line.items = line.items || [];
@@ -44864,13 +44933,13 @@ function slLineCmd(claudeDir, p) {
     process.exit(2);
   }
   const line = layout.lines[n - 1];
-  const sep = flag("--separator");
+  const sep = slFlag("--separator");
   if (typeof sep === "string") line.separator = sep;
-  const pre = flag("--prefix");
+  const pre = slFlag("--prefix");
   if (typeof pre === "string") line.prefix = pre;
-  const mw = flag("--max-width");
+  const mw = slFlag("--max-width");
   if (typeof mw === "string") line.max_width = Number(mw) || 0;
-  const th = flag("--theme");
+  const th = slFlag("--theme");
   if (typeof th === "string") {
     if (!STATUSLINE_THEMES[th]) {
       if (wantsJson()) return emitJson({ ok: false, reason: "unknown-theme", theme: th, known: Object.keys(STATUSLINE_THEMES) }, 2);
@@ -44890,7 +44959,7 @@ function slLineCmd(claudeDir, p) {
 // per scope, and the panel calls the one that matches the control.
 function slDocCmd(claudeDir, p) {
   const layout = slLoadOrDefault(claudeDir);
-  const th = flag("--theme");
+  const th = slFlag("--theme");
   if (typeof th === "string") {
     if (!STATUSLINE_THEMES[th]) {
       if (wantsJson()) return emitJson({ ok: false, reason: "unknown-theme", theme: th, known: Object.keys(STATUSLINE_THEMES) }, 2);
@@ -44904,7 +44973,7 @@ function slDocCmd(claudeDir, p) {
     // shadowed is the one failure this whole command exists to fix.
     for (const l of layout.lines) l.theme = null;
   }
-  const gl = flag("--glyphs");
+  const gl = slFlag("--glyphs");
   if (typeof gl === "string") {
     if (!STATUSLINE_GLYPHSETS[gl]) {
       if (wantsJson()) return emitJson({ ok: false, reason: "unknown-glyphs", glyphs: gl, known: Object.keys(STATUSLINE_GLYPHSETS) }, 2);
@@ -44913,7 +44982,7 @@ function slDocCmd(claudeDir, p) {
     }
     layout.glyphs = gl;
   }
-  const an = flag("--ansi");
+  const an = slFlag("--ansi");
   if (typeof an === "string") {
     if (!["auto", "off"].includes(an)) {
       if (wantsJson()) return emitJson({ ok: false, reason: "unknown-ansi", ansi: an, known: ["auto", "off"] }, 2);
@@ -44922,7 +44991,7 @@ function slDocCmd(claudeDir, p) {
     }
     layout.ansi = an;
   }
-  const align = flag("--align-columns");
+  const align = slFlag("--align-columns");
   if (typeof align === "string") layout.align_columns = align === "on";
   return slSaveAndCompile(claudeDir, layout, { action: "doc", theme: layout.theme, glyphs: layout.glyphs, ansi: layout.ansi, align_columns: !!layout.align_columns });
 }
@@ -45005,14 +45074,18 @@ function slSaveAndCompile(claudeDir, layout, info, skipWrite) {
   if (!skipWrite) slWriteLayout(claudeDir, layout);
   fs.writeFileSync(paths.compiled, JSON.stringify(compiled, null, 2) + "\n");
   fs.writeFileSync(paths.lock, JSON.stringify(lock, null, 2) + "\n");
+  // A fresh compile supersedes the hook's last recorded fallback.
+  if (paths.board.id === "status") slClearFallback(claudeDir);
+  const hook = slHookInfo(claudeDir, paths.board);
   let preview = null;
   try {
     preview = slPreview(compiled, "healthy", 120, {}).text;
   } catch (_) {}
-  const out = Object.assign({ ok: true, wrote: true, warnings: v.warnings, needs_refresh_interval: lock.needs_refresh_interval, static_width: compiled.lines.map((l) => l.static_width), preview }, info);
+  const out = Object.assign({ ok: true, wrote: true, warnings: v.warnings, needs_refresh_interval: lock.needs_refresh_interval, static_width: compiled.lines.map((l) => l.static_width), preview, hook }, info);
   if (wantsJson()) return emitJson(out, 0);
   console.log("");
   console.log("  " + ui.mark.ok(`${info.action} — compiled`));
+  if (!hook.match && hook.fix) console.log("  " + ui.mark.warn(slHookSentence(hook)));
   if (preview) for (const row of preview.split("\n")) console.log("    " + row);
   for (const w of v.warnings) console.log("  " + ui.mark.warn(w));
   if (lock.needs_refresh_interval)
@@ -45026,6 +45099,83 @@ function slSaveAndCompile(claudeDir, layout, info, skipWrite) {
   if (String(cfg.statusline_custom || "off") !== "on")
     console.log("  " + ui.color.gray("the custom layout is OFF — turn it on with `orc config set statusline_custom on`"));
   console.log("");
+}
+
+function slClearFallback(claudeDir) {
+  try {
+    fs.unlinkSync(path.join(claudeDir, "orc", "statusline-state.json"));
+  } catch (_) {}
+}
+
+function slReadJson(p) {
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8").replace(/^\uFEFF/, ""));
+  } catch (_) {
+    return null;
+  }
+}
+
+// WHICH HOOK WILL DRAW THIS LAYOUT, and does it speak this CLI's catalogue?
+// The panel said "your lines are showing" while the hook refused the lock.
+function slHookInfo(claudeDir, board) {
+  const b = board || SL_BOARDS.status;
+  const needle = b.id === "subagent" ? "orc-subagent-line" : "orc-statusline";
+  let hookPath = null;
+  for (const sp of [path.join(claudeDir, "settings.json"), path.join(os.homedir(), ".claude", "settings.json")]) {
+    const st = slReadJson(sp);
+    const cmd = st && st[b.setting] && typeof st[b.setting].command === "string" ? st[b.setting].command : null;
+    if (!cmd || !cmd.includes(needle)) continue;
+    const quoted = cmd.match(/"([^"]+)"/g);
+    const q = quoted && quoted.map((x) => x.slice(1, -1)).find((x) => x.includes(needle));
+    hookPath = path.resolve(q || cmd.trim().split(/\s+/).pop());
+    break;
+  }
+  const inst = hookPath ? slReadJson(path.join(path.dirname(hookPath), "orc-version.json")) : null;
+  const hash = slCatalogHash();
+  const cli = currentVersion();
+  const version = (inst && inst.version) || null;
+  const catalog_hash = (inst && inst.catalog_hash) || null;
+  const hookOk = !!hookPath && (catalog_hash ? catalog_hash === hash : version === cli);
+  const lock = slReadJson(slPaths(claudeDir, b).lock);
+  const lockOk = !lock || lock.catalog_hash === hash;
+  const fallback = b.id === "status" ? slReadJson(path.join(claudeDir, "orc", "statusline-state.json")) : null;
+  const match = hookOk && lockOk;
+  let fix = null;
+  if (hookPath && !hookOk) {
+    const home = path.join(os.homedir(), ".claude").toLowerCase() + path.sep;
+    fix = hookPath.toLowerCase().startsWith(home) ? "orc update --global" : "orc update";
+  } else if (!hookPath) fix = null;
+  else if (!lockOk || fallback) fix = "orc statusline compile";
+  return { path: hookPath, version, catalog_hash, cli_version: cli, match, fallback, fix };
+}
+
+function slHookSentence(h) {
+  if (h.fix === "orc statusline compile")
+    return `Your terminal does not show this layout yet. The compiled layout is old. Run: ${h.fix}`;
+  return `Your terminal does not show this layout yet. The status line hook is ORC ${h.version || "unknown"} and this CLI is ORC ${h.cli_version}. Run: ${h.fix}`;
+}
+
+// After `orc init|update`: recompile each EXISTING layout, so the lock matches
+// the hooks that were just installed. Never creates a layout.
+function slRecompileInstalled(claudeDir) {
+  for (const b of [SL_BOARDS.status, SL_BOARDS.subagent]) {
+    try {
+      const paths = slPaths(claudeDir, b);
+      if (!fs.existsSync(paths.layout)) continue;
+      const layout = slReadLayout(claudeDir, b);
+      const v = layout ? slValidate(layout) : { ok: false };
+      if (!v.ok) {
+        console.log(`  skip  orc/${b.files[0]} — the layout does not validate; run \`orc statusline validate\``);
+        continue;
+      }
+      const { compiled, lock } = slCompile(layout);
+      lock.warnings = v.warnings;
+      fs.writeFileSync(paths.compiled, JSON.stringify(compiled, null, 2) + "\n");
+      fs.writeFileSync(paths.lock, JSON.stringify(lock, null, 2) + "\n");
+      console.log(`  upd   orc/${b.files[1]} (recompiled for v${currentVersion()})`);
+      if (b.id === "status") slClearFallback(claudeDir);
+    } catch (_) {}
+  }
 }
 
 

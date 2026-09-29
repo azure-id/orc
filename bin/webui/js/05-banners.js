@@ -53,13 +53,15 @@ function versionState(v) {
 // global config, by design.
 // The update banner. It is a BUTTON, not a notice: the useful question is
 // "what changed", and the answer is one click away rather than on GitHub.
-async function renderUpdateBanner(host) {
+async function renderUpdateBanner(host, gen) {
   let v;
   try {
     v = await versionInfo();
   } catch (_) {
     return;
   }
+  // A newer renderBanners call has cleared the host: do not add a second copy.
+  if (gen !== bannerGen) return;
   if (!v || !v.update_available) return;
 
   const b = el("button", "banner banner-update");
@@ -128,16 +130,22 @@ async function showChangelog(v) {
   return close;
 }
 
+// The router calls this on every route, so two calls can overlap. Both banners
+// are appended after an await, so only the NEWEST call may append (here and in
+// renderUpdateBanner), or a banner shows twice.
+let bannerGen = 0;
 async function renderBanners() {
+  const gen = ++bannerGen;
   const host = $("#banners");
   host.replaceChildren();
-  renderUpdateBanner(host);
+  renderUpdateBanner(host, gen);
   let doctor;
   try {
     doctor = (await read("/api/doctor")).data;
   } catch (_) {
     return;
   }
+  if (gen !== bannerGen) return;
   if (!doctor) return;
   const g = doctor.global_install || {};
   if (g.present && g.shadows) {
@@ -155,7 +163,8 @@ async function renderBanners() {
     // project-scoped and never writes global config, so handing over the exact
     // line to paste is the whole of what it can do — and a wrong line here is
     // why the warning felt permanent.
-    const fixCmd = (doctor.findings || []).map((f) => f.fix_command).find(Boolean);
+    // The global finding's OWN command — not the first fix of any finding.
+    const fixCmd = finding && finding.fix_command;
     if (fixCmd) {
       const row = el("div", "banner-fix");
       row.append(el("code", "action-cmd", fixCmd));

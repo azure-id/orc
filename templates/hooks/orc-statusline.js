@@ -473,7 +473,7 @@ function readPlan(d) {
     const projectDir =
       (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
     const raw = fs.readFileSync(path.join(projectDir, ".claude", "orc.config.yaml"), "utf8");
-    if (!/^[ \t]*statusline_custom:[ \t]*["']?on["']?[ \t]*\r?$/m.test(raw)) return null;
+    if (!/^[ \t]*statusline_custom:[ \t]*["']?on["']?[ \t]*(?:#.*)?\r?$/m.test(raw)) return null;
     const lock = JSON.parse(
       fs.readFileSync(path.join(projectDir, ".claude", "orc", "statusline.lock.json"), "utf8")
     );
@@ -1117,7 +1117,8 @@ process.stdin.on("end", () => {
 //   1  statusline_custom is not `on`        the shipped lines. BYTE-IDENTICAL.
 //   2  statusline-compiled.json missing /   default + statusline-layout-unreadable
 //      unparseable / schema mismatch
-//   3  orc_version or catalog_hash moved    default + statusline-layout-stale
+//   3  catalog_hash moved (orc_version when default + statusline-layout-stale
+//      the install has no catalog_hash)
 //   4  an unknown op or an unknown binding  default + statusline-layout-skew
 //   5  the cheap shape guard fails          default + statusline-layout-invalid
 //   6  otherwise                            run the program
@@ -1145,7 +1146,7 @@ function custom(d, ctx) {
       // The trailing \r is tolerated on purpose: a config file written on
       // Windows carries CRLF, and a $-anchored match silently never fires
       // there — which is a feature that is ON in the file and OFF on the bar.
-      on = /^[ \t]*statusline_custom:[ \t]*["']?on["']?[ \t]*\r?$/m.test(raw);
+      on = /^[ \t]*statusline_custom:[ \t]*["']?on["']?[ \t]*(?:#.*)?\r?$/m.test(raw);
     } catch (_) {}
     if (!on) return null;
 
@@ -1164,11 +1165,13 @@ function custom(d, ctx) {
     try {
       lock = JSON.parse(fs.readFileSync(path.join(orcDir, "statusline.lock.json"), "utf8"));
     } catch (_) {}
-    let installed = null;
+    // The catalogue hash decides when the install carries one: a CLI version
+    // bump that changed no component must not drop the user's design.
+    let inst = {};
     try {
-      installed = JSON.parse(fs.readFileSync(path.join(__dirname, "orc-version.json"), "utf8")).version;
+      inst = JSON.parse(fs.readFileSync(path.join(__dirname, "orc-version.json"), "utf8")) || {};
     } catch (_) {}
-    if (!lock || (installed && lock.orc_version !== installed))
+    if (!lock || (inst.catalog_hash ? lock.catalog_hash !== inst.catalog_hash : (inst.version && lock.orc_version !== inst.version)))
       return slFallback(orcDir, "statusline-layout-stale");
 
     const engine = require("./orc-statusline-render.js");
@@ -1178,6 +1181,7 @@ function custom(d, ctx) {
     for (const b of lock.bindings || []) {
       if (!engine.BINDINGS[b]) return slFallback(orcDir, "statusline-layout-skew");
     }
+    if (engine.OPS && !opsKnown(prog.lines, engine.OPS)) return slFallback(orcDir, "statusline-layout-skew");
 
     // Rung 5. The cheap shape guard: at most three lines, at most `max_per_line`
     // components on any of them, and the dense-prefix rule —
@@ -1216,12 +1220,34 @@ function custom(d, ctx) {
       env: process.env,
     });
     if (out.errors && out.errors.length) slNote(orcDir, "statusline-item-failed", out.errors[0]);
+    else {
+      // A working bar clears the old fallback, so `orc doctor` stops naming it.
+      try {
+        const st = path.join(orcDir, "statusline-state.json");
+        if (fs.existsSync(st)) fs.unlinkSync(st);
+      } catch (_) {}
+    }
     return out.text;
   } catch (_) {
     // Even the ladder must not throw. A status line that crashes is a status
     // line that is simply absent, with no way to find out why.
     return null;
   }
+}
+
+// Every compiled op must be one the engine walks. A plain stack, no copies.
+function opsKnown(lines, OPS) {
+  const st = [];
+  for (const l of lines || []) st.push(l.ops || []);
+  while (st.length) {
+    const list = st.pop();
+    for (let i = 0; i < list.length; i++) {
+      const o = list[i];
+      if (!o || !OPS[o.op]) return false;
+      if (o.children) st.push(o.children);
+    }
+  }
+  return true;
 }
 
 // A fallback RECORDS ITSELF. `orc doctor` reads this file and names the finding

@@ -472,6 +472,16 @@ It never writes model text, and it blocks a stop only for the narration guard.
   authored. If the compiled file is missing, stale, or does not pass a cheap
   shape check, the hook silently renders the shipped lines instead and
   `orc doctor` names the reason.
+- **Stale means the parts changed, not the version** (v2.0.3). `orc init` and
+  `orc update` write `catalog_hash` into `hooks/orc-version.json`, and the hook
+  compares it with the `catalog_hash` in `statusline.lock.json`. An install with
+  no hash compares the version, as before. `orc update` also recompiles every
+  layout that exists and validates, so an upgrade never leaves your bar on the
+  shipped lines. A good render deletes `orc/statusline-state.json`, so
+  `orc doctor` never reports a fallback that is already gone.
+- `orc statusline show --json` carries `hook`: the hook the settings point to,
+  its version, whether it will run this layout, the last fallback, and the fix.
+  `orc ui` shows that on the status card.
 - The cache file is `.claude/orc/usage-session.json`. The hook reads it once and
   writes it once, after the text is ready. It stores raw numbers only — never a
   word like `fresh` or `STALE`, which is computed each time it is shown.
