@@ -82,9 +82,9 @@ const components = {
   ok: true,
   schema: 1,
   catalog_hash: "b7c1d2e3f4a5968708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f",
-  count: 6,
+  count: 8,
   inherit_token: "inherit",
-  groups: { A: "Session and tier", B: "Quota and spend", D: "Knowledge", H: "Project and VCS" },
+  groups: { A: "Session and tier", B: "Quota and spend", D: "Knowledge", H: "Project and VCS", M: "Pets and motion" },
   components: [
     {
       id: "verdict", group: "A", label: null,
@@ -162,6 +162,27 @@ const components = {
       params: null, binding: null, composite: null, time_based: false, structural: false,
       previews: {},
     },
+    // v2.0.4 — a PET and the WEATHER, both in the new group "M".
+    {
+      id: "pet-cat", group: "M", label: null,
+      summary: "A small cat that runs along the line. It moves only when the status line redraws.",
+      renderers: ["run", "bounce", "idle"],
+      defaults: { render: "run", width: 12 },
+      states: null, shapes: null, bounded: false, series: null,
+      unknown: "hide", cost: "free", refused_reason: null, params: null,
+      binding: null, composite: null, time_based: true, structural: false,
+      previews: { run: "   =^.^=    ", bounce: "  =^.^=     ", idle: "=^.^=       " },
+    },
+    {
+      id: "weather", group: "M", label: null,
+      summary: "The temperature where you are, from a cached read.",
+      renderers: ["bare", "plain", "badge"],
+      defaults: { render: "bare" },
+      states: null, shapes: null, bounded: false, series: null,
+      unknown: "hide", cost: "new-read", refused_reason: null, params: null,
+      binding: "weather.temp", composite: null, time_based: false, structural: false,
+      previews: { bare: "21°C", plain: dim("weather ") + "21°C", badge: "▏21°C▕" },
+    },
   ],
   renderers: {
     bare: { kind: "text", form: "value", needs: null, width: null, decoration: false },
@@ -182,6 +203,9 @@ const components = {
     icon: { kind: "state", form: null, needs: "states", width: null, decoration: false },
     spark: { kind: "series", form: null, needs: "series", width: [4, 16], decoration: false },
     trend: { kind: "series", form: null, needs: "series", width: null, decoration: false },
+    run: { kind: "sprite", form: null, needs: null, width: [6, 40], decoration: false },
+    bounce: { kind: "sprite", form: null, needs: null, width: [6, 40], decoration: false },
+    idle: { kind: "sprite", form: null, needs: null, width: [6, 40], decoration: false },
   },
   glyph_sets: ["blocks", "bars", "pipes", "braille", "shade", "minimal", "ascii"],
   ramps: {
@@ -209,7 +233,20 @@ const components = {
   ],
   formats: ["percent", "ratio", "fraction", "decimal", "plain"],
   compact: ["off", "si", "bytes"],
-  cases: ["none", "upper", "lower", "title"],
+  cases: ["none", "upper", "lower", "title", "small", "super", "sub"],
+  // v2.0.4 — what each case looks like, and every design option list the
+  // editor reads (contract §5). The panel names none of these itself.
+  case_samples: { none: "Weekly 61", upper: "WEEKLY 61", lower: "weekly 61", title: "Weekly 61", small: "ᴡᴇᴇᴋʟʏ 61", super: "ʷᵉᵉᵏˡʸ ⁶¹", sub: "wₑₑₖₗy ₆₁" },
+  label_positions: ["before", "after", "above", "below"],
+  value_positions: ["none", "before", "after"],
+  caption_positions: ["above", "below"],
+  caption_aligns: ["left", "center", "right"],
+  aligns: ["left", "right"],
+  signs: ["auto", "always", "never"],
+  unknowns: ["dash", "hide"],
+  line_aligns: ["left", "center", "right"],
+  caption_tokens: ["{value}", "{label}"],
+  limits: { caption: 40, max_len: 60, padding: 8, ramp_colors: [2, 8], brackets: 3, param_text: 60 },
   truncate: ["end", "middle", "none"],
   emphasis: ["normal", "bold", "dim", "italic", "underline", "reverse", "strike"],
   refused_emphasis: ["blink"],
@@ -239,6 +276,17 @@ const components = {
   dense_prefix: "A line may hold a component only if every line above it holds at least one.",
 };
 
+// v2.0.4 — WHAT EACH SHAPE USES (contract §5), so the editor can grey out a
+// field the shape ignores. Written once per kind, as the CLI lists them.
+const USES_ALL = ["label", "label_pos", "caption", "caption_pos", "caption_align", "caption_color", "caption_case", "brackets", "padding", "prefix", "suffix"];
+const USES_KIND = {
+  text: ["case", "format", "compact", "min_width", "precision", "align", "sign", "max_len"],
+  bar: ["width", "ramp", "value_pos", "fill_color", "empty_color", "fill_char", "empty_char", "ramp_colors", "ramp_stops"],
+  series: ["width", "value_pos", "fill_color"],
+  state: ["glyph_by_state"],
+};
+for (const r of Object.values(components.renderers)) r.uses = USES_ALL.concat(USES_KIND[r.kind] || []);
+
 // THE FEATURE IS OFF WITH A LAYOUT SAVED — the state a user is in for most of
 // the time they are composing, and the one the gate card exists for. Line 1 is
 // at 5/5; line 3 is empty, so the board can show a full line and an ordinary
@@ -254,7 +302,7 @@ const show = {
   align_columns: false,
   lines: [
     {
-      line: 1, separator: " · ", theme: null, max_width: 0, count: 5, counted: 5, full: true,
+      line: 1, separator: " · ", theme: null, max_width: 0, count: 5, counted: 5, full: true, align: null, sep_color: "bright-black", prefix: "",
       items: [
         { pos: 1, id: "i1", type: "verdict", render: "icon", label: null, label_color: "bright-black", value_color: "default", ramp: null, emphasis: [], hide_when: [], unknown: "dash", known: true },
         { pos: 2, id: "i2", type: "context", render: "bar", label: "CTX", label_color: "bright-black", value_color: null, ramp: "heat", emphasis: ["bold"], hide_when: [], unknown: "dash", known: true },
@@ -264,7 +312,7 @@ const show = {
       ],
     },
     {
-      line: 2, separator: " · ", theme: null, max_width: 0, count: 2, counted: 2, full: false,
+      line: 2, separator: " · ", theme: null, max_width: 0, count: 2, counted: 2, full: false, align: null, sep_color: null, prefix: "   ",
       items: [
         { pos: 1, id: "i6", type: "context", render: "fine", label: null, label_color: "bright-black", value_color: "default", ramp: null, emphasis: [], hide_when: ["ok"], unknown: "dash", known: true },
         // AN UNKNOWN COMPONENT ID — what an upgrade that retired a component
@@ -272,11 +320,15 @@ const show = {
         { pos: 2, id: "i7", type: "retired-thing", render: "bare", label: null, label_color: null, value_color: null, ramp: null, emphasis: [], hide_when: [], unknown: null, known: false },
       ],
     },
-    { line: 3, separator: " · ", theme: null, max_width: 0, count: 0, counted: 0, full: false, items: [] },
+    { line: 3, separator: " · ", theme: null, max_width: 0, count: 0, counted: 0, full: false, align: null, sep_color: null, prefix: "", items: [] },
   ],
   // ONE HARD ERROR and TWO WARNINGS, so the caution strip can show that an error
   // is a refusal and a warning is a fact the user then owns.
   errors: ['unknown component "retired-thing" on line 2 position 2 — did you mean "resume"?'],
+  // v2.0.4 — the redraw timer is off and nothing on this board moves.
+  refresh_interval: null,
+  needs_refresh: null,
+  animated: false,
   warnings: [
     "line 1 shows the same value twice (context, context)",
     '"verdict" carries meaning in its colour (ready/boosted/degrade) and you set a flat colour — a green ⛔ is a status line that lies',
@@ -382,6 +434,17 @@ const subComponents = {
   formats: components.formats,
   compact: components.compact,
   cases: components.cases,
+  case_samples: components.case_samples,
+  label_positions: components.label_positions,
+  value_positions: components.value_positions,
+  caption_positions: components.caption_positions,
+  caption_aligns: components.caption_aligns,
+  aligns: components.aligns,
+  signs: components.signs,
+  unknowns: components.unknowns,
+  line_aligns: components.line_aligns,
+  caption_tokens: components.caption_tokens,
+  limits: components.limits,
   truncate: components.truncate,
   emphasis: components.emphasis,
   refused_emphasis: components.refused_emphasis,
@@ -405,7 +468,7 @@ const subShow = {
   align_columns: false,
   lines: [
     {
-      line: 1, separator: " · ", theme: null, max_width: 0, count: 4, counted: 4, full: false,
+      line: 1, separator: " · ", theme: null, max_width: 0, count: 4, counted: 4, full: false, align: null, sep_color: null, prefix: "",
       items: [
         { pos: 1, id: "s1", type: "task-status", render: "shape", label: null, label_color: "bright-black", value_color: "default", ramp: null, emphasis: [], hide_when: [], unknown: "dash", known: true },
         { pos: 2, id: "s2", type: "task-name", render: "bare", label: null, label_color: "bright-black", value_color: "default", ramp: null, emphasis: [], hide_when: [], unknown: "dash", known: true },
@@ -415,6 +478,9 @@ const subShow = {
     },
   ],
   errors: [],
+  refresh_interval: null,
+  needs_refresh: null,
+  animated: false,
   // A layout can be perfectly valid and still worth a caution.
   warnings: ["task-tokens is a FLOOR: an agent that finishes between two redraws is never counted"],
   preview: amber("●") + " orc-executor-opus-5-low · " + dim("O5/low") + " · 84K",

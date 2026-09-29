@@ -284,6 +284,9 @@ const READS = {
     // applies these to a copy of the saved layout before it compiles.
     if (q.theme) argv.push("--theme", String(q.theme));
     if (q.glyphs) argv.push("--glyphs", String(q.glyphs));
+    // v2.0.4 — an animated preview: N frames, M ms apart. Render-only.
+    if (q.frames) argv.push("--frames", String(q.frames));
+    if (q.frame_ms) argv.push("--frame-ms", String(q.frame_ms));
     return argv;
   },
   "/api/statusline/explain": (q) => ["statusline", "explain", String(q.at || "1:1"), ...slBoard(q)],
@@ -527,6 +530,18 @@ const WRITES = {
       ["width", "--width"], ["precision", "--precision"],
       ["min_width", "--min-width"], ["min_cols", "--min-cols"],
       ["max_cols", "--max-cols"], ["priority", "--priority"],
+      // v2.0.4 — the design fields. Same rule: absent sends nothing, "" clears.
+      ["label_pos", "--label-pos"], ["value_pos", "--value-pos"],
+      ["caption", "--caption"], ["caption_pos", "--caption-pos"],
+      ["caption_align", "--caption-align"], ["caption_color", "--caption-color"],
+      ["caption_case", "--caption-case"], ["fill_color", "--fill-color"],
+      ["empty_color", "--empty-color"], ["ramp_colors", "--ramp-colors"],
+      ["ramp_stops", "--ramp-stops"], ["fill_char", "--fill-char"],
+      ["empty_char", "--empty-char"], ["brackets", "--brackets"],
+      ["threshold", "--threshold"], ["pad_left", "--pad-left"],
+      ["pad_right", "--pad-right"], ["align", "--align"], ["sign", "--sign"],
+      ["max_len", "--max-len"], ["unknown", "--unknown"],
+      ["color_by_state", "--state-color"], ["glyph_by_state", "--state-glyph"],
     ]) {
       // An absent key sends nothing; a PRESENT "" or null sends `<flag> ""`,
       // which the CLI reads as "delete the key" (inherit). Dropping it made a
@@ -535,13 +550,21 @@ const WRITES = {
       argv.push(f, b[k] === null ? "" : String(b[k]));
     }
     if (b.draw_empty) argv.push("--draw-empty");
+    // `params` is an OBJECT, one `--param k=v` per key. The CLI scans every
+    // `--param`, and `k=` (a null or "" value) deletes that key.
+    if (b.params && typeof b.params === "object")
+      for (const [k, v] of Object.entries(b.params)) argv.push("--param", String(k) + "=" + (v === null || v === undefined ? "" : String(v)));
     return argv.concat(slBoard(b));
   },
   "/api/statusline/move": (b) => ["statusline", "move", String(b.from), String(b.to), ...slBoard(b)],
   "/api/statusline/remove": (b) => ["statusline", "remove", String(b.at), ...slBoard(b)],
   "/api/statusline/line": (b) => {
     const argv = ["statusline", "line", String(b.line)];
-    if (b.separator !== undefined) argv.push("--separator", String(b.separator));
+    // A PRESENT key is forwarded even when it is "" — that is the clear.
+    for (const [k, f] of [["separator", "--separator"], ["prefix", "--prefix"], ["align", "--align"], ["sep_color", "--sep-color"]]) {
+      if (b[k] === undefined) continue;
+      argv.push(f, b[k] === null ? "" : String(b[k]));
+    }
     if (b.theme) argv.push("--theme", String(b.theme));
     if (b.max_width !== undefined) argv.push("--max-width", String(b.max_width));
     return argv.concat(slBoard(b));
@@ -568,6 +591,8 @@ const WRITES = {
   "/api/statusline/clone": (b) => ["statusline", "clone", String(b.at), ...slBoard(b)],
   "/api/statusline/reset": (b) => ["statusline", "reset", ...slBoard(b)],
   "/api/statusline/compile": (b) => ["statusline", "compile", ...slBoard(b)],
+  // v2.0.4 — the redraw timer: a settings write, not a layout op.
+  "/api/statusline/refresh": (b) => ["statusline", "refresh", String(b.seconds), ...slBoard(b)],
   "/api/wait/unblock": (b) => (b.slug ? ["wait", "unblock", String(b.slug)] : ["wait", "unblock"]),
   "/api/wait/cancel": (b) => (b.slug ? ["wait", "cancel", String(b.slug)] : ["wait", "cancel"]),
   "/api/wiki/sync": () => ["wiki", "sync"],
@@ -1150,7 +1175,11 @@ async function handleApi(req, res, url, ctx) {
       try {
         body = await readBody(req);
       } catch (_) {}
-      const canned = fixtures.post(route, body);
+      // The staged preview has nothing to replay here, so it answers with the
+    // canned picture — the shape the panel reads, not "nothing ran".
+    if (route === "/api/statusline/stage-preview")
+      return json(res, 200, { ok: true, preview: fixtures.get("/api/statusline/preview", body), show: fixtures.get("/api/statusline/show", body) });
+    const canned = fixtures.post(route, body);
       if (canned)
         return json(res, 200, {
           ok: true,
@@ -1412,6 +1441,10 @@ async function handleApi(req, res, url, ctx) {
     return json(res, 200, { ok: true, ...started });
   }
 
+  // v2.0.4 — the staged preview. NOT a mutation of this project: it runs in a
+  // throwaway copy, so it neither waits on nor blocks a running job.
+  if (route === "/api/statusline/stage-preview") return json(res, 200, stagePreview(body, ctx));
+
   const build = WRITES[route];
   if (!build) return json(res, 404, { error: "unknown endpoint " + route });
   if (job && job.running) return json(res, 409, { error: "busy", job: jobView() });
@@ -1421,8 +1454,7 @@ async function handleApi(req, res, url, ctx) {
   } catch (_) {
     return json(res, 400, { error: "bad request body" });
   }
-  if (argv.some((a) => a === "undefined" || a === "null" || a === ""))
-    return json(res, 400, { error: "missing argument" });
+  if (!argvComplete(argv)) return json(res, 400, { error: "missing argument" });
   const out = runCli(argv, ctx);
   clearCache();
   // A write's exit code is a REAL failure signal (validators exit 1), unlike a
@@ -1434,6 +1466,71 @@ async function handleApi(req, res, url, ctx) {
     // Writes print human text, not JSON — that IS the confirmation to show.
     output: (out.stdout + (out.stderr ? "\n" + out.stderr : "")).trim(),
   });
+}
+
+// A write's argv is complete when no element is a lost value. `""` is a real
+// value right after a `--flag` — it is how a v2.0.3 clear is spelled — and is
+// refused only as a positional, together with "undefined" and "null".
+function argvComplete(argv) {
+  return !argv.some((a, i) => {
+    if (a === "undefined" || a === "null") return true;
+    if (a !== "") return false;
+    const prev = argv[i - 1];
+    return !(typeof prev === "string" && prev.startsWith("--"));
+  });
+}
+
+// The files a board's layout lives in, under `.claude/orc/`. The CLI's own
+// names; only the AUTHORED file is copied — the rest is compiled from it.
+const SL_LAYOUT_FILE = { status: "statusline-layout.json", subagent: "subagent-layout.json" };
+
+// v2.0.4 — THE STAGED PREVIEW. The staged writes are replayed through the SAME
+// `WRITES` builders against a throwaway copy of this project's layout, then
+// the copy is previewed by the hook's own engine. Nothing touches the real
+// project, and the copy is always deleted.
+function stagePreview(body, ctx) {
+  const b = body || {};
+  const board = b.board === "subagent" ? "subagent" : "status";
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "orc-stage-"));
+  const sub = { ...ctx, projectRoot: tmp };
+  try {
+    const orcDir = path.join(tmp, ".claude", "orc");
+    fs.mkdirSync(orcDir, { recursive: true });
+    const src = path.join(ctx.projectRoot || "", ".claude", "orc", SL_LAYOUT_FILE[board]);
+    if (ctx.projectRoot && fs.existsSync(src)) fs.copyFileSync(src, path.join(orcDir, SL_LAYOUT_FILE[board]));
+    const actions = Array.isArray(b.actions) ? b.actions : [];
+    for (let i = 0; i < actions.length; i++) {
+      const a = actions[i] || {};
+      const route = String(a.route || "");
+      const build = route.startsWith("/api/statusline/") ? WRITES[route] : null;
+      let argv = null;
+      try {
+        argv = build ? build(Object.assign({}, a.body || {}, { board: board })) : null;
+      } catch (_) {
+        argv = null;
+      }
+      if (!argv || !argvComplete(argv)) return { ok: false, failed: { index: i, output: "refused: " + route } };
+      const out = runCli(argv, sub);
+      if (out.exit_code !== 0)
+        return { ok: false, failed: { index: i, output: (out.stdout + (out.stderr ? chr10 + out.stderr : "")).trim() } };
+    }
+    const q = { board };
+    if (b.width) q.width = b.width;
+    if (b.state) q.state = b.state;
+    if (b.frames) q.frames = b.frames;
+    if (b.frame_ms) q.frame_ms = b.frame_ms;
+    const preview = runCli(READS["/api/statusline/preview"](q), sub, { json: true });
+    const show = runCli(READS["/api/statusline/show"](q), sub, { json: true });
+    return { ok: true, preview: preview.data, show: show.data };
+  } finally {
+    rmTree(tmp);
+  }
+}
+
+function rmTree(dir) {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch (_) {}
 }
 
 // `orc upgrade` replaces the package while your working tree may hold changes.
@@ -1452,4 +1549,4 @@ function isDirtyTree(ctx) {
   }
 }
 
-module.exports = { handleApi, clearCache, encodeBody, READS, WRITES, MAINTENANCE };
+module.exports = { handleApi, clearCache, encodeBody, READS, WRITES, MAINTENANCE, argvComplete, stagePreview };

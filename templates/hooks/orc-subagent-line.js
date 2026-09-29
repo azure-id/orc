@@ -233,6 +233,7 @@ function opsKnown(lines, OPS) {
       const o = list[i];
       if (!o || !OPS[o.op]) return false;
       if (o.children) st.push(o.children);
+      if (o.cap && o.cap.ops) st.push(o.cap.ops);
     }
   }
   return true;

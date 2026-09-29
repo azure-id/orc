@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.0.3-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.4-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v2.0.3** · diperbarui 30-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v2.0.4** · diperbarui 30-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -786,27 +786,37 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v2.0.3 - status line yang Anda desain adalah status line yang Anda lihat _(30-09-2026)_
+### v2.0.4 - desain status line sampai sel terakhir _(30-09-2026)_
 
-**Patch untuk `orc ui` ▸ CLI Hook Interface.** Panel berkata "Your lines are showing",
-tetapi terminal menampilkan baris bawaan ORC. Sekarang:
+**`orc ui` ▸ CLI Hook Interface sekarang bisa mengubah hampir semua yang bisa
+ditampilkan satu sel terminal.** Setiap item juga ada sebagai flag `orc statusline set`:
 
-- **Hook memeriksa bagian-bagiannya, bukan nomor versi.** Versi ORC yang berbeda dengan
-  bagian yang sama tetap menampilkan layout Anda, dan `orc update` meng-compile ulang
-  layout Anda secara otomatis.
-- **Panel memberi tahu jika terminal Anda tidak menampilkan layout Anda**, dan memberi
-  perintah untuk memperbaikinya. `orc doctor` mengatakan hal yang sama.
-- **Setiap pengaturan diterapkan.** Anda bisa mengosongkan field, memilih warna
-  "shared", mengganti bagian ke bagian dengan bentuk lain, dan memberi warna serta
-  ketebalan sendiri pada bar. Apply berhenti di perubahan pertama yang ditolak.
-- **Enam bagian menampilkan teks yang salah** (`api-time`, `wall-time`, `clock`, `pill`,
-  `effort` dots, `lines-added`). Sekarang sudah benar.
+- **Kata-kata di sekitar bentuk apa pun.** Nama di depan, di belakang, di atas atau di
+  bawah bar. Teks sebelum dan sesudahnya (`[██░░]`). Angka di samping bar.
+- **Caption** di baris atas atau bawah sebuah bagian, dengan **teks kecil** (ꜱᴍᴀʟʟ
+  ᴄᴀᴘꜱ, ˢᵘᵖᵉʳ, subscript) jika Anda mau.
+- **Bar dengan warna dan karakter Anda sendiri.** Warna isi dan warna kosong, warna
+  gradien sendiri (dicampur dalam true colour), karakter isi dan kosong sendiri.
+- **Lebih banyak pada setiap bagian:** kurung, padding, latar, warna hex apa pun, lebih
+  dari satu ketebalan, warna dan glyph per state, perataan baris dan warna pemisah.
+- **Enam bagian yang dulu tidak menggambar apa pun sekarang bekerja** (`text`,
+  `divider`, `spacer`, `icon-static`, `fill`, `config`).
+- **Hewan animasi** (kucing piksel, kucing yang mengejar tikus, pac-man, ikan, burung,
+  anjing) dan **cuaca** (suhu, ikon langit, deskripsi). `orc statusline refresh 1`
+  membuatnya bergerak sekali per detik.
+- **Panel menampilkan perubahan yang belum disimpan secara langsung**, dan pratinjau
+  bergerak.
+- **Perbaikan:** teks di atas atau di bawah sebuah bagian sekarang tampil di atas
+  bagian itu (Claude Code menghapus spasi di awal baris), spark menampilkan
+  riwayatnya, nilai yang tidak diketahui tampil `—` dan bukan bar kosong,
+  mengosongkan field bekerja (dulu HTTP 400), dan karakter kontrol di label ditolak.
 
 **Yang harus Anda lakukan:** `orc update`.
 
 <details>
-<summary><strong>Rilis sebelumnya</strong> — 125 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Rilis sebelumnya</strong> — 126 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.0.3** — the status line you designed is the status line you see · _2026-09-30_
 - **v2.0.2** — the lanes record what you answered, and the reviewer always gets the card · _2026-09-28_
 - **v2.0.1** — the trace keeps the gate name, and the lanes find the habits rule · _2026-09-27_
 - **v2.0.0** — the coding lanes remember what you fixed and how you work · _2026-09-27_

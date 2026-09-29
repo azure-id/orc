@@ -12,6 +12,7 @@ updated: 05-09-2026 (v1.4.2 — the hook board: repaint not refetch, the live ed
 updated: 21-09-2026 (v1.9.0 — the lean lanes widened, and the panel needed no edit)
 updated: 27-09-2026 (v2.0.0 W7 — the Behaviour panel: habits, rhythm, gotchas, review quality, answer log)
 updated: 30-09-2026 (v2.0.3 — the hook board: the real hook state, clears, stop-on-refusal, saved chip samples, the banner race)
+updated: 30-09-2026 (v2.0.4 — the hook board: every design field in the editor, line options, the staged live preview, the "" guard)
 -->
 
 > **LOCAL ONLY. Never `git add` this file.** It joins the untracked `*-plan.md`
@@ -846,6 +847,45 @@ template; that is what put a 250px ellipse on `.ex-tool`.
   await, the update banner's too: the router calls it on each route, and two
   quick routes appended the banner twice. The global banner copies the global
   finding's own `fix_command`, never the first command of any finding.
+
+### 4b.4 v2.0.4 — the editor reaches every field the compiler knows
+
+- **THE EDITOR IS DRIVEN BY `uses`, AND `uses` IS THE CLI'S.** Sections: Words
+  (name, `label_positions`, `value_positions`, before/after, `cases` with
+  `case_samples`), Caption (`caption_positions`, `caption_aligns`,
+  `caption_tokens`), Colour (label · value · bg · caption, each = "shared" +
+  slots + `<input type=color>` + a `#rrggbb` box), Bar look (fill/empty colour
+  and character, `ramp_colors`, `ramp_stops`, threshold), Weight (MULTI-select),
+  Frame and spacing (brackets, padding, `aligns`, `signs`, max length,
+  `unknowns`, all bounded by `cat.limits`), States (colour + glyph per state →
+  `color_by_state` / `glyph_by_state` as `k=v,…`), Settings (`params`: options
+  → buttons, free → text; staged as field `param.<key>`, sent as
+  `{ params: { key: v } }`). A field the shape does not use is greyed with the
+  reason. **Never hard-code one of these lists** — the test greps for it.
+- **THE STAGED `sep` OP IS NOW A `line` OP** `{op:"line", line, field, value}` →
+  `/api/statusline/line` (separator incl. a custom text, `sep_color`, `align`
+  from `line_aligns`, `prefix`).
+- **THE PREVIEW SHOWS STAGED CHANGES — THROUGH THE REAL CLI.**
+  `POST /api/statusline/stage-preview` copies the board's layout into a temp
+  dir, replays `plan.actions` through the SAME `WRITES` builders with
+  `--dir <tmp>`, stops at the first refusal, then runs `preview --json` and
+  `show --json` there and deletes the dir. The real project is never touched,
+  and there is still ONE engine. The panel debounces it (400 ms) and drops a
+  stale answer by sequence number (`HK_STAGED`, `HK_STAGE_SEQ`); chips and the
+  editor's live sample read the staged `show` by line/position. Cleared on
+  Apply, Discard, board change, preset and reset.
+- **THE POST GUARD ALLOWS `""` AFTER A `--flag`** (`argvComplete`). It still
+  refuses `""`, "undefined" and "null" as a positional. Before this, every
+  v2.0.3 text clear returned 400 "missing argument".
+- **THE PREVIEW MOVES, AND STOPS.** When `show.animated` (the lock holds a
+  sprite or a motif) the preview asks for `frames=12&frame_ms=1000` and
+  `hkAnimStart` cycles them with ONE interval for at most `HK_ANIM_MAX_MS`
+  (20 s), then rests on frame 0. `hkAnimStop` runs at the top of every
+  `hkPaint`, and nothing cycles under `prefers-reduced-motion`. A JS cycle for a
+  preview is the only motion outside `04-motion.css`, and it is finite.
+- **THE ANIMATION TIMER IS A SETTINGS WRITE, NOT A STAGED OP.** `animationBlock`
+  posts `/api/statusline/refresh` (`statusline refresh <s|off>`) straight away and
+  reloads; it says what the timer costs, and warns when a moving part has none.
 
 ### Test (v1.5.0) — the panel for the lane that runs the test
 

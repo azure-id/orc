@@ -95,6 +95,25 @@ let HK_COMPARE_DATA = null;
 // after it is instant, because nothing arrived — the same cards are still there
 // with one value different.
 let HK_PAINTED = false;
+// v2.0.4 — THE STAGED PREVIEW. The staged writes, replayed by the server into a
+// throwaway copy of the layout and drawn by the hook's own engine, so the
+// picture shows the unsaved changes BEFORE Apply. `HK_STAGE_SEQ` drops a stale
+// answer: only the answer to the LAST request is ever painted.
+let HK_STAGED = null;
+let HK_STAGE_SEQ = 0;
+let HK_STAGE_TIMER = null;
+const HK_STAGE_WAIT_MS = 400;
+// The lines whose separator box is open ("Custom…" was picked), kept across a
+// repaint so the box does not close under the user.
+const HK_SEP_OPEN = new Set();
+// v2.0.4 — THE ANIMATED PREVIEW. When `show.animated` is set, the preview asks
+// the CLI for several frames and the card steps through them for at most 20
+// seconds after a paint, then rests on frame 0. One timer only: every paint
+// and every navigation stops it first. Never under prefers-reduced-motion.
+const HK_ANIM_FRAMES = 12;
+const HK_ANIM_FRAME_MS = 1000;
+const HK_ANIM_MAX_MS = 20000;
+let HK_ANIM_TIMER = null;
 
 PANELS.hookui = function (host) {
   head(host, t("hookui.title"), t("hookui.sub"));
@@ -102,6 +121,8 @@ PANELS.hookui = function (host) {
   HK_SLOT = null;
   HK_MODAL = null;
   HK_PAINTED = false;
+  hkAnimStop();
+  hkStageClear();
   section(host, hkLoad, (data) => {
     HK_DATA = data;
     // `stack` is what spaces the cards; `section` gives it to its own slot, and
@@ -113,17 +134,65 @@ PANELS.hookui = function (host) {
   });
 };
 
-function hkPreviewUrl() {
-  return "/api/statusline/preview?board=" + HK_BOARD + "&width=" + HK_WIDTH + "&state=" + HK_STATE;
+function hkPreviewUrl(animated) {
+  const base = "/api/statusline/preview?board=" + HK_BOARD + "&width=" + HK_WIDTH + "&state=" + HK_STATE;
+  return animated ? base + "&frames=" + HK_ANIM_FRAMES + "&frame_ms=" + HK_ANIM_FRAME_MS : base;
+}
+
+// Whether the saved layout moves. The CLI says so in `show.animated`.
+function hkAnimated() {
+  return !!(HK_DATA && HK_DATA.show && HK_DATA.show.animated);
+}
+
+function hkReducedMotion() {
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch (_) {
+    return false;
+  }
+}
+
+function hkAnimStop() {
+  clearInterval(HK_ANIM_TIMER);
+  HK_ANIM_TIMER = null;
+}
+
+// Step the preview node through `frames`, then rest on frame 0. The node is
+// replaced through the same ansiBlock the still picture uses.
+function hkAnimStart(node, frames) {
+  hkAnimStop();
+  if (!node || !Array.isArray(frames) || frames.length < 2 || hkReducedMotion()) return;
+  const started = Date.now();
+  let i = 0;
+  let cur = node;
+  const cls = node.className;
+  HK_ANIM_TIMER = setInterval(() => {
+    const done = Date.now() - started >= HK_ANIM_MAX_MS;
+    if (!cur.isConnected) return hkAnimStop();
+    i = done ? 0 : (i + 1) % frames.length;
+    const next = ansiBlock(String(frames[i] || ""), cls);
+    cur.replaceWith(next);
+    cur = next;
+    if (done) hkAnimStop();
+  }, HK_ANIM_FRAME_MS);
 }
 
 function hkLoad() {
+  const animated = hkAnimated();
   return Promise.all([
     read("/api/statusline/show?board=" + HK_BOARD).then((r) => r.data),
     read("/api/statusline/components?board=" + HK_BOARD).then((r) => r.data),
     read("/api/statusline/presets?board=" + HK_BOARD).then((r) => r.data),
-    read(hkPreviewUrl()).then((r) => r.data),
-  ]).then(([show, cat, presets, prev]) => ({ show, cat, presets, prev }));
+    read(hkPreviewUrl(animated)).then((r) => r.data),
+  ]).then(async ([show, cat, presets, prev]) => {
+    // The layout became animated since the last load: ask again for frames.
+    if (show && show.animated && !animated) {
+      try {
+        prev = (await read(hkPreviewUrl(true))).data || prev;
+      } catch (_) {}
+    }
+    return { show, cat, presets, prev };
+  });
 }
 
 // THE ONLY PAINT. No fetch, no skeleton, no router. The scroll position is
@@ -131,6 +200,7 @@ function hkLoad() {
 // you moved one chip.
 function hkPaint() {
   if (!HK_SLOT || !HK_DATA) return;
+  hkAnimStop();
   const y = window.scrollY;
   // NO ENTRANCE ANIMATION ON A REPAINT. `.stack > *` fades and slides each
   // child in on a 30ms stagger, and `.hk-chip` does the same per chip — which
@@ -158,12 +228,14 @@ function hkPaint() {
       // POSITIONAL writes: after one refusal the rest would hit the wrong part.
       await applyActions(edits, b, { stopOnFail: true, stoppedText: (n) => t("hookui.notSent", { n }) });
       HK_OPS = [];
+      hkStageClear();
       HK_COMPARE_DATA = null;
       await hkReload();
     },
     onReset: () => confirmReset(),
     onCancel: () => {
       HK_OPS = [];
+      hkStageClear();
       hkPaint();
     },
     resetLabel: t("hookui.resetLayout"),
@@ -209,10 +281,79 @@ async function hkReload() {
 // only thing refetched. Four endpoints for a picture is three too many.
 async function hkPreviewReload() {
   try {
-    const r = await read(hkPreviewUrl());
+    const r = await read(hkPreviewUrl(hkAnimated()));
     if (HK_DATA) HK_DATA.prev = r.data;
   } catch (_) {}
   hkPaint();
+  // The staged picture was drawn at the old width or state; draw it again.
+  hkStageSchedule();
+}
+
+/* ══ the staged preview ═══════════════════════════════════════════════════
+   After a staged change, and after a short pause, the server replays the
+   staged writes into a TEMP copy of the layout and previews that copy. The
+   real project is never written. A burst of changes is ONE request, and an
+   answer that arrives after a newer request was sent is dropped. */
+function hkStageSchedule() {
+  clearTimeout(HK_STAGE_TIMER);
+  if (!HK_OPS.length || !HK_DATA) {
+    HK_STAGED = null;
+    return;
+  }
+  HK_STAGE_TIMER = setTimeout(hkStageSend, HK_STAGE_WAIT_MS);
+}
+
+async function hkStageSend() {
+  if (!HK_OPS.length || !HK_DATA) return;
+  const seq = ++HK_STAGE_SEQ;
+  const plan = hkPlan(HK_DATA.show, HK_DATA.cat);
+  let r = null;
+  try {
+    r = await post("/api/statusline/stage-preview", {
+      board: HK_BOARD,
+      width: HK_WIDTH,
+      state: HK_STATE,
+      ...(hkAnimated() ? { frames: HK_ANIM_FRAMES, frame_ms: HK_ANIM_FRAME_MS } : {}),
+      actions: plan.actions.map((a) => ({ route: a.route, body: a.body })),
+    });
+  } catch (e) {
+    r = { ok: false, failed: { index: -1, output: String((e && e.message) || "") } };
+  }
+  // A NEWER REQUEST WAS SENT, or the ops were cleared: this answer is stale.
+  if (seq !== HK_STAGE_SEQ || !HK_OPS.length) return;
+  if (r && r.ok && r.preview) HK_STAGED = { preview: r.preview, show: r.show || null };
+  else {
+    const f = (r && r.failed) || { index: -1, output: "" };
+    const hit = plan.actions[f.index];
+    HK_STAGED = { failed: { label: hit ? hit.label : "", output: String(f.output || "") } };
+  }
+  hkStagePaint();
+}
+
+// A value typed but not yet staged must not be wiped by the repaint this
+// answer triggers. The paint waits until that field loses focus.
+function hkStagePaint() {
+  const a = document.activeElement;
+  if (a && a.tagName === "INPUT" && a.dataset && "built" in a.dataset && a.value !== a.dataset.built) {
+    a.addEventListener("blur", () => hkPaint(), { once: true });
+    return;
+  }
+  hkPaint();
+}
+
+function hkStageClear() {
+  clearTimeout(HK_STAGE_TIMER);
+  HK_STAGE_SEQ++;
+  HK_STAGED = null;
+}
+
+// The staged `show` item at this chip's place, when the staged preview has
+// one. The replay ran the same ops in the same order, so the place matches.
+function stagedItem(item, line) {
+  if (!HK_STAGED || !HK_STAGED.show || !line) return null;
+  const l = (HK_STAGED.show.lines || []).find((x) => x.line === line.line);
+  const i = line.items.indexOf(item);
+  return l && i >= 0 && l.items ? l.items[i] || null : null;
 }
 
 // EVERY write carries the board it is about. Forgetting it on one route would
@@ -235,13 +376,14 @@ function hkOp(op) {
   // decision typed twice is one decision, and the pending list has to read as a
   // list of decisions rather than a list of keystrokes.
   if (op.op === "set") HK_OPS = HK_OPS.filter((o) => !(o.op === "set" && o.ref === op.ref && o.field === op.field));
-  if (op.op === "sep") HK_OPS = HK_OPS.filter((o) => !(o.op === "sep" && o.line === op.line));
+  if (op.op === "line") HK_OPS = HK_OPS.filter((o) => !(o.op === "line" && o.line === op.line && o.field === op.field));
   if (op.op === "doc") HK_OPS = HK_OPS.filter((o) => !(o.op === "doc" && o.field === op.field));
   HK_OPS.push(op);
   // A REPAINT, NEVER A REFETCH. Nothing has been written, so nothing on disk
   // has moved — and re-entering the router here is what made every click look
   // like a save.
   hkPaint();
+  hkStageSchedule();
 }
 
 function hkPlan(show, cat) {
@@ -249,6 +391,9 @@ function hkPlan(show, cat) {
   const lines = (show.lines || []).map((l) => ({
     line: l.line,
     separator: l.separator,
+    align: l.align,
+    sep_color: l.sep_color,
+    prefix: l.prefix,
     items: (l.items || []).map((it) => ({ ref: it.id, type: it.type, src: it, over: {}, isNew: false })),
   }));
   const actions = [];
@@ -297,12 +442,18 @@ function hkPlan(show, cat) {
       if (!f) return;
       f.it.over[op.field] = op.value;
       if (op.field === "type") f.it.type = op.value;
-      actions.push({ key, route: "/api/statusline/set", body: bd(Object.assign({ line: f.l.line, pos: f.i + 1 }, { [op.field]: op.value })), label: op.label });
-    } else if (op.op === "sep") {
+      // A SETTING is one key of the `params` object; the route sends it as one
+      // `--param key=value`, so two settings are two ops and never collide.
+      const body = op.field.startsWith("param.")
+        ? { params: { [op.field.slice(6)]: op.value } }
+        : { [op.field]: op.value };
+      actions.push({ key, route: "/api/statusline/set", body: bd(Object.assign({ line: f.l.line, pos: f.i + 1 }, body)), label: op.label });
+    } else if (op.op === "line") {
+      // One LINE field (separator, its colour, align, prefix) per op.
       const l = lines[op.line - 1];
       if (!l) return;
-      l.separator = op.value;
-      actions.push({ key, route: "/api/statusline/line", body: bd({ line: op.line, separator: op.value }), label: op.label });
+      l[op.field] = op.value;
+      actions.push({ key, route: "/api/statusline/line", body: bd({ line: op.line, [op.field]: op.value }), label: op.label });
     } else if (op.op === "doc") {
       doc[op.field] = op.value;
       actions.push({ key, route: "/api/statusline/doc", body: bd({ [op.field]: op.value }), label: op.label });
@@ -364,6 +515,7 @@ function boardTabs(cat) {
       // computed against this one.
       if (HK_OPS.length) return toast(t("hookui.applyFirst"), "bad");
       HK_BOARD = b;
+      hkStageClear();
       HK_SEARCH = "";
       HK_COMPARE_DATA = null;
       hkReload();
@@ -490,9 +642,20 @@ function previewCard(prev, plan, cat) {
   }
   const c = card(t("hookui.preview"), right);
   c.append(el("div", "note", t("hookui.previewAbout")));
-  // THE STAGED BANNER IS AN INSTRUCTION, not a disclaimer. It says what is
-  // missing from the picture AND what to press to put it there.
-  if (plan.dirty) c.append(el("div", "note note-warn", tn(plan.actions.length, "hookui.previewStaleN")));
+  // v2.0.4 — THE PICTURE INCLUDES THE STAGED CHANGES once the server has
+  // replayed them into a temp copy, and it SAYS SO. A change the CLI refused is
+  // named here, with the CLI's own text, before anybody presses Apply.
+  const staged = plan.dirty && HK_STAGED && HK_STAGED.preview && HK_STAGED.preview.ok ? HK_STAGED.preview : null;
+  if (plan.dirty && HK_STAGED && HK_STAGED.failed) {
+    c.append(el("div", "note note-warn", t("hookui.stageFailed", { label: HK_STAGED.failed.label || "?" })));
+    if (HK_STAGED.failed.output) c.append(el("pre", "hk-stage-out", HK_STAGED.failed.output));
+  } else if (staged) {
+    c.append(el("div", "note hk-staged-tag", tn(plan.actions.length, "hookui.previewStagedN")));
+  } else if (plan.dirty) {
+    // THE STAGED BANNER IS AN INSTRUCTION, not a disclaimer. It says what is
+    // missing from the picture AND what to press to put it there.
+    c.append(el("div", "note note-warn", tn(plan.actions.length, "hookui.previewStaleN")));
+  }
   if (!prev || !prev.ok) {
     c.append(el("div", "note", t("hookui.previewUnavailable")));
     return c;
@@ -514,19 +677,23 @@ function previewCard(prev, plan, cat) {
   }
   c.append(states);
 
-  c.append(termWindow(prev.text, {
+  const shown = staged || prev;
+  const win = termWindow(shown.text, {
     title: tn(HK_WIDTH, "hookui.termTitle"),
     // The colour set and the symbol set the picture was drawn with are the
     // CLI's answer, carried on the preview itself. Naming them here would be a
     // second idea of what is in force.
-    tags: [prev.theme, prev.glyphs].filter(Boolean),
+    tags: [shown.theme, shown.glyphs].filter(Boolean).concat(staged ? [t("hookui.stagedTag")] : []),
     ruler: true,
-  }));
+  });
+  c.append(win);
+  // v2.0.4 — the moving parts move here too, for a short while after a paint.
+  if (hkAnimated() && Array.isArray(shown.frames)) hkAnimStart(win.querySelector(".hk-preview"), shown.frames);
 
   // WHAT EACH LINE COSTS IN CELLS, under the window it belongs to. A number in
   // a row of chips a long way from the picture is a number nobody reads.
   const meta = el("div", "row-actions hk-widths");
-  (prev.static_width || []).forEach((w, i) => {
+  (shown.static_width || []).forEach((w, i) => {
     if (!w) return;
     meta.append(chip(tn(i + 1, "hookui.lineN") + " " + tn(w, "hookui.cells"), null));
   });
@@ -798,35 +965,88 @@ function boardCard(cat, plan) {
 
 // THE SEPARATOR IS A DROPDOWN, and its options are the CLI's. A free-text box
 // asked a person to invent a rhythm and then to type a character that may not
-// be on their keyboard. A value the layout already carries that is NOT in the
-// set keeps its slot, leads the list and is disabled — the `fixed_executor`
-// rule: the state must be visible, never re-offerable.
+// be on their keyboard — so the text box is the LAST entry, "Custom…", and it
+// opens only when asked for. A value the layout already carries that is not in
+// the set opens it, so the state stays visible.
+//
+// v2.0.4 — the line head also carries the separator's colour, the line's
+// alignment and its prefix. Every option list is the CLI's; each is one `line`
+// op, so two line fields never overwrite each other in the pending list.
+const HK_SEP_CUSTOM = "\u0000custom";
 function separatorPicker(cat, line) {
+  const box = el("div", "hk-line-opts-wrap");
   const wrap = el("label", "hk-line-opts");
   wrap.append(el("span", "note", t("hookui.separator")));
   const sel = el("select", "hk-select");
   const known = cat.separators || [];
-  if (!known.some((s) => s.value === line.separator)) {
-    const o = el("option", null, t("hookui.sepCustom", { s: JSON.stringify(line.separator) }));
-    o.value = line.separator;
-    o.disabled = true;
-    o.selected = true;
-    sel.append(o);
-  }
+  const lineOp = (field, value, label) => hkOp({ op: "line", line: line.line, field, value, label });
+  const custom = HK_SEP_OPEN.has(line.line) || !known.some((s) => s.value === line.separator);
   for (const s of known) {
     // The NAME is the CLI's word; the sample is the literal string, shown
     // between two marks so a run of spaces is visible at all.
     const o = el("option", null, s.name + "   ‹" + s.value + "›");
     o.value = s.value;
-    if (s.value === line.separator) o.selected = true;
+    if (!custom && s.value === line.separator) o.selected = true;
     sel.append(o);
   }
+  const co = el("option", null, t("hookui.sepCustomPick"));
+  co.value = HK_SEP_CUSTOM;
+  if (custom) co.selected = true;
+  sel.append(co);
   sel.addEventListener("change", () => {
+    if (sel.value === HK_SEP_CUSTOM) {
+      HK_SEP_OPEN.add(line.line);
+      return hkPaint();
+    }
+    HK_SEP_OPEN.delete(line.line);
     const hit = known.find((s) => s.value === sel.value);
-    hkOp({ op: "sep", line: line.line, value: sel.value, label: t("hookui.opSep", { n: line.line, s: hit ? hit.name : sel.value }) });
+    lineOp("separator", sel.value, t("hookui.opSep", { n: line.line, s: hit ? hit.name : sel.value }));
   });
   wrap.append(sel);
-  return wrap;
+  box.append(wrap);
+  if (custom) {
+    const txt = textField(line.separator, (v) => lineOp("separator", v, t("hookui.opSep", { n: line.line, s: JSON.stringify(v) })), true);
+    txt.classList.add("hk-short");
+    txt.setAttribute("aria-label", t("hookui.sepCustomBox"));
+    box.append(txt);
+  }
+
+  // The separator's colour: "shared" (the line's own), a named slot, or a hex
+  // value the layout already carries, which keeps its own entry.
+  const colour = el("label", "hk-line-opts");
+  colour.append(el("span", "note", t("hookui.sepColour")));
+  const cs = el("select", "hk-select");
+  const sharedOpt = el("option", null, t("hookui.shared"));
+  sharedOpt.value = "";
+  cs.append(sharedOpt);
+  const slots = (cat.colors || []).map(String);
+  if (line.sep_color && !slots.includes(String(line.sep_color))) slots.push(String(line.sep_color));
+  for (const c of slots) {
+    const o = el("option", null, c);
+    o.value = c;
+    if (String(line.sep_color) === c) o.selected = true;
+    cs.append(o);
+  }
+  cs.addEventListener("change", () => lineOp("sep_color", cs.value, t("hookui.opSepColour", { n: line.line, v: cs.value || t("hookui.shared") })));
+  colour.append(cs);
+  box.append(colour);
+
+  if ((cat.line_aligns || []).length) {
+    const al = el("div", "hk-line-opts");
+    al.append(el("span", "note", t("hookui.lineAlign")));
+    al.append(pickRow(cat.line_aligns, line.align || null,
+      (v) => lineOp("align", v, t("hookui.opLineAlign", { n: line.line, v: v || t("hookui.shared") })),
+      { label: t("hookui.shared"), value: "", on: !line.align }));
+    box.append(al);
+  }
+
+  const pre = el("label", "hk-line-opts");
+  pre.append(el("span", "note", t("hookui.linePrefix")));
+  const pt = textField(line.prefix, (v) => lineOp("prefix", v, t("hookui.opLinePrefix", { n: line.line, v })), true);
+  pt.classList.add("hk-short");
+  pre.append(pt);
+  box.append(pre);
+  return box;
 }
 
 /* ══ a chip ═══════════════════════════════════════════════════════════════ */
@@ -844,7 +1064,7 @@ function chipEl(item, line, plan, cat) {
 
   const face = el("div", "hk-chip-face");
   face.append(el("span", "hk-grip", "∷"));
-  face.append(ansiBlock(chipSample(item, comp), "hk-preview hk-preview-chip"));
+  face.append(ansiBlock(chipSample(item, comp, line), "hk-preview hk-preview-chip"));
   wrap.append(face);
 
   wrap.append(el("div", "hk-chip-id", item.type));
@@ -931,7 +1151,11 @@ function chipEl(item, line, plan, cat) {
 // What this chip will look like in the bar. A part staged in this session has
 // no rendered sample from the CLI yet, so it borrows its component's default —
 // which is exactly what it will render as until somebody changes its shape.
-function chipSample(item, comp) {
+function chipSample(item, comp, line) {
+  // v2.0.4 — the staged preview's own render of THIS place, when it has one:
+  // the real engine's answer beats the per-shape sample below.
+  const st = stagedItem(item, line);
+  if (st && st.sample) return st.sample;
   // Nothing staged: the CLI's own render of THIS item with its saved design.
   if (Object.keys(item.over).length === 0 && item.src && item.src.sample) return item.src.sample;
   if (!comp) return item.type;
@@ -1280,6 +1504,70 @@ function editModal(item0, line0, comp, cat) {
     return box;
   };
 
+  // v2.0.4 — the small builders every new control goes through. Each option
+  // list is the CLI's (`cat.*`), each value is staged with `stage`, and a
+  // "shared" pick clears the key so the part inherits again.
+  const HEX = /^#[0-9a-fA-F]{6}$/;
+  const isHex = (v) => typeof v === "string" && HEX.test(v);
+  const change = (nameKey, v) => t("hookui.fieldChange", { id: comp.id, field: t(nameKey), v: String(v) });
+  const lim = (k) => (cat.limits || {})[k];
+  // A list the CLI stores as an array and the panel stages as "a,b".
+  const listOf = (v) => (Array.isArray(v) ? v.map(String) : v == null || v === "" ? [] : String(v).split(","));
+  // A map the CLI stores as an object and the panel stages as "k=v,k=v".
+  const mapOf = (v) => {
+    if (v && typeof v === "object" && !Array.isArray(v)) return Object.assign({}, v);
+    const out = {};
+    for (const pair of listOf(v)) {
+      const at = pair.indexOf("=");
+      if (at > 0) out[pair.slice(0, at)] = pair.slice(at + 1);
+    }
+    return out;
+  };
+  const mapText = (m) => Object.entries(m).filter(([, v]) => v !== "" && v != null).map(([k, v]) => k + "=" + v).join(",");
+  // One row of CLI options with the "shared" pick first.
+  const choice = (field, options, nameKey, aboutKey, gate, tips) => {
+    const node = pickRow(options, own(field), (v) => stage(field, v, change(nameKey, v)), shared(field, ""), tips);
+    return labelled(fieldName(t(nameKey), field), gate ? gated(field, node) : node, t(aboutKey));
+  };
+  const text = (field, nameKey, aboutKey, gate, cls) => {
+    const cur = val(field, "");
+    const node = textField(Array.isArray(cur) ? cur.join(",") : cur, (v) => stage(field, v, change(nameKey, v)));
+    if (cls) node.classList.add(cls);
+    return labelled(fieldName(t(nameKey), field), gate ? gated(field, node) : node, t(aboutKey));
+  };
+  const num = (field, lo, hi, nameKey, aboutKey, gate) => {
+    const node = numField(val(field, null), lo, hi, (v) => stage(field, v, change(nameKey, v)));
+    return labelled(fieldName(t(nameKey), field), gate ? gated(field, node) : node, t(aboutKey));
+  };
+  // EVERY COLOUR PICKER: "shared" first, then the named slots, then a hex
+  // entry — the browser's own colour picker AND a short box that takes
+  // `#rrggbb`. The hex string is what is staged; the CLI validates it.
+  const colourPick = (field, nameKey, aboutKey, gate) => {
+    const box = el("div", "hk-colour");
+    const cur = own(field);
+    box.append(pickRow(cat.colors, cur, (v) => stage(field, v, change(nameKey, v)), shared(field, cat.inherit_token)));
+    const hex = el("div", "hk-hex");
+    const pick = el("input", "hk-hex-pick");
+    pick.type = "color";
+    pick.value = isHex(cur) ? cur.toLowerCase() : "#000000";
+    pick.setAttribute("aria-label", t("hookui.hexPick"));
+    pick.addEventListener("change", () => stage(field, pick.value, change(nameKey, pick.value)));
+    const box2 = el("input", "hk-input hk-short");
+    box2.type = "text";
+    box2.placeholder = t("hookui.hexPlaceholder");
+    box2.value = isHex(cur) ? cur : "";
+    box2.dataset.built = box2.value;
+    box2.setAttribute("aria-label", t("hookui.hexBox"));
+    // Staged only once it IS a colour — "#22c" is a keystroke, not a value.
+    box2.addEventListener("input", () => {
+      const v = box2.value.trim();
+      if (isHex(v)) stage(field, v, change(nameKey, v));
+    });
+    hex.append(pick, box2);
+    box.append(hex);
+    return labelled(fieldName(t(nameKey), field), gate ? gated(field, box) : box, t(aboutKey));
+  };
+
   function build() {
     const live = el("div", "hk-editor-live");
     // WHAT THIS IS, EXACTLY. `previews` is a per-renderer sample the CLI drew
@@ -1287,7 +1575,7 @@ function editModal(item0, line0, comp, cat) {
     // the words or the numbers this component will carry at run time. Claiming
     // otherwise would make the one picture in this dialog a lie.
     live.append(el("div", "note", t("hookui.editorLive")));
-    live.append(termWindow(chipSample(item, comp), { title: comp.id, tags: [], ruler: false, small: true }));
+    live.append(termWindow(chipSample(item, comp, line), { title: comp.id, tags: [], ruler: false, small: true }));
     pane.append(live);
     if (comp.summary) pane.append(el("div", "note", comp.summary));
     pane.append(el("div", "note", t("hookui.editorStaged")));
@@ -1345,13 +1633,26 @@ function editModal(item0, line0, comp, cat) {
     label.addEventListener("change", push);
     label.addEventListener("input", push);
     pane.append(labelled(fieldName(t("hookui.label"), "label"), gated("label", label, cat.label_renderers), t("hookui.labelAbout")));
-    pane.append(labelled(fieldName(t("hookui.case"), "case"), gated("case", pickRow(cat.cases, val("case", null), (v) => stage("case", v, t("hookui.caseChange", { id: comp.id, v })))), t("hookui.caseAbout")));
+    pane.append(choice("label_pos", cat.label_positions, "hookui.labelPos", "hookui.labelPosAbout", true));
+    pane.append(choice("value_pos", cat.value_positions, "hookui.valuePos", "hookui.valuePosAbout", true));
+    // Each case button carries the CLI's own sample of what it does.
+    pane.append(labelled(fieldName(t("hookui.case"), "case"), gated("case", pickRow(cat.cases, val("case", null), (v) => stage("case", v, t("hookui.caseChange", { id: comp.id, v })), null, cat.case_samples)), t("hookui.caseAbout")));
     pane.append(labelled(fieldName(t("hookui.before"), "prefix"), gated("prefix", textField(val("prefix", ""), (v) => stage("prefix", v, t("hookui.beforeChange", { id: comp.id, v })))), t("hookui.beforeAbout")));
     pane.append(labelled(fieldName(t("hookui.after"), "suffix"), gated("suffix", textField(val("suffix", ""), (v) => stage("suffix", v, t("hookui.afterChange", { id: comp.id, v })))), t("hookui.afterAbout")));
 
+    // A CAPTION is a second row of text above or below the part. `{value}` and
+    // `{label}` are the CLI's tokens, listed from `caption_tokens`.
+    pane.append(sectionHead(t("hookui.caption"), t("hookui.captionAbout", { tokens: (cat.caption_tokens || []).join(" "), n: lim("caption") || "" })));
+    pane.append(text("caption", "hookui.captionText", "hookui.captionTextAbout", true));
+    pane.append(choice("caption_pos", cat.caption_positions, "hookui.captionPos", "hookui.captionPosAbout", true));
+    pane.append(choice("caption_align", cat.caption_aligns, "hookui.captionAlign", "hookui.captionAlignAbout", true));
+    pane.append(choice("caption_case", cat.cases, "hookui.captionCase", "hookui.captionCaseAbout", true, cat.case_samples));
+
     pane.append(sectionHead(t("hookui.colour"), t("hookui.colourAbout")));
-    pane.append(labelled(fieldName(t("hookui.labelColour"), "label_color"), pickRow(cat.colors, own("label_color"), (v) => stage("label_color", v, t("hookui.colourChange", { id: comp.id, v })), shared("label_color", cat.inherit_token)), t("hookui.labelColourAbout")));
-    pane.append(labelled(fieldName(t("hookui.valueColour"), "value_color"), pickRow(cat.colors, own("value_color"), (v) => stage("value_color", v, t("hookui.colourChange", { id: comp.id, v })), shared("value_color", cat.inherit_token)), t("hookui.valueColourAbout")));
+    pane.append(colourPick("label_color", "hookui.labelColour", "hookui.labelColourAbout", false));
+    pane.append(colourPick("value_color", "hookui.valueColour", "hookui.valueColourAbout", false));
+    pane.append(colourPick("bg", "hookui.bgColour", "hookui.bgColourAbout", false));
+    pane.append(colourPick("caption_color", "hookui.captionColour", "hookui.captionColourAbout", true));
     if (comp.bounded)
       pane.append(labelled(fieldName(t("hookui.ramp"), "ramp"), pickRow(Object.keys(cat.ramps), val("ramp", null), (v) => stage("ramp", v, t("hookui.rampChange", { id: comp.id, v }))), t("hookui.rampAbout")));
     // R3, AT THE CONTROL, at the moment the choice is made - never in a
@@ -1360,8 +1661,118 @@ function editModal(item0, line0, comp, cat) {
 
     // "Weight", never "font size". A terminal owns its font, and a picker that
     // did nothing would be worse than not offering one.
-    pane.append(labelled(fieldName(t("hookui.emphasis"), "emphasis"), pickRow((cat.emphasis || []).filter((e) => !(cat.refused_emphasis || []).includes(e)), shared("emphasis").on ? null : (val("emphasis", []) || [])[0], (v) => stage("emphasis", v, t("hookui.emphasisChange", { id: comp.id, v })), shared("emphasis", "")), t("hookui.emphasisAbout")));
+    // v2.0.4 — the bar's own look, only when the current shape draws one.
+    const barFields = ["fill_color", "empty_color", "fill_char", "empty_char", "ramp_colors", "ramp_stops", "threshold"];
+    if (barFields.some((f) => usesOf(f))) {
+      pane.append(sectionHead(t("hookui.barLook"), t("hookui.barLookAbout")));
+      pane.append(colourPick("fill_color", "hookui.fillColour", "hookui.fillColourAbout", true));
+      pane.append(colourPick("empty_color", "hookui.emptyColour", "hookui.emptyColourAbout", true));
+      pane.append(text("fill_char", "hookui.fillChar", "hookui.charAbout", true, "hk-char"));
+      pane.append(text("empty_char", "hookui.emptyChar", "hookui.charAbout", true, "hk-char"));
+      const rc = lim("ramp_colors") || [];
+      pane.append(labelled(fieldName(t("hookui.rampColours"), "ramp_colors"), gated("ramp_colors", textField(listOf(val("ramp_colors", null)).join(","), (v) => stage("ramp_colors", v, change("hookui.rampColours", v)))), t("hookui.rampColoursAbout", { lo: rc[0] || "", hi: rc[1] || "" })));
+      pane.append(labelled(fieldName(t("hookui.rampStops"), "ramp_stops"), gated("ramp_stops", textField(listOf(val("ramp_stops", null)).join(","), (v) => stage("ramp_stops", v, change("hookui.rampStops", v)))), t("hookui.rampStopsAbout")));
+      pane.append(num("threshold", 0, 100, "hookui.threshold", "hookui.thresholdAbout", true));
+    }
+
+    // "Weight", never "font size". A terminal owns its font, and a picker that
+    // did nothing would be worse than not offering one. v2.0.4 — SEVERAL at
+    // once (bold AND underline): each button toggles one, and "shared" clears.
+    const weights = el("div", "hk-picks");
+    const on = new Set(shared("emphasis").on ? [] : listOf(val("emphasis", [])));
+    const lead = el("button", "hk-pick" + (on.size ? "" : " hk-pick-on"), t("hookui.shared"));
+    lead.type = "button";
+    lead.addEventListener("click", () => stage("emphasis", "", ""));
+    weights.append(lead);
+    for (const e of (cat.emphasis || []).filter((x) => !(cat.refused_emphasis || []).includes(x))) {
+      const b = el("button", "hk-pick" + (on.has(e) ? " hk-pick-on" : ""), String(e));
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(on.has(e)));
+      b.addEventListener("click", () => {
+        const next = new Set(on);
+        if (next.has(e)) next.delete(e);
+        else next.add(e);
+        const v = [...next].join(",");
+        stage("emphasis", v, t("hookui.emphasisChange", { id: comp.id, v }));
+      });
+      weights.append(b);
+    }
+    pane.append(labelled(fieldName(t("hookui.emphasis"), "emphasis"), weights, t("hookui.emphasisAbout")));
     pane.append(el("div", "note", t("hookui.fontWhy")));
+
+    // FRAME AND SPACING: the brackets around the part, the blank cells on each
+    // side, and how a padded value sits. Every range is the CLI's `limits`.
+    pane.append(sectionHead(t("hookui.frame"), t("hookui.frameAbout")));
+    const br = listOf(val("brackets", null));
+    const stageBr = (l, r) => stage("brackets", l === "" && r === "" ? "" : l + "," + r, change("hookui.brackets", l + " " + r));
+    let brR = null;
+    const brL = textField(br[0] || "", (v) => stageBr(v, brR.value));
+    brR = textField(br[1] || "", (v) => stageBr(brL.value, v));
+    brL.classList.add("hk-short");
+    brR.classList.add("hk-short");
+    brL.setAttribute("aria-label", t("hookui.bracketLeft"));
+    brR.setAttribute("aria-label", t("hookui.bracketRight"));
+    const brPair = el("div", "hk-pair");
+    brPair.append(brL, brR);
+    pane.append(labelled(fieldName(t("hookui.brackets"), "brackets"), gated("brackets", brPair), t("hookui.bracketsAbout", { n: lim("brackets") || "" })));
+    const pad = listOf(val("padding", null));
+    const padOf = (k, i) => (k in item.over ? item.over[k] : pad[i] !== undefined ? pad[i] : null);
+    const padPair = el("div", "hk-pair");
+    const padL = numField(padOf("pad_left", 0), 0, lim("padding"), (v) => stage("pad_left", v, change("hookui.padLeft", v)));
+    const padR = numField(padOf("pad_right", 1), 0, lim("padding"), (v) => stage("pad_right", v, change("hookui.padRight", v)));
+    padL.setAttribute("aria-label", t("hookui.padLeft"));
+    padR.setAttribute("aria-label", t("hookui.padRight"));
+    padPair.append(padL, padR);
+    pane.append(labelled(fieldName(t("hookui.padding"), "padding"), gated("padding", padPair), t("hookui.paddingAbout")));
+    pane.append(choice("align", cat.aligns, "hookui.align", "hookui.alignAbout", true));
+    pane.append(choice("sign", cat.signs, "hookui.sign", "hookui.signAbout", true));
+    pane.append(num("max_len", 0, lim("max_len"), "hookui.maxLen", "hookui.maxLenAbout", true));
+    pane.append(choice("unknown", cat.unknowns, "hookui.unknown", "hookui.unknownAbout", false));
+
+    // PER STATE: a colour and a glyph for each state the component declares.
+    // The state words are the CLI's own and are printed verbatim.
+    if (comp.states && comp.states.length) {
+      pane.append(sectionHead(t("hookui.states"), t("hookui.statesAbout")));
+      const cmap = mapOf(val("color_by_state", null));
+      const gmap = mapOf(val("glyph_by_state", null));
+      for (const st of comp.states) {
+        const row = el("div", "hk-state-row");
+        const sel = el("select", "hk-select");
+        const none = el("option", null, t("hookui.shared"));
+        none.value = "";
+        sel.append(none);
+        const slots = (cat.colors || []).map(String);
+        if (cmap[st] && !slots.includes(String(cmap[st]))) slots.push(String(cmap[st]));
+        for (const c of slots) {
+          const o = el("option", null, c);
+          o.value = c;
+          if (String(cmap[st] || "") === c) o.selected = true;
+          sel.append(o);
+        }
+        sel.setAttribute("aria-label", t("hookui.stateColour", { s: st }));
+        sel.addEventListener("change", () => stage("color_by_state", mapText(Object.assign({}, cmap, { [st]: sel.value })), t("hookui.stateChange", { id: comp.id, s: st, v: sel.value || t("hookui.shared") })));
+        const g = textField(gmap[st] || "", (v) => stage("glyph_by_state", mapText(Object.assign({}, gmap, { [st]: v })), t("hookui.stateChange", { id: comp.id, s: st, v })));
+        g.classList.add("hk-short", "hk-char");
+        g.setAttribute("aria-label", t("hookui.stateGlyph", { s: st }));
+        row.append(el("span", "hk-state-name", st), sel, gated("glyph_by_state", g));
+        pane.append(row);
+      }
+    }
+
+    // SETTINGS: the component's own parameters, as the CLI declares them — a
+    // fixed list is buttons, free text is a box. Each key is its own op.
+    const params = comp.params && typeof comp.params === "object" ? Object.entries(comp.params) : [];
+    if (params.length) {
+      pane.append(sectionHead(t("hookui.settings"), t("hookui.settingsAbout")));
+      for (const [key, spec] of params) {
+        const field = "param." + key;
+        const saved = item.src && item.src.params ? item.src.params[key] : undefined;
+        const cur = field in item.over ? item.over[field] : saved !== undefined && saved !== null ? saved : spec && spec.dflt;
+        const onSet = (v) => stage(field, v, t("hookui.paramChange", { id: comp.id, k: key, v: String(v) }));
+        const node = spec && spec.options ? pickRow(spec.options, cur, onSet) : textField(cur, onSet);
+        pane.append(labelled(key, node, spec && spec.options ? t("hookui.paramOptionsAbout") : t("hookui.paramFreeAbout", { n: lim("param_text") || "" })));
+      }
+    }
 
     if (comp.bounded || (comp.defaults && comp.defaults.format)) {
       pane.append(sectionHead(t("hookui.numbers"), t("hookui.numbersAbout")));
@@ -1498,17 +1909,25 @@ function numField(value, lo, hi, onSet) {
   const i = el("input", "hk-input hk-num");
   i.type = "number";
   i.min = String(lo);
-  i.max = String(hi);
+  // No upper bound when the CLI sent none — the CLI still validates.
+  if (hi !== undefined && hi !== null) i.max = String(hi);
   if (value !== null && value !== undefined) i.value = String(value);
+  // The value it was BUILT with: a staged-preview repaint waits while the box
+  // holds something different (see hkStagePaint).
+  i.dataset.built = i.value;
   i.addEventListener("change", () => onSet(i.value));
   return i;
 }
 
-function textField(value, onSet) {
+// `blurOnly` is for a box on the BOARD, which repaints without putting the
+// caret back; a box in the editor stages per keystroke, as the Name box does.
+function textField(value, onSet, blurOnly) {
   const i = el("input", "hk-input");
   i.type = "text";
   i.value = value == null ? "" : String(value);
+  i.dataset.built = i.value;
   i.addEventListener("change", () => onSet(i.value));
+  if (!blurOnly) i.addEventListener("input", () => onSet(i.value));
   return i;
 }
 
@@ -1529,7 +1948,9 @@ function labelled(name, node, about) {
 // translated renderer name is a renderer that does not exist.
 // `lead` ({label, value, on}) is an optional first button that is not a CLI
 // value by name — the "shared" pick, whose value is the CLI's inherit token.
-function pickRow(options, current, onPick, lead) {
+// `tips` (optional) maps an option to a sample of what it does — the CLI's
+// `case_samples` — shown under the option and as its tooltip.
+function pickRow(options, current, onPick, lead, tips) {
   const row = el("div", "hk-picks");
   if (lead) {
     const b = el("button", "hk-pick" + (lead.on ? " hk-pick-on" : ""), lead.label);
@@ -1540,6 +1961,10 @@ function pickRow(options, current, onPick, lead) {
   for (const o of options || []) {
     const b = el("button", "hk-pick" + (String(current) === String(o) ? " hk-pick-on" : ""), String(o));
     b.type = "button";
+    if (tips && tips[o]) {
+      b.title = tips[o];
+      b.append(el("span", "hk-pick-tip", tips[o]));
+    }
     b.addEventListener("click", () => onPick(o));
     row.append(b);
   }
@@ -1659,6 +2084,7 @@ function confirmApply(name) {
           const r = await post("/api/statusline/apply", bd({ name }));
           if (!r.ok) toast(t("hookui.applyFailed"), "bad", (r.output || "").trim());
           HK_OPS = [];
+          hkStageClear();
           HK_COMPARE_DATA = null;
           hkReload();
         },
@@ -1680,6 +2106,7 @@ function confirmReset() {
           c();
           await post("/api/statusline/reset", bd({}));
           HK_OPS = [];
+          hkStageClear();
           HK_COMPARE_DATA = null;
           hkReload();
         },
@@ -1726,5 +2153,34 @@ function advancedCard(cat, plan) {
   acts.append(re);
   c.append(acts);
   c.append(el("div", "note", t("hookui.compileNote")));
+  c.append(animationBlock());
   return c;
+}
+
+// v2.0.4 — THE REDRAW TIMER. A settings write, not a staged layout op: the
+// button writes straight away, says so, and reloads.
+function animationBlock() {
+  const show = (HK_DATA && HK_DATA.show) || {};
+  const cur = show.refresh_interval || null;
+  const box = el("div", "hk-anim");
+  box.append(el("div", "hk-anim-head", t("hookui.animTitle")));
+  box.append(el("div", "note", cur ? t("hookui.animNowN", { n: cur }) : t("hookui.animNowOff")));
+  const row = el("div", "row-actions");
+  for (const v of [null, 1, 2, 5, 10]) {
+    const on = (cur || null) === v;
+    const b = el("button", "btn btn-xs" + (on ? " btn-primary" : " btn-ghost"), v ? t("hookui.animSec", { n: v }) : t("hookui.animOff"));
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      const r = await post("/api/statusline/refresh", bd({ seconds: v ? String(v) : "off" }));
+      if (r.ok) toast(v ? t("hookui.animSetN", { n: v }) : t("hookui.animSetOff"), "ok");
+      else toast(t("hookui.animFailed"), "bad", (r.output || "").trim());
+      hkReload();
+    });
+    row.append(b);
+  }
+  box.append(row);
+  box.append(el("div", "note", t("hookui.animCost")));
+  if (!cur && (show.animated || show.needs_refresh))
+    box.append(el("div", "note note-warn", t("hookui.animNeeds")));
+  return box;
 }

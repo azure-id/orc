@@ -214,18 +214,76 @@ move, and it tells you why.
 Every component can be changed: its words, its colour, its shape, how wide it
 is, and when it is allowed to disappear.
 
-**The shape decides what the other settings can do.** Only these shapes print a
-short name in front of the value: `plain`, `label-value`, `bracket`, `angle`,
-`badge`, `pill` and `stack`. A bar, an icon and a bare value have no room for
-one, so the panel switches the Name box off for them and says so. The same is
-true of the number settings: a bar has a width and a colour ramp, and no number
-format at all.
+**The shape decides what the other settings can do.** The panel switches off a
+setting that the shape does not use, and says so.
+
+**Words around any shape** (v2.0.4). Every shape draws the name you type. You
+choose where it goes: before, after, above or below the part. A bar can also have
+text before and after it (for example `[██░░]`) and its number beside it. If you
+type no name, only `plain`, `label-value`, `bracket`, `angle`, `badge`, `pill` and
+`stack` print the part's built-in name.
+
+**Captions.** A caption is a short text on a row above or below a part, at the
+column of that part. `{value}` and `{label}` in the caption are replaced. A caption
+makes the line one row taller.
+
+**Small text.** A terminal has no font size. The letter styles `small` (ꜱᴍᴀʟʟ
+ᴄᴀᴘꜱ), `super` (ˢᵘᵖᵉʳ) and `sub` (₆₁) use Unicode letters that look smaller.
+A character with no small form stays as it is.
+
+**Bars in your own colours and characters.** A bar can have its own fill colour,
+empty colour, colour range (for example `#22c55e,#eab308,#ef4444`, blended cell by
+cell on `gradient`), and its own fill and empty characters (one cell each).
+
+**Every part** can also have brackets, space on the left and right, a background,
+any `#rrggbb` colour, more than one weight, and its own colour and symbol per
+state. A line can be aligned right or centre, and its separator can have a colour.
+`text`, `divider`, `spacer`, `icon-static`, `fill` (pushes the rest to the right
+edge) and `config` take their text in the part's settings.
+
+**Claude Code removes the spaces at the start of every row.** So when a row of
+your status line starts with a space (a caption row, a line prefix, a
+right-aligned line), ORC makes that first space a braille blank (U+2800). It is one
+cell wide and Claude Code keeps it, so a caption stays above or below its own part.
+Under `ORC_STATUSLINE_ASCII=1` this is not done, because U+2800 is not ASCII.
+
+**Pets that move** (the "Pets and motion" group): a pixel cat drawn in braille
+dots, a mouse, a cat that chases the mouse, the text cat ᓚᘏᗢ, pac-man, a fish, a
+bird and a dog. Each can `run` across its track, `bounce` right and back, or stay
+`idle` and move its legs.
+
+**Motion needs a timer.** Claude Code redraws the status line when something
+happens (a message, typing), or every `refreshInterval` seconds if you set it (at
+least 1). Set it with:
+
+```
+orc statusline refresh 1
+```
+
+and remove it with `orc statusline refresh off`. With the timer the hook runs
+every second even when you do nothing, and each run starts `node`. So a pet moves
+about one step per second.
+
+**Weather** (`weather`, `weather-icon`, `weather-desc`). This is the ONLY part of
+the status line that uses the network. The hook itself never waits for it: it reads
+`.claude/orc/weather.json`, and when that is older than 30 minutes it starts
+`orc-weather-fetch.js` in the background, which asks wttr.in and writes the file.
+With an empty `location`, wttr.in finds your place from your network address. It
+runs only while a weather part is on your layout. `ORC_STATUSLINE_NO_NET=1` stops
+it. Every text it gets back is cleaned of control characters before it is saved.
+
+**The panel shows your unsaved changes.** The picture above the board is drawn
+from a temporary copy with your staged changes, so you see the result before you
+press Apply. Nothing is written until you press Apply.
+
+A layout may not carry a control character (for example ESC) in any text. It is
+printed to your terminal, so the CLI refuses it.
 
 **Three things a terminal cannot do**, said plainly so you do not look for them:
 
 | You may want | What you get |
 |---|---|
-| A bigger font | The terminal owns the font size. Use **bold**, or make a component wider — a bar at width 12 is a big object. |
+| A bigger font | The terminal owns the font size. Use **bold**, a small letter style for the words around it, or make a component wider — a bar at width 12 is a big object. |
 | A blinking part | Refused. Half of terminals turn it off, and no part of a status line needs it. |
 | Icon-font symbols | Not shipped. They need a font we cannot check for, and they draw as empty boxes without it. |
 

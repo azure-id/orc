@@ -70,12 +70,12 @@ test("statusline set: a swap drops the shape the new component cannot draw", () 
 
 // ── A2 + A3 — show, the hook info and the samples ──────────────────────────
 
-test("statusline show --json: a hook block with seven keys, and a sample per item", () => {
+test("statusline show --json: a hook block with eight keys, and a sample per item", () => {
   const { root } = freshInstall();
   try {
     slj(root, ["apply", "orc-default"]);
     const { json } = slj(root, ["show"]);
-    assert.deepStrictEqual(Object.keys(json.hook).sort(), ["catalog_hash", "cli_version", "fallback", "fix", "match", "path", "version"]);
+    assert.deepStrictEqual(Object.keys(json.hook).sort(), ["catalog_hash", "cli_version", "fallback", "fix", "match", "path", "settings", "version"]);
     assert.strictEqual(json.hook.match, true, JSON.stringify(json.hook));
     assert.strictEqual(json.hook.fix, null);
     for (const l of json.lines) for (const it of l.items) assert.ok("sample" in it, it.id);

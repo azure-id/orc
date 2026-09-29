@@ -1210,13 +1210,14 @@ function custom(d, ctx) {
     // Rung 6. Run the program. Failure isolation lives inside the engine: one
     // throwing item emits its unknown form and the rest of the line survives.
     SCAN.preset = prog.preset || null;
+    if ((lock.providers || []).indexOf("scan.weather") >= 0) weather(orcDir, prog.lines);
     const out = engine.render(prog, {
       payload: ctx.payload,
       ledger: ctx.ledger,
       scan: ctx.scan,
       derived: ctx.derived,
       now: ctx.now,
-      cols: Number(process.env.COLUMNS) || 0,
+      cols: Number(process.env.COLUMNS) || Number(d.columns) || 0,
       env: process.env,
     });
     if (out.errors && out.errors.length) slNote(orcDir, "statusline-item-failed", out.errors[0]);
@@ -1245,9 +1246,55 @@ function opsKnown(lines, OPS) {
       const o = list[i];
       if (!o || !OPS[o.op]) return false;
       if (o.children) st.push(o.children);
+      if (o.cap && o.cap.ops) st.push(o.cap.ops);
     }
   }
   return true;
+}
+
+// ── WEATHER (v2.0.4) ───────────────────────────────────────────────────────
+// ONE small file read. The network belongs to a DETACHED fetcher that this
+// hook starts and never waits for; the bar shows the last cached answer, or an
+// em dash. A lock file keeps a slow network from starting a fetch per render.
+function weather(orcDir, lines) {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const now = Date.now();
+    let j = null;
+    try {
+      j = JSON.parse(fs.readFileSync(path.join(orcDir, "weather.json"), "utf8"));
+    } catch (_) {}
+    SCAN.weather = j && typeof j === "object" ? j : undefined;
+    if (j && typeof j.at === "number" && now - j.at < 30 * 60 * 1000) return;
+    if (process.env.ORC_STATUSLINE_NO_NET === "1") return;
+    const lockFile = path.join(orcDir, "weather.lock");
+    try {
+      if (now - fs.statSync(lockFile).mtimeMs < 2 * 60 * 1000) return;
+    } catch (_) {}
+    // Location and units come from the first op that binds `weather.*`.
+    let p = null;
+    const st = (lines || []).map((l) => l.ops || []);
+    while (st.length && !p) {
+      for (const o of st.pop()) {
+        if (!o) continue;
+        if (typeof o.b === "string" && o.b.indexOf("weather.") === 0 && o.p) {
+          p = o.p;
+          break;
+        }
+        if (o.children) st.push(o.children);
+      }
+    }
+    p = p || {};
+    fs.writeFileSync(lockFile, String(now));
+    require("child_process")
+      .spawn(process.execPath, [path.join(__dirname, "orc-weather-fetch.js"), orcDir, String(p.location || ""), p.units === "us" ? "us" : "metric"], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      })
+      .unref();
+  } catch (_) {}
 }
 
 // A fallback RECORDS ITSELF. `orc doctor` reads this file and names the finding
@@ -1574,7 +1621,15 @@ function extendedScan(d, wants, wantsProvider) {
 // planner again. A series nothing binds is not kept, so the ledger does not
 // grow for a user whose layout has no sparkline on it.
 const SERIES_MAX = 16;
-const SERIES_MIN_GAP_MS = 20000;
+const SERIES_MIN_GAP_MS = 10000;
+// Series name → the binding whose number it stores. The stored sample IS the
+// binding's value, so a spark and the number beside it can never disagree.
+const SERIES_BINDING = {
+  agents: "run.agents", burn: "burn.rate", cost: "cost.usd", cachehit: "cache.hit_ratio",
+  cachewrite: "cache.write_tokens", lines: "cost.lines_net", extraspend: "extra.spend",
+  speed: "mtok.speed", mtok: "mtok.total", mtokkind: "mtok.cache_read",
+  quota5h: "quota.5h.pct", quotawk: "quota.week.pct", ucs: "ucs.pct",
+};
 
 function sampleSeries(d, plan) {
   try {
@@ -1582,42 +1637,32 @@ function sampleSeries(d, plan) {
     const led = LED;
     if (!led) return;
     const now = Date.now();
-    // A sample every 20 seconds, not every render. Sixteen samples at the
-    // render rate would be five seconds of history, which is not history — it
-    // is the same number sixteen times.
-    if (led.series_at && now - led.series_at < SERIES_MIN_GAP_MS) return;
-    led.series_at = now;
     led.series = led.series || {};
-    const push = (key, v) => {
-      if (!plan.series.has(key)) return;
-      if (typeof v !== "number" || !Number.isFinite(v)) return;
+    // A sample every 10 seconds, not every render. Sixteen samples at the
+    // render rate would be a few seconds of history, which is not history — it
+    // is the same number sixteen times. While no series has a point yet, it is
+    // sampled at once, so a new spark has a point on its first render.
+    const empty = [...plan.series].every((k) => !(led.series[k] && led.series[k].length));
+    if (!empty && led.series_at && now - led.series_at < SERIES_MIN_GAP_MS) return;
+    led.series_at = now;
+    // The engine is required by custom() on this same render, so this costs no
+    // extra file read.
+    const B = require("./orc-statusline-render.js").BINDINGS;
+    const c = { payload: d, ledger: led, scan: SCAN, now, derived: {}, task: null };
+    for (const key of plan.series) {
+      const b = SERIES_BINDING[key];
+      if (!b || !B[b]) continue;
+      let v = null;
+      try {
+        v = B[b](c);
+      } catch (_) {}
+      if (typeof v !== "number" || !Number.isFinite(v)) continue;
       const arr = led.series[key] || [];
-      arr.push(Math.round(v));
+      // Two decimals: Math.round turned every dollar amount below 1 into 0.
+      arr.push(Number(v.toFixed(2)));
       while (arr.length > SERIES_MAX) arr.shift();
       led.series[key] = arr;
-    };
-    const rl = d.rate_limits || {};
-    const w = led.five_hour;
-    push("quota5h", rl.five_hour && rl.five_hour.used_percentage);
-    push("quotawk", rl.seven_day && rl.seven_day.used_percentage);
-    push("ucs", w && typeof w.last === "number" && typeof w.baseline === "number"
-      ? Math.max(0, (w.accumulated || 0) + Math.max(0, w.last - w.baseline))
-      : null);
-    const tok = led.tok;
-    if (tok) {
-      push("mtok", (tok.input || 0) + (tok.cache_write || 0) + (tok.cache_read || 0) + (tok.output || 0));
-      push("mtokkind", tok.cache_read || 0);
     }
-    push("agents", SCAN.spawns);
-    push("cost", d.cost && d.cost.total_cost_usd != null ? d.cost.total_cost_usd * 100 : null);
-    push("cachehit", d.prompt_cache && d.prompt_cache.hit_ratio != null
-      ? (d.prompt_cache.hit_ratio <= 1 ? d.prompt_cache.hit_ratio * 100 : d.prompt_cache.hit_ratio)
-      : null);
-    push("cachewrite", d.prompt_cache && d.prompt_cache.cache_write_tokens);
-    push("lines", d.cost && d.cost.total_lines_added != null
-      ? (d.cost.total_lines_added || 0) - (d.cost.total_lines_removed || 0)
-      : null);
-    push("extraspend", SCAN.extra_spend && SCAN.extra_spend.usd != null ? SCAN.extra_spend.usd * 100 : null);
   } catch (_) {
     // A series is a nicety. It never takes the status line down with it.
   }

@@ -10,6 +10,127 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v2.0.4 — design the status line to the last cell _(2026-09-30)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+`orc ui` ▸ CLI Hook Interface can now change almost everything a terminal cell can
+show. Before, a bar drew only its cells: you could not put words before, after,
+above or below it, and a gradient used fixed colours. Every item below is a
+`orc statusline set` flag, and the part editor has a control for each one.
+
+**Words around any shape**
+
+- **A name on every shape.** `--label` now draws on a bar, a spark, an icon and a
+  motion mark too. `--label-pos before|after|above|below` says where it goes. A name
+  you already typed on a bar shows before it when you choose no position.
+- **Text before and after the shape.** `--prefix` and `--suffix` wrap a bar, for
+  example `[██░░]`.
+- **The number next to the bar.** `--value-pos before|after` draws the value of the
+  part beside its shape, with your number format.
+- **Captions.** `--caption "five-hour window"` puts a short text on a row above or
+  below the part, at the column of the part (`--caption-pos`, `--caption-align
+  left|center|right`, `--caption-color`, `--caption-case`). `{value}` and `{label}`
+  in the text are replaced.
+- **Small text.** A terminal has no font size, so `--case` (and `--caption-case`)
+  have three Unicode styles: `small` (ꜱᴍᴀʟʟ ᴄᴀᴘꜱ), `super` (ˢᵘᵖᵉʳ) and `sub` (numbers like ₆₁).
+
+**Bars in your own colours and characters**
+
+- `--fill-color` and `--empty-color` colour the filled and the empty cells.
+- `--ramp-colors "#22c55e,#eab308,#ef4444"` and `--ramp-stops "0,60,85"` give any
+  part your own colour range. On `gradient` with hex colours, each cell is blended
+  in true colour.
+- `--fill-char ■ --empty-char □` draw the bar with your own characters (one cell
+  each).
+- `--threshold` sets the mark on `split` and `marker`.
+
+**More control on every part**
+
+- `--brackets "⟦,⟧"`, `--pad-left`, `--pad-right`, `--align`, `--sign`, `--max-len`
+  and `--unknown dash|hide`.
+- `--bg` and any `#rrggbb` colour are in the editor now, and you can pick more than
+  one weight (bold and underline).
+- `--state-color "ok=green,critical=red"` and `--state-glyph "ok=✓"` per state.
+- `--param k=v` sets the settings of a part (the text of `text`, the clock format).
+
+**Lines**
+
+- `orc statusline line <n> --align right|center` and `--sep-color`. The panel also
+  takes your own separator text.
+
+**Six parts that drew nothing now work**
+
+- `text`, `divider`, `spacer`, `icon-static`, `fill` and `config` bound a value that
+  is always empty, and no command could set their text. They draw now. `fill`
+  pushes the parts after it to the right edge of the terminal.
+
+**Animated pets and weather**
+
+- **Eight pets that move** (group "Pets and motion"): `pet-cat` (a pixel cat drawn
+  in braille dots), `pet-mouse`, `pet-chase` (the cat chases the mouse),
+  `pet-cat-text` (ᓚᘏᗢ), `pet-pacman` (it eats the dots), `pet-fish`, `pet-bird` and
+  `pet-dog`. Each has three shapes: `run` (across the track), `bounce` (right and
+  back) and `idle` (stays and moves its legs), a track width of 6–40 cells, and a
+  `speed` setting.
+- **Weather:** `weather` (the temperature), `weather-icon` (☼ ◐ ☁ ☂ ❄ ϟ ≋) and
+  `weather-desc`. Set `location` (empty = found from your network address) and
+  `units` (`metric` or `us`). The hook never waits on the network: a small
+  background fetcher asks wttr.in at most every 30 minutes, and only while a weather
+  part is on your layout. `ORC_STATUSLINE_NO_NET=1` stops it.
+- **`orc statusline refresh <seconds|off>`** sets `refreshInterval` in the status
+  line setting. Claude Code redraws the status line only on events, or on this
+  timer (at least 1 second). So a pet moves about one step per second. The panel has
+  the same control, and tells you when a moving part has no timer.
+
+**The panel**
+
+- **Live preview of unsaved changes.** The panel replays your staged changes in a
+  temporary copy and draws the real result before you press Apply. A change that
+  the CLI refuses is named before Apply.
+- **The preview moves.** A layout with a pet or a motion mark plays 12 frames in the
+  panel (at most 20 seconds, never when your system asks for reduced motion).
+- A new `designer` preset shows the new powers.
+
+**Fixes**
+
+- **Text above or below a part showed at the start of the line.** Claude Code
+  removes the spaces at the start of every status line row, so a caption row, a
+  line prefix and a right-aligned line lost their indent. The first space of such a
+  row is now a braille blank (U+2800), which Claude Code keeps. The caption shows
+  above or below its own part.
+- **Spark showed nothing.** `burn-rate` and `tok-speed` never recorded a history,
+  the first sample came after 20 seconds, and an empty history drew `░░░░░░░░`.
+  Now every history is recorded, the first sample is taken at once, the spark adds
+  the current value as its last point, and an empty spark shows `—`. `spark-braille`
+  keeps its width, and `trend` with one point shows `—`.
+- **An unknown value on a bar drew an empty bar** (it read as 0%). It shows `—` now.
+- **A small value on a bar drew no cell** (6% on 10 cells). A value above 0 fills
+  at least one cell.
+- **`fill` could make a row wrap.** It leaves the last column free.
+- **Parts disappeared on a wide terminal.** When any line was wider than 72 cells,
+  the plan for a narrow terminal was used on every wider one too, and it could
+  remove a part from a line that fitted. Now a part is removed only when the
+  terminal is narrower than the widest line, and only from a line that does not fit.
+- Clearing a text field or a weight in the panel returned HTTP 400 ("missing
+  argument"). The clear now reaches the CLI.
+- A label, caption or separator with a control character (for example ESC) is
+  refused. Before, a layout could send terminal escape codes to your terminal.
+- `orc statusline set … --board subagent` read `subagent` as the part type.
+
+**What you have to do:** `orc update`. Layouts you already have compile to the same
+bytes.
+
+---
+
 ### v2.0.3 — the status line you designed is the status line you see _(2026-09-30)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

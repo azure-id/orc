@@ -240,14 +240,20 @@ test("statusline components --json: a renderer says which item fields it USES", 
     assert.deepStrictEqual(cat.label_renderers.slice().sort(),
       ["angle", "badge", "bracket", "label-value", "pill", "plain", "stack"]);
     for (const r of cat.label_renderers) assert.ok(cat.renderers[r].uses.includes("label"), r + " must use label");
-    assert.ok(!cat.renderers.bare.uses.includes("label"), "bare draws no label");
-    assert.ok(!cat.renderers.icon.uses.includes("label"), "an icon draws no label");
-    // Only a text renderer lowers the FORMAT, which is where case, prefix,
-    // suffix, precision and the rest ride.
-    assert.ok(cat.renderers.bare.uses.includes("case"), "a text renderer formats its value");
-    assert.ok(!cat.renderers.blocks.uses.includes("case"), "a bar has no text to case");
-    assert.ok(cat.renderers.blocks.uses.includes("width"), "a bar has a width");
-    assert.deepStrictEqual(cat.renderers.icon.uses, [], "a state glyph uses none of them");
+    // v2.0.4 — every shape can draw an authored name and a caption, and `case`
+    // styles that name, so none of these is ever greyed out.
+    for (const [n, v] of Object.entries(cat.renderers))
+      for (const f of ["label", "caption", "case", "brackets", "padding"]) assert.ok(v.uses.includes(f), n + " must use " + f);
+    const NUM = ["format", "compact", "precision", "min_width", "sign", "align", "max_len"];
+    // A text renderer formats its value.
+    for (const f of NUM) assert.ok(cat.renderers.bare.uses.includes(f), "bare must use " + f);
+    // A bar can draw its value beside the shape, through the same format.
+    for (const f of ["fill_color", "empty_color", "width", ...NUM]) assert.ok(cat.renderers.blocks.uses.includes(f), "blocks must use " + f);
+    // A state glyph has no size, no ramp, no cells and no value beside it.
+    for (const n of ["dot", "shape", "icon"])
+      for (const f of ["width", "ramp", "fill_char", "value_pos"]) assert.ok(!cat.renderers[n].uses.includes(f), n + " must not use " + f);
+    for (const n of ["split", "marker"]) assert.ok(cat.renderers[n].uses.includes("threshold"), n + " must use threshold");
+    assert.ok(!cat.renderers.blocks.uses.includes("threshold"), "blocks has no threshold");
   } finally {
     rmrf(root);
   }
@@ -264,7 +270,7 @@ test("statusline: SL_LABEL_RENDERERS is exactly the set the compiler draws a lab
   // Read the compiler's own switch: every `case "x":` that falls through to a
   // branch which pushes a label.
   const swAt = src.indexOf("  switch (r.render) {");
-  const sw = src.slice(swAt, src.indexOf("  if (close) ops.push(slLit(close));", swAt));
+  const sw = src.slice(swAt, src.indexOf("\n}\n", swAt));
   assert.ok(swAt > 0 && sw.length > 200, "the compiler switch was not found - this test is reading the wrong thing");
   const drawn = new Set();
   let pending = [];
@@ -1041,6 +1047,8 @@ test("statusline panel: it names no component, renderer, glyph set, ramp, colour
     // nothing. Every multi-word, hyphenated or otherwise distinctive literal is
     // still checked, which is where a real duplicate would appear.
     const AMBIGUOUS = new Set([
+      // v2.0.4 renderers and cases that are also ordinary words (id overview has "run").
+      "run", "bounce", "idle", "small", "super", "sub",
       "text", "plain", "bare", "word", "icon", "shape", "dot", "dots", "bar",
       "fill", "clock", "model", "effort", "tier", "context", "project", "cwd",
       "branch", "wave", "resume", "doc", "pact", "wait", "update", "config",

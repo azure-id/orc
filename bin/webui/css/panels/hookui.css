@@ -772,3 +772,82 @@ button.hk-pick-row:hover {
 .hk-boards {
   margin-bottom: 4px;
 }
+
+/* v2.0.4 — the line head's options and the editor's new controls. All flex,
+   so each one wraps on a narrow screen by itself. */
+.hk-line-opts-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.hk-input.hk-short {
+  width: 7em;
+}
+.hk-input.hk-char {
+  width: 3.5em;
+  text-align: center;
+}
+.hk-colour,
+.hk-hex,
+.hk-pair,
+.hk-state-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hk-colour {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.hk-hex-pick {
+  width: 32px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+.hk-state-row {
+  margin: 4px 0;
+}
+.hk-state-name {
+  min-width: 8em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+/* A case button's sample, under its name. */
+.hk-pick-tip {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+/* The CLI's own refusal text for a staged change. */
+.hk-stage-out {
+  margin: 0;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+.hk-staged-tag {
+  color: var(--ok);
+}
+
+/* v2.0.4 — the redraw timer, under the advanced card. */
+.hk-anim {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.hk-anim-head {
+  font-weight: 600;
+}

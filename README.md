@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.0.3-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.4-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v2.0.3** · updated 30-09-2026 · [full changelog](CHANGELOG.md)
+**Latest: v2.0.4** · updated 30-09-2026 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -730,26 +730,36 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v2.0.3 — the status line you designed is the status line you see _(2026-09-30)_
+### v2.0.4 — design the status line to the last cell _(2026-09-30)_
 
-**A patch for `orc ui` ▸ CLI Hook Interface.** The panel said "Your lines are showing",
-but the terminal showed ORC's built-in lines. Now:
+**`orc ui` ▸ CLI Hook Interface can now change almost everything a terminal cell can
+show.** Every item is also an `orc statusline set` flag:
 
-- **The hook checks the parts, not the version number.** A different ORC version with
-  the same parts renders your layout, and `orc update` recompiles your layout for you.
-- **The panel tells you when your terminal does not show your layout**, and gives the
-  command that fixes it. `orc doctor` says the same.
-- **Every setting applies.** You can clear a field, pick the "shared" colour, swap a
-  part to one with other shapes, and put your own colour and weight on a bar. Apply
-  stops at the first refused change.
-- **Six parts drew the wrong text** (`api-time`, `wall-time`, `clock`, `pill`, `effort`
-  dots, `lines-added`). They are correct now.
+- **Words around any shape.** A name before, after, above or below a bar. Text
+  before and after it (`[██░░]`). The number next to the bar.
+- **Captions** on a row above or below a part, in **small text** (ꜱᴍᴀʟʟ ᴄᴀᴘꜱ,
+  ˢᵘᵖᵉʳ, subscript) if you want.
+- **Bars in your own colours and characters.** Fill and empty colours, your own
+  gradient colours (blended in true colour), your own fill and empty characters.
+- **More on every part:** brackets, padding, background, any hex colour, more than
+  one weight, per-state colours and glyphs, line alignment and separator colour.
+- **Six parts that drew nothing now work** (`text`, `divider`, `spacer`,
+  `icon-static`, `fill`, `config`).
+- **Animated pets** (a pixel cat, a cat that chases a mouse, pac-man, a fish, a bird,
+  a dog) and **weather** (temperature, sky icon, description). `orc statusline
+  refresh 1` makes them move once per second.
+- **The panel shows your unsaved changes live**, and the preview moves.
+- **Fixes:** text above or below a part now shows over that part (Claude Code
+  removed the leading spaces), spark shows its history, an unknown value is `—` and
+  not an empty bar, clearing a field works (it returned HTTP 400), and a control
+  character in a label is refused.
 
 **What you have to do:** `orc update`.
 
 <details>
-<summary><strong>Earlier releases</strong> — 125 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 126 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.0.3** — the status line you designed is the status line you see · _2026-09-30_
 - **v2.0.2** — the lanes record what you answered, and the reviewer always gets the card · _2026-09-28_
 - **v2.0.1** — the trace keeps the gate name, and the lanes find the habits rule · _2026-09-27_
 - **v2.0.0** — the coding lanes remember what you fixed and how you work · _2026-09-27_

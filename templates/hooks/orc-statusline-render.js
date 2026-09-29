@@ -296,6 +296,16 @@ const BINDINGS = {
   "clock.now": (c) => c.now,
   "session.elapsed_min": (c) => (c.ledger.started_at ? Math.max(0, Math.round((c.now - c.ledger.started_at) / 60000)) : null),
   "static.text": () => null, // supplied per-op by `lit`; present so the set is total
+
+  // — weather (v2.0.4): a cache file the detached fetcher writes ————————
+  // The hook never waits on the network; these read what the last fetch left.
+  "weather.temp": (c) => {
+    const w = c.scan.weather;
+    if (!w) return null;
+    return num(c.param && c.param.units === "us" ? w.temp_f : w.temp_c);
+  },
+  "weather.state": (c) => (c.scan.weather && c.scan.weather.state) || null,
+  "weather.desc": (c) => (c.scan.weather && c.scan.weather.desc) || null,
 };
 
 // ── small helpers the bindings share ────────────────────────────────────────
@@ -542,6 +552,72 @@ function truncate(s, max, mode) {
   return s.slice(0, max - 1) + "…";
 }
 
+// ── Cell width and styled text (v2.0.4) ─────────────────────────────────────
+// Terminal cells, not string length. Only a line that uses flex, align or a
+// caption pays for this; every other line never measures.
+const SGR_RE = new RegExp(ESC + "\\[[0-9;?]*[A-Za-z]", "g");
+const OSC8_RE = new RegExp(ESC + "\\]8;;[^" + BEL + "]*" + BEL, "g");
+const SENT_RE = /\u0000[^\u0000]*\u0000/g;
+const WIDE = [
+  [0x1100, 0x115f], [0x231a, 0x231b], [0x23e9, 0x23ec], [0x23f0, 0x23f0], [0x23f3, 0x23f3],
+  [0x25fd, 0x25fe], [0x2614, 0x2615], [0x2648, 0x2653], [0x267f, 0x267f], [0x2693, 0x2693],
+  [0x26a1, 0x26a1], [0x26aa, 0x26ab], [0x26bd, 0x26be], [0x26c4, 0x26c5], [0x26ce, 0x26ce],
+  [0x26d4, 0x26d4], [0x26ea, 0x26ea], [0x26f2, 0x26f3], [0x26f5, 0x26f5], [0x26fa, 0x26fa],
+  [0x26fd, 0x26fd], [0x2705, 0x2705], [0x270a, 0x270b], [0x2728, 0x2728], [0x274c, 0x274c],
+  [0x274e, 0x274e], [0x2753, 0x2755], [0x2757, 0x2757], [0x2795, 0x2797], [0x27b0, 0x27b0],
+  [0x27bf, 0x27bf], [0x2b1b, 0x2b1c], [0x2b50, 0x2b50], [0x2b55, 0x2b55], [0x2e80, 0xa4cf],
+  [0xac00, 0xd7a3], [0xf900, 0xfaff], [0xfe30, 0xfe4f], [0xff00, 0xff60], [0xffe0, 0xffe6],
+  [0x1f000, 0x1faff],
+];
+function cellWidth(s) {
+  const t = String(s == null ? "" : s).replace(OSC8_RE, "").replace(SGR_RE, "").replace(SENT_RE, "");
+  let n = 0;
+  for (const ch of t) {
+    const cp = ch.codePointAt(0);
+    if (cp < 0x300) {
+      n += 1;
+      continue;
+    }
+    // Zero width: combining marks, the ZW/direction marks, VS16.
+    if ((cp >= 0x300 && cp <= 0x36f) || (cp >= 0x1ab0 && cp <= 0x1aff) || (cp >= 0x1dc0 && cp <= 0x1dff) ||
+      (cp >= 0x20d0 && cp <= 0x20ff) || (cp >= 0xfe20 && cp <= 0xfe2f) || (cp >= 0x200b && cp <= 0x200f) || cp === 0xfe0f)
+      continue;
+    let w = 1;
+    for (const r of WIDE) {
+      if (cp < r[0]) break;
+      if (cp <= r[1]) {
+        w = 2;
+        break;
+      }
+    }
+    n += w;
+  }
+  return n;
+}
+function styleMap(from, to) {
+  const m = {};
+  const a = [...from];
+  const b = [...to];
+  for (let i = 0; i < a.length; i++) {
+    m[a[i]] = b[i];
+    m[a[i].toUpperCase()] = b[i];
+  }
+  return m;
+}
+const STYLES = {
+  small: styleMap("abcdefghijklmnopqrstuvwxyz", "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ"),
+  super: styleMap("0123456789+-=()abcdefghijklmnoprstuvwxyz", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻ"),
+  sub: styleMap("0123456789+-=()aehijklmnoprstuvx", "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ"),
+};
+// A character with no styled form passes through unchanged.
+function styleText(s, style) {
+  const m = STYLES[style];
+  if (!m || s == null) return s;
+  let out = "";
+  for (const ch of String(s)) out += m[ch] || ch;
+  return out;
+}
+
 // ── The renderers ──────────────────────────────────────────────────────────
 // Every one takes a value, a glyph set and a width, and returns cells. None of
 // them decides a colour: colour arrives as precomputed `sgr` ops around them.
@@ -550,6 +626,11 @@ function glyphs(gs, ascii) {
   return ascii && gs.ascii ? Object.assign({}, gs, gs.ascii) : gs;
 }
 
+// D3: a value above zero fills at least one cell. 6% on ten cells is not 0%.
+function fullCells(p, w) {
+  const n = Math.floor((p / 100) * w);
+  return Math.min(w, p > 0 ? Math.max(1, n) : n);
+}
 function barCells(pct, g, w, kind) {
   const p = Math.max(0, Math.min(100, pct == null ? 0 : pct));
   const exact = (p / 100) * w;
@@ -562,7 +643,8 @@ function barCells(pct, g, w, kind) {
     if (full < w && idx >= 0) out += g.part[idx];
     return padCells(out, w, g.empty);
   }
-  out = g.fill.repeat(full) + g.empty.repeat(Math.max(0, w - full));
+  const n = fullCells(p, w);
+  out = g.fill.repeat(n) + g.empty.repeat(Math.max(0, w - n));
   return out.slice(0, w);
 }
 function padCells(s, w, filler) {
@@ -581,7 +663,7 @@ function microCell(pct, g) {
 }
 function dotsCells(pct, g, w) {
   const p = Math.max(0, Math.min(100, pct == null ? 0 : pct));
-  const on = Math.round((p / 100) * w);
+  const on = Math.min(w, p > 0 ? Math.max(1, Math.round((p / 100) * w)) : 0);
   return g.on.repeat(on) + g.off.repeat(Math.max(0, w - on));
 }
 function markerCells(pct, g, w) {
@@ -701,30 +783,104 @@ function render(prog, ctx) {
   // H4 PLAN — one lookup, no measuring. The last plan whose `cols` ≤ COLUMNS
   // wins; its ids are dropped.
   const dropped = new Set();
-  if (cols && Array.isArray(prog.plans)) {
+  // A plan applies only when the terminal is narrower than the widest line.
+  const need = (prog.lines || []).reduce((m, l) => Math.max(m, Number(l && l.static_width) || 0), 0);
+  if (cols && Array.isArray(prog.plans) && !(need && cols >= need)) {
     let chosen = null;
     for (const p of prog.plans) if (p.cols <= cols && (!chosen || p.cols >= chosen.cols)) chosen = p;
+    // Narrower than every plan: the smallest real plan (the most it drops).
+    if (need && (!chosen || !chosen.cols)) {
+      for (const p of prog.plans) if (p.cols > 0 && (!chosen || !chosen.cols || p.cols < chosen.cols)) chosen = p;
+    }
     if (chosen) for (const id of chosen.drop) dropped.add(id);
   }
 
   const lines = [];
   for (const line of prog.lines || []) {
     let out = "";
+    const o = { color, ascii, motion, cols, hasRun, dropped, flex: false, caps: [] };
     for (const op of line.ops || []) {
       // H5 FAILURE ISOLATION — each item renders inside its own try. One bad
       // component never takes the bar down; it emits its unknown form and the
       // rest of the line survives.
       try {
-        out += walk(op, prog, rctx, { color, ascii, motion, cols, hasRun, dropped }, errors);
+        out += walk(op, prog, rctx, o, errors);
       } catch (e) {
         errors.push(String((e && e.message) || e));
       }
     }
-    lines.push(line.prefix ? line.prefix + out : out);
+    let text = line.prefix ? line.prefix + out : out;
+    // A line with no flex, no align and no caption stops here, unmeasured.
+    const align = line.align === "right" || line.align === "center" ? line.align : null;
+    if (!o.flex && !o.caps.length && !(align && cols > 0)) {
+      lines.push(text);
+      continue;
+    }
+    if (o.flex) text = applyFlex(text, cols);
+    else if (align && cols > 0) {
+      const gap = cols - cellWidth(text);
+      if (gap > 0) text = " ".repeat(align === "right" ? gap : Math.floor(gap / 2)) + text;
+    }
+    if (!o.caps.length) {
+      lines.push(text);
+      continue;
+    }
+    const rows = captionRows(text, o.caps);
+    if (rows.above) lines.push(rows.above);
+    lines.push(rows.line);
+    if (rows.below) lines.push(rows.below);
   }
   // A trailing empty line is not a line. It would print as a blank row.
   while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+  // D1: Claude Code trims every row, so a caption row or an indent that starts
+  // with a space moves to column 0. U+2800 is one blank cell it keeps. A row
+  // that starts with ESC is not trimmed and stays as it is.
+  if (!ascii) for (let i = 0; i < lines.length; i++) if (lines[i][0] === " ") lines[i] = "\u2800" + lines[i].slice(1);
   return { text: lines.join("\n"), errors };
+}
+
+// FLEX: slack = cols − the line's width, shared by weight (the remainder to the
+// last); each flex prints max(min, share). cols 0 → each prints its min. One
+// column stays free: a row exactly COLUMNS wide can wrap (D5).
+function applyFlex(text, cols) {
+  const re = /\u0000F(\d+),(\d+)\u0000/g;
+  const fl = [];
+  let m;
+  while ((m = re.exec(text))) fl.push({ w: Number(m[1]), min: Number(m[2]) });
+  const slack = cols > 0 ? Math.max(0, cols - cellWidth(text) - 1) : 0;
+  const tot = fl.reduce((a, f) => a + f.w, 0) || 1;
+  let used = 0;
+  const n = fl.map((f, i) => {
+    const share = i === fl.length - 1 ? slack - used : Math.floor((slack * f.w) / tot);
+    used += share;
+    return Math.max(f.min, cols > 0 ? share : 0);
+  });
+  let i = 0;
+  return text.replace(re, () => " ".repeat(n[i++]));
+}
+
+// CAPTIONS: one row above and one below, each placed left to right; a caption
+// that would overlap the previous one starts one space after it.
+function captionRows(text, caps) {
+  const re = /\u0000C(\d+)\u0000/g;
+  const at = [];
+  let m;
+  while ((m = re.exec(text))) at.push({ cap: caps[Number(m[1])], col: cellWidth(text.slice(0, m.index)) });
+  const row = { above: "", below: "" };
+  const cur = { above: 0, below: 0 };
+  const any = { above: false, below: false };
+  for (const a of at) {
+    const k = a.cap;
+    const col = a.col + k.off;
+    let start = col;
+    if (k.align === "center") start = col + Math.max(0, Math.floor((k.content - k.w) / 2));
+    else if (k.align === "right") start = col + Math.max(0, k.content - k.w);
+    if (any[k.pos] && start < cur[k.pos] + 1) start = cur[k.pos] + 1;
+    row[k.pos] += " ".repeat(Math.max(0, start - cur[k.pos])) + k.text;
+    cur[k.pos] = Math.max(start, cur[k.pos]) + k.w;
+    any[k.pos] = true;
+  }
+  return { above: row.above, line: text.replace(re, ""), below: row.below };
 }
 
 function walk(op, prog, c, o, errors) {
@@ -753,7 +909,9 @@ function walk(op, prog, c, o, errors) {
       return OSC8 + url + BEL + inner + OSC8 + BEL;
     }
     case "flex":
-      return " ".repeat(Math.max(op.min || 0, 0)); // slack is applied in emit()
+      // A sentinel; render() swaps it for its share of the slack.
+      o.flex = true;
+      return "\u0000F" + Math.max(1, op.w || 1) + "," + Math.max(op.min || 0, 0) + "\u0000";
     case "val":
       return renderVal(op, prog, c, o);
     case "bar":
@@ -764,6 +922,8 @@ function walk(op, prog, c, o, errors) {
       return renderMotif(op, prog, c, o);
     case "series":
       return renderSeries(op, prog, c, o);
+    case "sprite":
+      return renderSprite(op, c, o);
     default:
       throw new Error("unknown op: " + op.op);
   }
@@ -778,7 +938,7 @@ function children(op, prog, c, o, errors) {
 function walkItem(op, prog, c, o, errors) {
   if (o.dropped.has(op.id)) return "";
   let probe = null;
-  if (op.b) probe = bind(op.b, c);
+  if (op.b) probe = bind(op.b, op.p ? Object.assign({}, c, { param: op.p }) : c);
   if (hidden(op, probe, { cols: o.cols, hasRun: o.hasRun })) return "";
   let body;
   try {
@@ -791,12 +951,32 @@ function walkItem(op, prog, c, o, errors) {
   if (body === "" && !op.draw_empty) return "";
   const l = " ".repeat(op.pad_l || 0);
   const r = " ".repeat(op.pad_r || 0);
-  return l + body + r;
+  const all = l + body + r;
+  // A CAPTION rides as a sentinel at the item's start; render() measures the
+  // column once the line is final (after flex and align) and strips it.
+  if (op.cap && body !== "" && o.caps) {
+    let t = "";
+    for (const ch of op.cap.ops || []) t += walk(ch, prog, c, o, errors);
+    if (t === "") return all;
+    const sw = op.sw || 0;
+    const pl = op.pad_l || 0;
+    o.caps.push({
+      pos: op.cap.pos === "above" ? "above" : "below",
+      align: op.cap.align || "left",
+      text: t,
+      w: cellWidth(t),
+      off: sw + pl,
+      content: Math.max(0, cellWidth(all) - sw - pl - (op.pad_r || 0)),
+    });
+    return "\u0000C" + (o.caps.length - 1) + "\u0000" + all;
+  }
+  return all;
 }
 
 function renderVal(op, prog, c, o) {
   const f = prog.formats[op.f] || {};
-  const v = bind(op.b, c);
+  // `p` is the op's own parameter (the `config` part's key).
+  const v = bind(op.b, op.p ? Object.assign({}, c, { param: op.p }) : c);
   let s = op.tf && typeof v === "number" && isFinite(v) ? formatTime(v, op.tf) : formatValue(v, f);
   // UNKNOWN IS NOT ZERO. An em dash keeps the slot and says "not measured"; a
   // `0` would say the thing was free. And it carries NEITHER the prefix nor the
@@ -807,6 +987,7 @@ function renderVal(op, prog, c, o) {
   if (f.case === "upper") s = s.toUpperCase();
   else if (f.case === "lower") s = s.toLowerCase();
   else if (f.case === "title") s = s.replace(/\w/g, (m) => m.toUpperCase());
+  if (f.case === "small" || f.case === "super" || f.case === "sub") s = styleText(s, f.case);
   s = truncate(s, f.max_len, f.truncate);
   s = (f.prefix || "") + pad(s, f) + (f.suffix || "");
   // A ramp derives the colour from the VALUE, so it colours a number as much as
@@ -831,7 +1012,19 @@ function renderBar(op, prog, c, o) {
     v = i < 0 ? null : ((i + 1) / op.o.length) * 100;
   }
   const w = op.w || 10;
-  const sgr = op.r != null ? rampSgr(prog.ramps[op.r], v, o.color) : "";
+  const single = op.k === "gauge" || op.k === "ring" || op.k === "micro";
+  // D2: UNKNOWN IS NOT ZERO. An empty bar or a 0% glyph reads as "0%"; the
+  // unknown form keeps the width and says "not measured".
+  if (v == null || (typeof v === "number" && !Number.isFinite(v))) {
+    const d = o.ascii ? "-" : "—";
+    return single ? d : d + " ".repeat(Math.max(0, w - 1));
+  }
+  const ramp = op.r != null ? rampSgr(prog.ramps[op.r], v, o.color) : "";
+  // Precedence: `gc` (gradient) > `fs`/`es` > the ramp. A single-cell kind
+  // takes `fs` as its whole colour.
+  const split = o.color && (op.fs || op.es);
+  const sgr = split && single && op.fs ? op.fs : ramp;
+  const p = Math.max(0, Math.min(100, v == null ? 0 : v));
   let cells;
   switch (op.k) {
     case "gauge":
@@ -858,16 +1051,20 @@ function renderBar(op, prog, c, o) {
     case "gradient": {
       // Each cell coloured by ITS OWN position along the ramp. Decoration, and
       // the panel labels it as decoration — never a component default.
-      if (!o.color || op.r == null) {
+      const full = fullCells(p, w);
+      if (o.color && Array.isArray(op.gc) && op.gc.length) {
+        let s1 = "";
+        for (let i = 0; i < w; i++) s1 += (op.gc[i] || op.gc[op.gc.length - 1]) + (i < full ? g.fill : g.empty);
+        return s1 + RESET;
+      }
+      if (split || !o.color || op.r == null) {
         cells = barCells(v, g, w, "blocks");
         break;
       }
-      const ramp = prog.ramps[op.r];
-      const p = Math.max(0, Math.min(100, v == null ? 0 : v));
-      const full = Math.floor((p / 100) * w);
+      const rp = prog.ramps[op.r];
       let s2 = "";
       for (let i = 0; i < w; i++) {
-        s2 += rampSgr(ramp, ((i + 1) / w) * 100, true) + (i < full ? g.fill : g.empty);
+        s2 += rampSgr(rp, ((i + 1) / w) * 100, true) + (i < full ? g.fill : g.empty);
       }
       return s2 + RESET;
     }
@@ -880,7 +1077,29 @@ function renderBar(op, prog, c, o) {
     default:
       cells = barCells(v, g, w, "blocks");
   }
+  if (split && !single) {
+    const n = filledCount(op.k, p, w, g, op.thr);
+    const list = [...cells];
+    // A glyph set whose cells are not one code point each cannot be cut by
+    // index; it takes the filled colour whole.
+    if (list.length !== w) return (op.fs || ramp) ? (op.fs || ramp) + cells + RESET : cells;
+    const run = (s, c) => (s === "" ? "" : c ? c + s + RESET : s);
+    return run(list.slice(0, n).join(""), op.fs || ramp) + run(list.slice(n).join(""), op.es || ramp);
+  }
   return sgr ? sgr + cells + RESET : cells;
+}
+
+// How many leading cells a bar kind draws as FILLED — the cut for `fs`/`es`.
+function filledCount(k, p, w, g, thr) {
+  if (k === "dots" || k === "meter") return Math.min(w, p > 0 ? Math.max(1, Math.round((p / 100) * w)) : 0);
+  if (k === "marker") return Math.min(w - 1, Math.round((p / 100) * (w - 1))) + 1;
+  const full = Math.floor((p / 100) * w);
+  if (k === "fine" && g.part && g.part.length && full < w) {
+    const idx = Math.min(g.part.length - 1, Math.floor(((p / 100) * w - full) * (g.part.length + 1)) - 1);
+    return idx >= 0 ? full + 1 : full;
+  }
+  if (k === "split" || k === "fine") return Math.min(w, full);
+  return fullCells(p, w);
 }
 
 function renderState(op, prog, c, o) {
@@ -906,10 +1125,20 @@ function renderMotif(op, prog, c, o) {
 
 function renderSeries(op, prog, c, o) {
   const g = glyphs(prog.glyphsets[op.g] || {}, o.ascii);
-  const s = seriesOf(c, op.s);
+  let s = seriesOf(c, op.s);
   const w = op.w || 8;
+  const dash = o.ascii ? "-" : "—";
+  // D4: a spark takes the CURRENT value as its live last point, so it shows
+  // something on the first render and moves on every render.
+  if (op.k === "spark" || op.k === "spark-braille" || !op.k) {
+    const cur = op.b ? bind(op.b, op.p ? Object.assign({}, c, { param: op.p }) : c) : null;
+    if (typeof cur === "number" && Number.isFinite(cur)) s = (s || []).concat([cur]);
+    if (!s || !s.length) return dash + " ".repeat(Math.max(0, w - 1));
+  }
   switch (op.k) {
     case "trend":
+      // One point has no direction; the flat arrow would claim one.
+      if (!s || s.length < 2) return dash;
       return trendGlyph(trendOf(s), g);
     case "delta": {
       if (!s || s.length < 2) return "—";
@@ -918,7 +1147,7 @@ function renderSeries(op, prog, c, o) {
     }
     case "spark-braille": {
       const set = g.spark_braille || ["⠀", "⣀", "⣤", "⣶", "⣿"];
-      if (!s || !s.length) return " ".repeat(w);
+      s = s.slice(-2 * w);
       const lo = Math.min(...s);
       const hi = Math.max(...s);
       const span = hi - lo || 1;
@@ -927,16 +1156,45 @@ function renderSeries(op, prog, c, o) {
         const v = (s[i] + (s[i + 1] == null ? s[i] : s[i + 1])) / 2;
         out += set[Math.min(set.length - 1, Math.round(((v - lo) / span) * (set.length - 1)))];
       }
-      return out;
+      // Exactly `w` cells, like `spark`: the history grows in from the right.
+      const n = [...out].length;
+      return n >= w ? out : " ".repeat(w - n) + out;
     }
     default:
       return sparkCells(s, g, w);
   }
 }
 
+// ── Sprites (v2.0.4) ───────────────────────────────────────────────────────
+// A pet on a track of `w` cells. The frame and the column both come off the
+// wall clock, so it moves only while the line redraws. Every frame cell is one
+// terminal cell (the CLI checks that), so a cell is a code point here.
+// MOTION=0 puts frame 0 at the left: motion REMOVED, never frozen mid-run.
+function renderSprite(op, c, o) {
+  const w = Math.max(1, op.w || 16);
+  const set = o.ascii && Array.isArray(op.a) && op.a.length ? op.a : op.f || [];
+  if (!set.length) return " ".repeat(w);
+  const tick = o.motion ? Math.floor(c.now / (op.ms > 0 ? op.ms : 1000)) : 0;
+  const frame = [...String(set[tick % set.length])];
+  const fw = frame.length;
+  let x = 0;
+  if (o.motion && op.mode === "run") x = (tick % (w + fw - 1)) - (fw - 1); // always one cell on the track
+  else if (o.motion && op.mode === "bounce") {
+    const span = Math.max(1, w - fw);
+    const p = tick % (2 * span);
+    x = p < span ? p : 2 * span - p;
+  }
+  // `ahead_a` / `behind_a` are the ASCII twins of the fillers, when they differ.
+  const ahead = (o.ascii && op.ahead_a != null ? op.ahead_a : op.ahead) || " ";
+  const behind = (o.ascii && op.behind_a != null ? op.behind_a : op.behind) || " ";
+  let out = "";
+  for (let i = 0; i < w; i++) out += i < x ? behind : i >= x + fw ? ahead : frame[i - x];
+  return out;
+}
+
 // Every op the walker handles. The hooks check a compiled program against
 // this before running it, so an op from a newer compiler is a skew, not a dash.
-const OPS = { lit: 1, sgr: 1, reset: 1, item: 1, cond: 1, link: 1, flex: 1, val: 1, bar: 1, state: 1, motif: 1, series: 1 };
+const OPS = { lit: 1, sgr: 1, reset: 1, item: 1, cond: 1, link: 1, flex: 1, val: 1, bar: 1, state: 1, motif: 1, series: 1, sprite: 1 };
 
 module.exports = {
   BINDINGS,
@@ -946,6 +1204,8 @@ module.exports = {
   barCells,
   sparkCells,
   motifFrame,
+  cellWidth,
+  styleText,
   // exported for the CLI's measure pass and its R1/R4 checks
-  _internals: { pad, truncate, si, bytes, bandState, hidden, rampSgr, glyphs },
+  _internals: { pad, truncate, si, bytes, bandState, hidden, rampSgr, glyphs, burnRate, tokSpeed },
 };

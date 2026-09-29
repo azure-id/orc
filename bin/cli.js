@@ -95,6 +95,12 @@ const SL_VALUE_FLAGS = new Set([
   "--prefix", "--suffix", "--emphasis", "--hide-when", "--width", "--precision",
   "--min-width", "--min-cols", "--max-cols", "--priority", "--separator",
   "--max-width", "--theme", "--state", "--set",
+  // v2.0.4 — the design fields.
+  "--label-pos", "--value-pos", "--caption", "--caption-pos", "--caption-align",
+  "--caption-color", "--caption-case", "--fill-color", "--empty-color",
+  "--ramp-colors", "--ramp-stops", "--fill-char", "--empty-char", "--brackets",
+  "--threshold", "--pad-left", "--pad-right", "--align", "--sign", "--max-len",
+  "--unknown", "--state-color", "--state-glyph", "--param", "--sep-color",
 ]);
 
 // `orc statusline` value flags: "" and "-x" are real values here ("" clears).
@@ -122,7 +128,7 @@ function positionals() {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--global") continue;
-    if (a === "--dir" || a === "--from" || a === "--preset" || a === "--reason") {
+    if (a === "--dir" || a === "--from" || a === "--preset" || a === "--reason" || a === "--board") {
       i++; // skip the flag's value
       continue;
     }
@@ -42646,6 +42652,10 @@ const STATUSLINE_RENDERERS = {
   // motion
   motif: { kind: "motif", needs: "motif" },
   pulse: { kind: "motif", sub: "pulse", needs: "motif" },
+  // v2.0.4 — the animated sprites (pets). `width` is the TRACK in cells.
+  run: { kind: "sprite", sub: "run", width: [6, 40], dflt_w: 16, needs: "sprite" },
+  bounce: { kind: "sprite", sub: "bounce", width: [6, 40], dflt_w: 16, needs: "sprite" },
+  idle: { kind: "sprite", sub: "idle", width: [6, 40], dflt_w: 16, needs: "sprite" },
 };
 
 // WHICH RENDERERS DRAW A LABEL. Seven of thirty-five, and the other
@@ -42682,7 +42692,18 @@ function slRendererUses(name) {
     out.push("ramp");
     if (!out.includes("width")) out.push("width");
   }
-  return out;
+  // v2.0.4 — the decorations every shape can now carry, and the per-kind ones.
+  // `case` styles the authored name, so every shape uses it.
+  out.push("label", "label_pos", "caption", "caption_pos", "caption_align", "caption_color", "caption_case", "case", "brackets", "padding", "prefix", "suffix");
+  if (rend.kind === "text" || rend.kind === "link") out.push("align", "sign", "max_len");
+  // A bar or a series can draw the item's own value beside it (`value_pos`),
+  // through the item's format with prefix/suffix removed, so it uses the number fields.
+  if (rend.kind === "bar" || rend.kind === "series") out.push("format", "compact", "precision", "min_width", "sign", "align", "max_len");
+  if (rend.kind === "bar") out.push("value_pos", "fill_color", "empty_color", "fill_char", "empty_char", "ramp_colors", "ramp_stops");
+  if (name === "split" || name === "marker") out.push("threshold");
+  if (rend.kind === "series") out.push("value_pos", "fill_color");
+  if (["dot", "shape", "icon", "traffic"].includes(name)) out.push("glyph_by_state");
+  return [...new Set(out)];
 }
 
 // ── The glyph sets (design-language.md §2) ──────────────────────────────────
@@ -42847,7 +42868,41 @@ const SL_THEME_ABOUT = {
 
 const SL_FORMATS = ["percent", "ratio", "fraction", "decimal", "plain"];
 const SL_COMPACT = ["off", "si", "bytes"];
-const SL_CASES = ["none", "upper", "lower", "title"];
+const SL_CASES = ["none", "upper", "lower", "title", "small", "super", "sub"];
+// v2.0.4 — the closed sets of the design fields. The panel reads each one from
+// `components --json` and names none of them itself.
+const SL_LABEL_POS = ["before", "after", "above", "below"];
+const SL_VALUE_POS = ["none", "before", "after"];
+const SL_CAPTION_POS = ["above", "below"];
+const SL_CAPTION_ALIGN = ["left", "center", "right"];
+const SL_ALIGNS = ["left", "right"];
+const SL_SIGNS = ["auto", "always", "never"];
+const SL_UNKNOWNS = ["dash", "hide"];
+const SL_LINE_ALIGNS = ["left", "center", "right"];
+const SL_LIMITS = { caption: 40, max_len: 60, padding: 8, ramp_colors: [2, 8], brackets: 3, param_text: 60 };
+
+// The engine owns cell width and the styled alphabets; the CLI borrows them so
+// the validator and the renderer can never disagree. The fallbacks only serve
+// an engine that predates v2.0.4.
+function slCellWidth(s) {
+  const e = slEngine();
+  if (typeof e.cellWidth === "function") return e.cellWidth(String(s));
+  let w = 0;
+  for (const ch of String(s)) w += /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]|[\u{1F000}-\u{1FAFF}]/u.test(ch) ? 2 : 1;
+  return w;
+}
+function slCaseText(s, c) {
+  if (c === "upper") return s.toUpperCase();
+  if (c === "lower") return s.toLowerCase();
+  if (c === "title") return s.replace(/\b\w/g, (m) => m.toUpperCase());
+  if (c === "small" || c === "super" || c === "sub") return (slEngine().styleText || ((x) => x))(s, c);
+  return s;
+}
+// A C0 or C1 control character in authored text is a terminal-escape
+// injection: the hook prints the layout to a terminal.
+function slHasControl(s) {
+  return /[\u0000-\u001f\u007f-\u009f]/.test(String(s));
+}
 const SL_TRUNCATE = ["end", "middle", "none"];
 
 // ── The component registry ─────────────────────────────────────────────────
@@ -42901,6 +42956,26 @@ function slRow(o) {
     o
   );
 }
+
+// v2.0.4 — THE SPRITES. Every glyph is exactly 1 cell and every frame of one
+// sprite has the same width; test/statusline-pets.test.js proves it. `a` is the
+// ASCII twin of each frame. `ahead` / `behind` fill the track in front of and
+// behind the sprite ("" = a space).
+const SL_SPRITES = {
+  "pet-cat": { summary: "A pixel cat that runs along the line.", f: ["⠑⡤⡤⠤⡷⡃", "⠑⢤⢤⠤⣷⠃"], a: ["=^.^=", "=^o^="], ms: 1000, ahead: "", behind: "" },
+  "pet-mouse": { summary: "A pixel mouse that runs along the line.", f: ["⢲⠾⡇", "⠲⣾⠇"], a: ["<:3", "<:3"], ms: 700, ahead: "", behind: "" },
+  "pet-chase": { summary: "A pixel cat that chases a mouse along the line.", f: ["⠑⡤⡤⠤⡷⡃  ⢲⠾⡇", "⠑⢤⢤⠤⣷⠃  ⠲⣾⠇"], a: ["=^.^=  <:3", "=^o^=  <:3"], ms: 1000, ahead: "", behind: "" },
+  "pet-cat-text": { summary: "A cat made of letters.", f: ["ᓚᘏᗢ", "ᓚᘏᗢ"], a: ["=^.^=", "=^.^="], ms: 1000, ahead: "", behind: "" },
+  "pet-pacman": { summary: "Pac-Man eats the dots in front of him.", f: ["ᗧ", "●"], a: ["C", "O"], ms: 800, ahead: "·", behind: " ", ahead_a: "." },
+  "pet-fish": { summary: "A fish that swims along the line.", f: [" ><>", "°><>"], a: [" ><>", "o><>"], ms: 1200, ahead: "", behind: "" },
+  "pet-bird": { summary: "A bird that flies along the line.", f: ["\\v/", "-v-"], a: ["\\v/", "-v-"], ms: 600, ahead: "", behind: "" },
+  "pet-dog": { summary: "A dog that runs along the line.", f: ["V•ᴥ•V", "V•ᴥ•V"], a: ["V.w.V", "V.w.V"], ms: 900, ahead: "", behind: "" },
+};
+const SL_SPRITE_SPEED = { slow: 2, normal: 1, fast: 0.5 };
+
+// The weather parts share their parameters. "" = the provider finds the place
+// from your IP address.
+const SL_WEATHER_PARAMS = { location: { free: true, dflt: "", max: 40 }, units: { options: ["metric", "us"], dflt: "metric" } };
 
 const STATUSLINE_COMPONENTS = [
   // ── Group A — Session and tier. Straight from the payload. Free. ─────────
@@ -43080,6 +43155,14 @@ const STATUSLINE_COMPONENTS = [
   slRow({ id: "task-window", group: "T", board: "subagent", summary: "The size of this agent's context window.", renderers: ["plain", "label-value", "bare"], defaults: { render: "plain", compact: "si" }, unknown: "hide", binding: "task.ctx_size" }),
   slRow({ id: "task-elapsed", group: "T", board: "subagent", label: "for", summary: "How long this agent has been running.", renderers: ["plain", "label-value", "bare"], defaults: { render: "plain", min_width: 3, align: "right", suffix: "m" }, binding: "task.elapsed_min", time_based: true }),
   slRow({ id: "task-what", group: "T", board: "subagent", summary: "What this agent was asked to do.", renderers: ["bare", "plain"], defaults: { render: "bare", truncate: "end", max_len: 40 }, unknown: "hide", binding: "task.description" }),
+
+  // ── Group M — Pets and motion (v2.0.4). A pet is a SPRITE: the frames are
+  //    data in SL_SPRITES, and the engine only moves them along a track. A
+  //    pet counts against the per-line limit — it is a thing the line shows.
+  ...Object.entries(SL_SPRITES).map(([id, sp]) => slRow({ id, group: "M", summary: sp.summary, renderers: ["run", "bounce", "idle"], defaults: { render: "run", width: 16 }, unknown: "hide", params: { speed: { options: ["slow", "normal", "fast"], dflt: "normal" } }, binding: "clock.now", time_based: true, sprite: id })),
+  slRow({ id: "weather", group: "M", label: "", summary: "The temperature where you are. It is read from wttr.in in the background, at most every 30 minutes.", renderers: ["plain", "bare", "label-value"], defaults: { render: "plain" }, cost: "new-read", params: SL_WEATHER_PARAMS, binding: "weather.temp" }),
+  slRow({ id: "weather-icon", group: "M", summary: "The sky where you are, as one shape.", renderers: ["shape", "icon", "word"], defaults: { render: "shape" }, states: ["sun", "partly", "cloud", "rain", "snow", "storm", "fog"], shapes: { sun: "☼", partly: "◐", cloud: "☁", rain: "☂", snow: "❄", storm: "ϟ", fog: "≋" }, ascii_shapes: { sun: "*", partly: "o", cloud: "c", rain: "r", snow: "s", storm: "!", fog: "=" }, cost: "new-read", params: SL_WEATHER_PARAMS, binding: "weather.state", state_binding: "weather.state" }),
+  slRow({ id: "weather-desc", group: "M", summary: "The short weather text from the provider (24 cells or less).", renderers: ["bare", "plain"], defaults: { render: "bare", truncate: "end", max_len: 24 }, cost: "new-read", params: SL_WEATHER_PARAMS, binding: "weather.desc" }),
 
   // ── Group J — Composite shortcuts. One slot, several facts. ─────────────
   slRow({ id: "tier-block", group: "J", summary: "Verdict + version + model/effort as one object.", renderers: ["plain", "badge", "pill"], defaults: { render: "pill" }, states: ["ready", "boosted", "degrade"], binding: "tier.text", state_binding: "verdict.state", composite: ["verdict", "orc-version", "tier"] }),
@@ -43362,6 +43445,8 @@ function slValidate(layout) {
           E(`"${r}" on "${comp.id}" — ${comp.id} has no states, so there is nothing for a shape to say.`);
         if (rend.needs === "series" && !comp.series)
           E(`"${r}" on "${comp.id}" — no history is kept for ${comp.id}. Series are kept for: ${slSeriesComponents().join(", ")}.`);
+        if (rend.needs === "sprite" && !comp.sprite)
+          E(`"${r}" on "${comp.id}" — only a pet moves along the line.`);
         if (rend.needs === "motif" && !comp.state_binding)
           E(`"${r}" on "${comp.id}" — motion is only for a component with a phase kind.`);
         if (rend.width && item.width != null) {
@@ -43401,8 +43486,17 @@ function slValidate(layout) {
         const given = item.params || {};
         for (const k of Object.keys(given)) {
           if (!comp.params[k]) E(`"${comp.id}" takes no parameter "${k}" — it takes: ${Object.keys(comp.params).join(", ")}`);
+          else if (comp.params[k].options && !comp.params[k].options.map(String).includes(String(given[k])))
+            E(`parameter "${k}" on ${where} takes one of: ${comp.params[k].options.join(", ")}`);
+          else if (comp.params[k].max && String(given[k]).length > comp.params[k].max)
+            E(`parameter "${k}" on ${where} is longer than ${comp.params[k].max} characters`);
+          else if (comp.params[k].free && slCellWidth(given[k]) > SL_LIMITS.param_text)
+            E(`parameter "${k}" on ${where} is longer than ${SL_LIMITS.param_text} cells`);
         }
+      } else if (item.params && Object.keys(item.params).length) {
+        E(`"${comp.id}" takes no parameters (${where})`);
       }
+      slValidateDesign(item, comp, where, board, E);
 
       // ── Tier 3 — design. The rules a human gets wrong and a machine can
       //    check. WARNINGS NEVER BLOCK: an error is a refusal, a warning is a
@@ -43421,12 +43515,21 @@ function slValidate(layout) {
     });
   });
 
+  layout.lines.forEach((line, li) => {
+    const where = `line ${li + 1}`;
+    for (const k of ["separator", "prefix"])
+      if (line[k] != null && slHasControl(line[k])) E(`the ${k} on ${where} holds a control character — a layout is printed to a terminal, so it may not carry one`);
+    if (line.align != null && !SL_LINE_ALIGNS.includes(line.align)) E(`unknown line align "${line.align}" on ${where} — use: ${SL_LINE_ALIGNS.join(", ")}`);
+    if (line.align != null && line.align !== "left" && board.id === "subagent") E(`line align on ${where} — the subagent row is one terminal row and cannot be aligned`);
+    if (line.sep_color != null && !slParseColor(line.sep_color)) E(`"${line.sep_color}" is not a colour (separator colour on ${where})`);
+  });
+
   // Cross-item design warnings.
   layout.lines.forEach((line, li) => {
     const bindings = new Map();
     for (const it of line.items || []) {
       const c = SL_BY_ID.get(it.type);
-      if (!c || !c.binding) continue;
+      if (!c || !c.binding || c.binding === "static.text") continue;
       bindings.set(c.binding, (bindings.get(c.binding) || 0) + 1);
     }
     for (const [b, n] of bindings) {
@@ -43441,6 +43544,81 @@ function slValidate(layout) {
   });
 
   return { ok: errors.length === 0, errors, warnings };
+}
+
+// v2.0.4 — the design fields of ONE item. Every problem is collected, and each
+// sentence names the position.
+function slValidateDesign(item, comp, where, board, E) {
+  const oneOf = (k, set) => {
+    if (item[k] != null && !set.includes(item[k])) E(`unknown ${k} "${item[k]}" on ${where} — use: ${set.join(", ")}`);
+  };
+  oneOf("label_pos", SL_LABEL_POS);
+  oneOf("value_pos", SL_VALUE_POS);
+  oneOf("caption_pos", SL_CAPTION_POS);
+  oneOf("caption_align", SL_CAPTION_ALIGN);
+  oneOf("caption_case", SL_CASES);
+  oneOf("align", SL_ALIGNS);
+  oneOf("sign", SL_SIGNS);
+  oneOf("unknown", SL_UNKNOWNS);
+  // SECURITY: no control character in any free text.
+  const texts = [["label", item.label], ["prefix", item.prefix], ["suffix", item.suffix], ["caption", item.caption], ["fill_char", item.fill_char], ["empty_char", item.empty_char]];
+  for (const b of Array.isArray(item.brackets) ? item.brackets : []) texts.push(["brackets", b]);
+  for (const g of Object.values(item.glyph_by_state || {})) texts.push(["glyph_by_state", g]);
+  for (const [k, v] of Object.entries(item.params || {})) texts.push(["parameter " + k, v]);
+  for (const [k, v] of texts)
+    if (v != null && slHasControl(v)) E(`the ${k} on ${where} holds a control character — a layout is printed to a terminal, so it may not carry one`);
+  if (item.caption != null && slCellWidth(item.caption) > SL_LIMITS.caption) E(`the caption on ${where} is wider than ${SL_LIMITS.caption} cells`);
+  const oneCell = (k, v) => {
+    if (v == null) return;
+    if ([...String(v)].length !== 1 || slCellWidth(v) !== 1) E(`${k} "${v}" on ${where} must be one character of exactly 1 cell`);
+  };
+  oneCell("fill_char", item.fill_char);
+  oneCell("empty_char", item.empty_char);
+  for (const [st, g] of Object.entries(item.glyph_by_state || {})) {
+    if (!comp.states || !comp.states.includes(st)) E(`glyph_by_state key "${st}" — "${comp.id}" has states: ${(comp.states || []).join(", ") || "none"}`);
+    oneCell(`glyph_by_state ${st}`, g);
+  }
+  for (const [st, c] of Object.entries(item.color_by_state || {}))
+    if (c != null && !slParseColor(c)) E(`"${c}" is not a colour (color_by_state ${st} on ${where})`);
+  for (const k of ["caption_color", "fill_color", "empty_color"]) {
+    const v = item[k];
+    if (v == null || v === "none") continue;
+    if (!slParseColor(v)) E(`"${v}" is not a colour (${k} on ${where})`);
+  }
+  if (item.ramp_colors != null) {
+    const rc = item.ramp_colors;
+    const [lo, hi] = SL_LIMITS.ramp_colors;
+    if (!Array.isArray(rc) || rc.length < lo || rc.length > hi) E(`ramp_colors on ${where} takes ${lo} to ${hi} colours`);
+    else for (const c of rc) if (!slParseColor(c) || /^ramp:/.test(c)) E(`"${c}" is not a colour (ramp_colors on ${where})`);
+  }
+  if (item.ramp_stops != null) {
+    const st = item.ramp_stops;
+    const ok = Array.isArray(st) && st.every((n, i) => typeof n === "number" && isFinite(n) && n >= 0 && n <= 100 && (i === 0 || n > st[i - 1]));
+    if (!ok) E(`ramp_stops on ${where} must be ascending numbers from 0 to 100`);
+    else if (Array.isArray(item.ramp_colors) && st.length !== item.ramp_colors.length) E(`ramp_stops on ${where} has ${st.length} stops for ${item.ramp_colors.length} colours — give one stop per colour`);
+  }
+  if (item.brackets != null) {
+    const b = item.brackets;
+    if (!Array.isArray(b) || b.length !== 2 || b.some((x) => typeof x !== "string" || slCellWidth(x) > SL_LIMITS.brackets))
+      E(`brackets on ${where} take "L,R", each 0 to ${SL_LIMITS.brackets} cells`);
+  }
+  const num = (k, lo, hi) => {
+    const v = item[k];
+    if (v == null) return;
+    if (typeof v !== "number" || !Number.isInteger(v) || v < lo || v > hi) E(`${k} on ${where} takes a whole number from ${lo} to ${hi}`);
+  };
+  num("threshold", 0, 100);
+  num("max_len", 0, SL_LIMITS.max_len);
+  if (item.padding != null) {
+    const p = item.padding;
+    if (!Array.isArray(p) || p.length !== 2 || p.some((n) => !Number.isInteger(n) || n < 0 || n > SL_LIMITS.padding))
+      E(`padding on ${where} takes two whole numbers from 0 to ${SL_LIMITS.padding}`);
+  }
+  // The subagent row is ONE terminal row by construction: no caption rows.
+  if (board.id === "subagent") {
+    if (item.caption != null) E(`a caption on ${where} — the subagent row is one terminal row, so it has no caption row`);
+    if (item.label_pos === "above" || item.label_pos === "below") E(`label_pos ${item.label_pos} on ${where} — the subagent row is one terminal row`);
+  }
 }
 
 // spacer / divider / fill do not count against the 5-per-line limit: the limit
@@ -43541,7 +43719,8 @@ function slCompile(layout) {
       : b.startsWith("wiki.") ? "scan.wiki"
         : b.startsWith("diy.") ? "scan.diy"
           : b.startsWith("update.") ? "scan.update"
-            : "scan.trace";
+            : b.startsWith("weather.") ? "scan.weather"
+              : "scan.trace";
   // W3's groups all read files the shipped status line never opens, so they
   // share one gate — the extended scan — and each sub-read inside it carries
   // its own TTL. One gate, many clocks.
@@ -43589,10 +43768,21 @@ function slCompile(layout) {
       // takes its separator with it. This is Starship's conditional group, and
       // it is what stops a dangling ` ·  · `. No user ever configures it.
       const children = [];
-      if (visible > 0 && !slIsStructural(item.type)) children.push(slLit(sep));
+      const lowered = slLowerItem(r, comp, { formats, glyphsets, statemaps, ramps, idxOf, layout });
+      // An empty `text` part lowers to nothing, and takes no separator with it.
+      if (!lowered.length && comp.id === "text") return;
+      const sepd = visible > 0 && !slIsStructural(item.type);
+      if (sepd) {
+        // The separator colour wraps the lit ONLY when the line sets one, so
+        // an unchanged line compiles to unchanged bytes.
+        const sc = line.sep_color ? slSgr(line.sep_color, null, null) : null;
+        if (sc) children.push({ op: "sgr", s: sc });
+        children.push(slLit(sep));
+        if (sc) children.push({ op: "reset" });
+      }
       visible++;
 
-      for (const op of slLowerItem(r, comp, { formats, glyphsets, statemaps, ramps, idxOf, layout })) children.push(op);
+      for (const op of lowered) children.push(op);
 
       const hide = (r.hide_when || []).filter((h) => h !== "never");
       const itemOp = {
@@ -43615,6 +43805,11 @@ function slCompile(layout) {
       if (slIsStructural(item.type)) itemOp.s = 1;
       if (r.min_cols) itemOp.min_cols = r.min_cols;
       if (r.max_cols) itemOp.max_cols = r.max_cols;
+      if (lowered.cap) {
+        itemOp.cap = lowered.cap;
+        if (sepd) itemOp.sw = slCellWidth(sep);
+      }
+      if (lowered.p) itemOp.p = lowered.p;
       ops.push(itemOp);
 
       // The responsive drop order: priority first (1 = keep longest), then
@@ -43622,23 +43817,27 @@ function slCompile(layout) {
       dropCandidates.push({ id: item.id, line: li, pos: pi, priority: r.priority || 3, min_cols: r.min_cols || 0 });
     });
 
-    lines.push({ prefix: line.prefix || "", separator: sep, ops, static_width: slMeasure(ops, { formats, glyphsets, statemaps }) });
+    const out = { prefix: line.prefix || "", separator: sep, ops, static_width: slMeasure(ops, { formats, glyphsets, statemaps }) };
+    if (line.align === "center" || line.align === "right") out.align = line.align;
+    lines.push(out);
   });
 
   // S5 — the responsive plans. Derived from each item's min_cols and priority;
   // the hook does ONE lookup and no measuring at render time.
   dropCandidates.sort((a, b) => b.priority - a.priority || b.pos - a.pos);
   const widths = [160, 120, 100, 80, 72];
-  const totalStatic = lines.reduce((m, l) => Math.max(m, l.static_width), 0);
+  // PER LINE: only a line wider than w loses parts, and only its own parts.
   for (const w of widths) {
-    if (totalStatic <= w) continue;
     const drop = [];
-    let est = totalStatic;
-    for (const c of dropCandidates) {
-      if (est <= w) break;
-      drop.push(c.id);
-      est -= 8; // a conservative per-item estimate; the exact width is measured
-    }
+    lines.forEach((l, li) => {
+      let est = l.static_width;
+      for (const c of dropCandidates) {
+        if (est <= w) break;
+        if (c.line !== li) continue;
+        drop.push(c.id);
+        est -= 8; // a conservative per-item estimate; the exact width is measured
+      }
+    });
     if (drop.length) plans.push({ cols: w, drop });
   }
   plans.sort((a, b) => a.cols - b.cols);
@@ -43675,7 +43874,8 @@ function slCompile(layout) {
     bindings: [...bindings].sort(),
     providers: [...providers].sort(),
     series: [...seriesWanted].sort(),
-    needs_refresh_interval: timeBased ? 5 : null,
+    // Motion (a sprite, a motif, a pulse) needs the timer at its fastest.
+    needs_refresh_interval: slHasMotion(compiled) ? 1 : timeBased ? 5 : null,
     // THE CAP TRAVELS WITH THE PROGRAM (v1.4.2). A hook cannot call this CLI —
     // a status line re-renders on every keystroke — so before this it simply
     // held its own `5`, and raising the cap here left every legal six-part line
@@ -43688,12 +43888,33 @@ function slCompile(layout) {
   return { compiled, lock };
 }
 
+// Whether a compiled program MOVES: a sprite, a motif or a pulse op anywhere.
+function slHasMotion(compiled) {
+  const walk = (list) => (list || []).some((o) => o && (o.op === "sprite" || o.op === "motif" || walk(o.children) || (o.cap && walk(o.cap.ops))));
+  return ((compiled && compiled.lines) || []).some((l) => walk(l.ops));
+}
+
 function slLowerItem(r, comp, T) {
   const ops = [];
   const rend = STATUSLINE_RENDERERS[r.render] || STATUSLINE_RENDERERS.bare;
-  const label = r.label == null ? null : String(r.label);
+  const rawLabel = r.label == null ? null : String(r.label);
+  const from = r._from || {};
+  // v2.0.4 — a label the ITEM moved. Only an authored position moves it, so
+  // an existing layout compiles to the same bytes.
+  // A non-text shape with an item-authored name and no authored position
+  // draws the name before the shape — the Name box must not be a no-op.
+  const shapeKind = rend.kind === "bar" || rend.kind === "series" || rend.kind === "state" || rend.kind === "motif" || rend.kind === "sprite";
+  const lpos = from.label_pos === "item" ? r.label_pos : shapeKind && from.label === "item" && rawLabel ? "before" : null;
+  const label = lpos && lpos !== "before" ? null : rawLabel;
   const caseOf = r.case || "none";
-  const applyCase = (s) => (caseOf === "upper" ? s.toUpperCase() : caseOf === "lower" ? s.toLowerCase() : caseOf === "title" ? s.replace(/\b\w/g, (m) => m.toUpperCase()) : s);
+  const applyCase = (s) => slCaseText(s, caseOf);
+  // A styled lit keeps its PLAIN text as the ASCII twin: `ᴄᴛx` falls back to
+  // `ctx`, never to `???`.
+  const styledLit = (plain, c) => {
+    const t = slCaseText(plain, c);
+    const a = slAsciiOf(slCaseText(plain, ["small", "super", "sub"].includes(c) ? "none" : c));
+    return a === t ? { op: "lit", t } : { op: "lit", t, a };
+  };
 
   const fmt = {
     kind: r.format || "plain",
@@ -43710,8 +43931,20 @@ function slLowerItem(r, comp, T) {
     prefix: r.prefix ? String(r.prefix) : "",
     suffix: r.suffix ? String(r.suffix) : "",
   };
+  // v2.0.4 — a weather part carries WHAT to fetch; the temperature takes its
+  // unit suffix from `units` unless the item set its own suffix.
+  const isWeather = /^weather\./.test(comp.binding || "");
+  const wp = isWeather ? { location: String(((r.params || {}).location != null ? r.params.location : comp.params.location.dflt)), units: String((r.params || {}).units || comp.params.units.dflt) } : null;
+  if (comp.id === "weather" && from.suffix !== "item") fmt.suffix = wp.units === "us" ? "°F" : "°C";
   const fi = T.idxOf(T.formats, fmt);
-  const gs = STATUSLINE_GLYPHSETS[r.glyphs] || STATUSLINE_GLYPHSETS.blocks;
+  let gs = STATUSLINE_GLYPHSETS[r.glyphs] || STATUSLINE_GLYPHSETS.blocks;
+  // v2.0.4 — the user's own fill and empty cells, on a CLONE. The ASCII twins
+  // keep their ASCII form.
+  if (r.fill_char != null || r.empty_char != null) {
+    gs = Object.assign({}, gs);
+    if (r.fill_char != null) for (const k of ["fill", "meter_on", "on", "braille_fill"]) gs[k] = String(r.fill_char);
+    if (r.empty_char != null) for (const k of ["empty", "meter_off", "off", "braille_empty", "track"]) gs[k] = String(r.empty_char);
+  }
   const gi = T.idxOf(T.glyphsets, gs);
 
   const labelSgr = slSgr(r.label_color, r.emphasis, r.bg);
@@ -43731,6 +43964,10 @@ function slLowerItem(r, comp, T) {
     const stops = r.ramp_stops || rp.stops;
     ri = T.idxOf(T.ramps, { stops, sgr: rp.colors.map((c, i) => slSgr(c, rp.emphasis ? [rp.emphasis[i]] : null, null) || "") });
   }
+  // v2.0.4 — the item's own ramp. It is used wherever a ramp would be.
+  const rampColors = Array.isArray(r.ramp_colors) && r.ramp_colors.length >= 2 ? r.ramp_colors.map(String) : null;
+  const rampStops = rampColors ? (Array.isArray(r.ramp_stops) && r.ramp_stops.length === rampColors.length ? r.ramp_stops : rampColors.map((_, i) => Math.round((i * 100) / rampColors.length))) : null;
+  if (rampColors) ri = T.idxOf(T.ramps, { stops: rampStops, sgr: rampColors.map((c) => slSgr(c, null, null) || "") });
 
   // The state map: glyph, ASCII twin and colour per state. Built ONCE here so
   // the `state` renderer and the `word` renderer can never disagree about what
@@ -43738,8 +43975,8 @@ function slLowerItem(r, comp, T) {
   const stateMap = () => {
     const map = { glyphs: {}, sgr: {}, ascii: {} };
     for (const st of comp.states || []) {
-      map.glyphs[st] = (comp.shapes && comp.shapes[st]) || st.slice(0, 1);
-      map.ascii[st] = slAsciiOf(map.glyphs[st]);
+      map.glyphs[st] = (r.glyph_by_state && r.glyph_by_state[st]) || (comp.shapes && comp.shapes[st]) || st.slice(0, 1);
+      map.ascii[st] = !(r.glyph_by_state && r.glyph_by_state[st]) && comp.ascii_shapes && comp.ascii_shapes[st] ? comp.ascii_shapes[st] : slAsciiOf(map.glyphs[st]);
       const c = (r.color_by_state && r.color_by_state[st]) || slStateColor(st, r, T.layout);
       const sg = slSgr(c, r.emphasis, r.bg);
       if (sg) map.sgr[st] = sg;
@@ -43758,9 +43995,64 @@ function slLowerItem(r, comp, T) {
   const pushLabel = (text, sep) => {
     if (!text) return;
     if (labelSgr) ops.push({ op: "sgr", s: labelSgr });
-    ops.push(slLit(applyCase(text) + sep));
+    ops.push(styledLit(text + sep, caseOf));
     if (labelSgr) ops.push({ op: "reset" });
   };
+  // The same label, drawn beside a non-text shape or after a text value. A
+  // separate name from `pushLabel`, which mirrors SL_LABEL_RENDERERS.
+  const sideLabel = (text, before, after) => {
+    if (labelSgr) ops.push({ op: "sgr", s: labelSgr });
+    ops.push(styledLit(before + text + after, caseOf));
+    if (labelSgr) ops.push({ op: "reset" });
+  };
+
+  // v2.0.4 — THE CAPTION: ordinary ops in their own row, above or below.
+  const capOps = [];
+  const capLabel = lpos === "above" || lpos === "below";
+  if (capLabel && rawLabel) {
+    if (labelSgr) capOps.push({ op: "sgr", s: labelSgr });
+    capOps.push(styledLit(rawLabel, caseOf));
+    if (labelSgr) capOps.push({ op: "reset" });
+  }
+  if (r.caption != null && String(r.caption) !== "") {
+    const cc = r.caption_case || "none";
+    const csg = slSgr(r.caption_color, null, null);
+    if (capOps.length) capOps.push(slLit(" "));
+    if (csg) capOps.push({ op: "sgr", s: csg });
+    for (const part of String(r.caption).split(/(\{value\}|\{label\})/)) {
+      if (!part) continue;
+      if (part === "{value}") capOps.push(Object.assign({ op: "val", b: comp.binding, f: cc === "none" ? fi : T.idxOf(T.formats, Object.assign({}, fmt, { case: cc })) }, wp ? { p: wp } : {}));
+      else capOps.push(styledLit(part === "{label}" ? rawLabel || "" : part, cc));
+    }
+    if (csg) capOps.push({ op: "reset" });
+  }
+  if (capOps.length) ops.cap = { pos: capLabel ? lpos : r.caption_pos || "below", align: r.caption_align || "left", ops: capOps };
+
+  // v2.0.4 — the static parts draw their own text. They bound `static.text`,
+  // which is null, so before this they drew nothing at all.
+  if (comp.binding === "static.text" && !comp.children) {
+    const prm = r.params || {};
+    const dflt = (k) => (comp.params && comp.params[k] ? comp.params[k].dflt : undefined);
+    if (comp.id === "fill") {
+      ops.push({ op: "flex", w: Number(prm.weight != null ? prm.weight : dflt("weight")) || 1, min: 1 });
+      return ops;
+    }
+    let t = "";
+    if (comp.id === "text") t = String(prm.text != null ? prm.text : dflt("text") || "");
+    else if (comp.id === "divider") t = String(prm.text != null ? prm.text : dflt("text"));
+    else if (comp.id === "spacer") t = " ".repeat(Number(prm.width != null ? prm.width : dflt("width")) || 1);
+    else if (comp.id === "icon-static") t = String(prm.glyph != null ? prm.glyph : dflt("glyph"));
+    if (!t) return ops;
+    const sb = r.brackets || rend.brackets || null;
+    if (sb && sb[0]) ops.push(slLit(sb[0]));
+    if (valueSgr) ops.push({ op: "sgr", s: valueSgr });
+    ops.push(styledLit(t, caseOf));
+    if (valueSgr) ops.push({ op: "reset" });
+    if (sb && sb[1]) ops.push(slLit(sb[1]));
+    return ops;
+  }
+  if (comp.id === "config") ops.p = { key: String((r.params && r.params.key) || comp.params.key.dflt) };
+  if (wp) ops.p = wp;
 
   // A GROUP: its children are lowered inside its brackets and share its
   // background, so a run of chips reads as one object. It is the one place an
@@ -43784,12 +44076,36 @@ function slLowerItem(r, comp, T) {
   const isPill = r.render === "pill" && !!label;
   if (open && !isPill) ops.push(slLit(open));
 
+  // v2.0.4 — a bar's own cell colours. `gc` (gradient, all-hex ramp) beats
+  // `fs`/`es`, which beat the ramp; the engine applies that order.
+  const barExtras = (bop) => {
+    const fs = r.fill_color ? slSgr(r.fill_color, null, null) : null;
+    const es = r.empty_color ? slSgr(r.empty_color, null, null) : null;
+    if (fs) bop.fs = fs;
+    if (es) bop.es = es;
+    if (bop.k === "gradient" && rampColors && rampColors.every((c) => /^#[0-9a-fA-F]{6}$/.test(c))) {
+      const rgb = rampColors.map((c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)));
+      const hex = (n) => Math.round(n).toString(16).padStart(2, "0");
+      bop.gc = [];
+      for (let i = 0; i < bop.w; i++) {
+        const pos = ((i + 1) / bop.w) * 100;
+        let k = 0;
+        while (k < rampStops.length - 2 && pos > rampStops[k + 1]) k++;
+        const span = rampStops[k + 1] - rampStops[k];
+        const t = Math.max(0, Math.min(1, span > 0 ? (pos - rampStops[k]) / span : 1));
+        const c = rgb[k].map((v, j) => v + (rgb[k + 1][j] - v) * t);
+        bop.gc.push(slSgr("#" + c.map(hex).join(""), null, null));
+      }
+    }
+    return bop;
+  };
+
   const valueOp = () => {
     if (rend.kind === "bar") {
       const bop = { op: "bar", b: comp.binding, k: rend.sub, g: gi, w: r.width || rend.dflt_w || 10, r: ri, thr: r.threshold == null ? null : r.threshold };
       // A state component on a bar: the engine maps the state to a percent.
       if (comp.states && !comp.bounded) bop.o = comp.states.filter((s) => s !== "unknown");
-      return bop;
+      return barExtras(bop);
     }
     if (rend.kind === "series") {
       return { op: "series", b: comp.binding, s: comp.series, k: rend.sub, g: gi, w: r.width || rend.dflt_w || 8 };
@@ -43800,12 +44116,20 @@ function slLowerItem(r, comp, T) {
     }
     if (rend.kind === "state") {
       const map = stateMap();
-      return { op: "state", b: comp.state_binding || comp.binding, m: T.idxOf(T.statemaps, map) };
+      const st = { op: "state", b: comp.state_binding || comp.binding, m: T.idxOf(T.statemaps, map) };
+      if (wp) st.p = wp;
+      return st;
+    }
+    if (rend.kind === "sprite") {
+      const sp = SL_SPRITES[comp.sprite];
+      const k = SL_SPRITE_SPEED[(r.params || {}).speed] || 1;
+      return { op: "sprite", w: r.width || rend.dflt_w, mode: rend.sub, ms: Math.round(sp.ms * k), f: sp.f.slice(), a: sp.a.slice(), ahead: sp.ahead, behind: sp.behind, ...(/[^ -~]/.test(sp.ahead || "") && sp.ahead_a != null ? { ahead_a: sp.ahead_a } : {}), ...(/[^ -~]/.test(sp.behind || "") && sp.behind_a != null ? { behind_a: sp.behind_a } : {}) };
     }
     // text
     const op = { op: "val", b: comp.binding, f: fi };
     if (r.render === "word" && comp.state_binding) op.b = comp.state_binding;
     if (comp.id === "clock") op.tf = (r.params && r.params.format) || comp.params.format.dflt;
+    if (ops.p) op.p = ops.p;
     // A ramp derives the colour FROM THE VALUE, so it applies to a number just
     // as much as to a bar — `context 38%` green and `context 94%` red is the
     // whole point of one.
@@ -43822,11 +44146,50 @@ function slLowerItem(r, comp, T) {
     // carry their OWN colour. Wrapping them in the theme's value colour as well
     // emits two sequences for one glyph, and the outer one is the wrong answer.
     const own = inner.op === "state" || inner.op === "motif" || (inner.op === "bar" && inner.r != null) ||
-      (inner.op === "val" && (inner.r != null || inner.m != null));
+      (inner.op === "val" && (inner.r != null || inner.m != null)) || (inner.op === "bar" && (inner.fs || inner.es || inner.gc));
     if (own) return emphSgr ? [{ op: "sgr", s: emphSgr }, inner, { op: "reset" }] : [inner];
+    // v2.0.4 — a fill colour paints the whole spark.
+    if (inner.op === "series" && r.fill_color) {
+      const ss = slSgr(r.fill_color, r.emphasis, r.bg);
+      if (ss) return [{ op: "sgr", s: ss }, inner, { op: "reset" }];
+    }
     if (!valueSgr) return [inner];
     return [{ op: "sgr", s: valueSgr }, inner, { op: "reset" }];
   };
+
+  // v2.0.4 §7 — a NON-TEXT shape with decorations the ITEM authored:
+  //   [label before] [prefix] [value before] SHAPE [value after] [suffix] [label after]
+  // Nothing here runs for a field the item did not set, so an existing layout
+  // compiles to the same bytes.
+  const vpos = from.value_pos === "item" ? r.value_pos : null;
+  const dPre = from.prefix === "item" && r.prefix ? String(r.prefix) : "";
+  const dSuf = from.suffix === "item" && r.suffix ? String(r.suffix) : "";
+  const nonText = rend.kind === "bar" || rend.kind === "series" || rend.kind === "state" || rend.kind === "motif" || rend.kind === "sprite";
+  if (nonText && ((lpos && rawLabel && !capLabel) || dPre || dSuf || vpos === "before" || vpos === "after")) {
+    // The value beside a shape carries neither prefix nor suffix: they are
+    // drawn once, around the whole part.
+    const bareF = T.idxOf(T.formats, Object.assign({}, fmt, { prefix: "", suffix: "" }));
+    const val = () => wrapValue({ op: "val", b: comp.binding, f: bareF });
+    if (lpos === "before" && rawLabel) sideLabel(rawLabel, "", " ");
+    if (dPre) ops.push(slLit(dPre));
+    if (vpos === "before") {
+      for (const o of val()) ops.push(o);
+      ops.push(slLit(" "));
+    }
+    if (r.render === "bar") {
+      for (const o of wrapValue({ op: "val", b: comp.binding, f: bareF })) ops.push(o);
+      ops.push(slLit(" "));
+      ops.push(barExtras({ op: "bar", b: comp.binding, k: "blocks", g: gi, w: r.width || 10, r: ri, thr: null }));
+    } else for (const o of wrapValue(valueOp())) ops.push(o);
+    if (vpos === "after") {
+      ops.push(slLit(" "));
+      for (const o of val()) ops.push(o);
+    }
+    if (dSuf) ops.push(slLit(dSuf));
+    if (lpos === "after" && rawLabel) sideLabel(rawLabel, " ", "");
+    if (close && !isPill) ops.push(slLit(close));
+    return ops;
+  }
 
   switch (r.render) {
     case "bare":
@@ -43895,7 +44258,7 @@ function slLowerItem(r, comp, T) {
       // The user's own worked example: number THEN bar.
       for (const o of wrapValue({ op: "val", b: comp.binding, f: fi })) ops.push(o);
       ops.push(slLit(" "));
-      ops.push({ op: "bar", b: comp.binding, k: "blocks", g: gi, w: r.width || 10, r: ri, thr: null });
+      ops.push(barExtras({ op: "bar", b: comp.binding, k: "blocks", g: gi, w: r.width || 10, r: ri, thr: null }));
       break;
     }
     case "link": {
@@ -43908,6 +44271,8 @@ function slLowerItem(r, comp, T) {
       for (const o of wrapValue(valueOp())) ops.push(o);
   }
 
+  // v2.0.4 — label_pos after on a text shape: the value, then the label.
+  if (lpos === "after" && rawLabel) sideLabel(rawLabel, " ", "");
   if (close && !isPill) ops.push(slLit(close));
   return ops;
 }
@@ -44026,6 +44391,12 @@ function slMeasure(ops, T) {
         case "motif":
           w += 1;
           break;
+        case "sprite":
+          w += op.w || 16;
+          break;
+        case "flex":
+          w += op.min || 1;
+          break;
         case "item":
           w += (op.pad_l || 0) + (op.pad_r || 0);
           walk(op.children || []);
@@ -44092,6 +44463,25 @@ const STATUSLINE_PRESETS = {
     build: () => [
       [slItem("verdict"), slItem("tier"), slItem("context")],
       [slItem("cache"), slItem("cache-hit", { render: "bar", width: 10 }), slItem("cache-expires"), slItem("cache-recache-cost")],
+      [],
+    ],
+  },
+  // v2.0.4 — the design powers, all on one board.
+  designer: {
+    summary: "Shows what a part can draw: labels beside a bar, a caption under it, a colour gradient, your own bar cells, and a clock at the right edge.",
+    build: () => [
+      [
+        slItem("text", { params: { text: "ORC" }, emphasis: ["bold"] }),
+        slItem("quota-5h", { render: "bar-only", width: 8, label: "5h", label_pos: "before", value_pos: "after" }),
+        slItem("context", { render: "gradient", width: 10, ramp_colors: ["#3fb950", "#d29922", "#f85149"], caption: "context", caption_case: "small" }),
+        slItem("fill"),
+        slItem("clock"),
+      ],
+      [
+        slItem("quota-week", { render: "meter", width: 8, fill_char: "▰", empty_char: "▱", label: "wk", label_pos: "before" }),
+        slItem("tier"),
+        slItem("branch"),
+      ],
       [],
     ],
   },
@@ -44294,8 +44684,8 @@ const SL_FIXTURES = {
       prompt_cache: { warm: true, ttl: "5m", hit_ratio: 0.91, requests: 214, misses: 19, cache_write_tokens: 48000, recache_tokens_if_cold: 45000 },
       workspace: { project_dir: "/repo", repo: { host: "github.com", owner: "azure-id", name: "orc" } },
     },
-    ledger: { five_hour: { baseline: 55, last: 61, accumulated: 0, resets: 0 }, tok: { input: 12000, cache_write: 40000, cache_read: 350000, output: 10000 }, series: { quota5h: [55, 56, 58, 59, 60, 61], ucs: [0, 1, 2, 4, 5, 6], mtok: [10, 40, 120, 260, 380, 412] } },
-    scan: { spawns: 7, running: 2, lanes: ["quick"], phase: { lane: "quick", label: "Q3 DO", kind: "do" }, branch: "main", inflight: "clear", wiki: { tier: "fresh", distance: 3 }, extra_enabled: true, trace_age_min: 0, trace_state: "live" },
+    ledger: { five_hour: { baseline: 55, last: 61, accumulated: 0, resets: 0 }, tok: { input: 12000, cache_write: 40000, cache_read: 350000, output: 10000 }, series: { quota5h: [55, 56, 58, 59, 60, 61], ucs: [0, 1, 2, 4, 5, 6], mtok: [10, 40, 120, 260, 380, 412], agents: [0, 1, 3, 2, 2, 2], burn: [0.8, 1.1, 1.4, 1.2, 1.3, 1.5], cost: [0.05, 0.12, 0.2, 0.28, 0.35, 0.42], cachehit: [62, 74, 81, 86, 89, 91], cachewrite: [12000, 20000, 28000, 36000, 42000, 48000], lines: [40, 120, 180, 240, 290, 324], extraspend: [0, 0.02, 0.04, 0.07, 0.09, 0.11], speed: [38, 52, 47, 61, 55, 58], mtokkind: [8, 30, 90, 200, 300, 340], quotawk: [15, 15, 16, 17, 17, 18] } },
+    scan: { spawns: 7, running: 2, lanes: ["quick"], phase: { lane: "quick", label: "Q3 DO", kind: "do" }, branch: "main", inflight: "clear", wiki: { tier: "fresh", distance: 3 }, extra_enabled: true, trace_age_min: 0, trace_state: "live", weather: { temp_c: 18, temp_f: 64, state: "partly", desc: "Partly cloudy" } },
   },
   degraded: {
     label: "the wrong tier, a full window, and nothing running",
@@ -44353,7 +44743,7 @@ function slDerived(payload) {
   return { verdict, reasons, version: currentVersion() };
 }
 
-function slPreview(compiled, fixtureName, cols, overrides) {
+function slPreview(compiled, fixtureName, cols, overrides, at) {
   const fx = SL_FIXTURES[fixtureName] || SL_FIXTURES.healthy;
   const payload = JSON.parse(JSON.stringify(fx.payload));
   for (const [k, v] of Object.entries(overrides || {})) slDeepSet(payload, k, v);
@@ -44364,7 +44754,8 @@ function slPreview(compiled, fixtureName, cols, overrides) {
     scan: fx.scan || {},
     derived: slDerived(payload),
     task: SL_TASK_FIXTURES[fixtureName] || SL_TASK_FIXTURES.healthy,
-    now,
+    // `at` moves ONLY the clock, so an animated preview draws the same session.
+    now: at || now,
     cols: cols || 0,
     env: Object.assign({}, process.env, { COLUMNS: String(cols || 120) }),
   };
@@ -44426,6 +44817,8 @@ function statusline() {
       return slCloneCmd(claudeDir, p);
     case "compile":
       return slCompileCmd(claudeDir, true);
+    case "refresh":
+      return slRefreshCmd(claudeDir, p);
     default:
       console.error(`usage: orc statusline components|show|explain|validate|preview [--json]
        orc statusline set <line> <pos> <type> [--render R] [--label L] [--color C] [--width N] …
@@ -44437,6 +44830,8 @@ function statusline() {
        orc statusline expand <line>:<pos>                     a composite, or a group, back into its parts
        orc statusline clone <line>:<pos>
        orc statusline presets [--json] | apply <name> | reset | compile
+       orc statusline refresh <seconds 1-60|off>              the refresh timer in settings.json
+       orc statusline preview --frames N [--frame-ms M]       an animated preview
 
 COMPOSE THIS IN \`orc ui\` ▸ CLI Hook Interface. These flags exist so the panel
 has something to shell — typing a three-line layout is worse than the board.`);
@@ -44503,6 +44898,18 @@ function slComponentsCmd() {
       formats: SL_FORMATS,
       compact: SL_COMPACT,
       cases: SL_CASES,
+      // v2.0.4 — what each case looks like, and the other closed sets.
+      case_samples: Object.fromEntries(SL_CASES.map((c) => [c, slCaseText("Weekly 61", c)])),
+      label_positions: SL_LABEL_POS,
+      value_positions: SL_VALUE_POS,
+      caption_positions: SL_CAPTION_POS,
+      caption_aligns: SL_CAPTION_ALIGN,
+      aligns: SL_ALIGNS,
+      signs: SL_SIGNS,
+      unknowns: SL_UNKNOWNS,
+      line_aligns: SL_LINE_ALIGNS,
+      caption_tokens: ["{value}", "{label}"],
+      limits: SL_LIMITS,
       truncate: SL_TRUNCATE,
       emphasis: Object.keys(SL_EMPHASIS),
       refused_emphasis: SL_REFUSED_EMPHASIS,
@@ -44550,6 +44957,7 @@ const SL_GROUP_NAMES = {
   H: "Project and VCS",
   I: "Static and structural",
   J: "Composite shortcuts",
+  M: "Pets and motion",
 };
 
 // A dropdown of the word `braille-bar` tells nobody anything, so every renderer
@@ -44584,11 +44992,17 @@ const SL_ITEM_FIELDS = [
   "glyphs", "format", "case", "truncate", "compact", "prefix", "suffix",
   "emphasis", "hide_when", "width", "precision", "min_width", "min_cols",
   "max_cols", "priority", "max_len", "align", "draw_empty", "unknown",
+  // v2.0.4 — the design fields.
+  "label_pos", "value_pos", "caption", "caption_pos", "caption_align",
+  "caption_color", "caption_case", "fill_color", "empty_color", "ramp_colors",
+  "ramp_stops", "fill_char", "empty_char", "brackets", "threshold", "padding",
+  "sign", "color_by_state", "glyph_by_state", "params",
 ];
 // The ones whose absence is an empty LIST rather than a null — a control that
 // iterates a null throws, and a null here would read as "unknown" when it means
 // "nothing selected".
-const SL_ITEM_LIST_FIELDS = new Set(["emphasis", "hide_when"]);
+const SL_ITEM_LIST_FIELDS = new Set(["emphasis", "hide_when", "ramp_colors", "ramp_stops", "brackets", "padding"]);
+const SL_ITEM_MAP_FIELDS = new Set(["color_by_state", "glyph_by_state", "params"]);
 
 function slAuthoredFields(it) {
   const out = {};
@@ -44611,6 +45025,11 @@ function slShowCmd(claudeDir) {
     preview = slPreview(slCompile(eff).compiled, "healthy", 120, {}).text;
   } catch (_) {}
   const hook = slHookInfo(claudeDir, slBoard());
+  const lockNow = slReadJson(slPaths(claudeDir).lock);
+  let animated = false;
+  try {
+    animated = slHasMotion(slCompile(eff).compiled);
+  } catch (_) {}
   // ONE item alone, in its own saved design: what the chip looks like.
   const sampleOf = (it, l) => {
     try {
@@ -44627,6 +45046,9 @@ function slShowCmd(claudeDir) {
     separator: l.separator,
     theme: l.theme,
     max_width: l.max_width || 0,
+    align: l.align || "left",
+    sep_color: l.sep_color || null,
+    prefix: l.prefix || "",
     count: (l.items || []).length,
     counted: (l.items || []).filter((it) => !slIsStructural(it.type)).length,
     full: (l.items || []).filter((it) => !slIsStructural(it.type)).length >= SL_MAX_PER_LINE,
@@ -44650,7 +45072,7 @@ function slShowCmd(claudeDir) {
         authored: slAuthoredFields(it),
         sample: sampleOf(it, l),
       };
-      for (const k of SL_ITEM_FIELDS) row[k] = r && r[k] !== undefined && r[k] !== null ? r[k] : SL_ITEM_LIST_FIELDS.has(k) ? [] : null;
+      for (const k of SL_ITEM_FIELDS) row[k] = r && r[k] !== undefined && r[k] !== null ? r[k] : SL_ITEM_LIST_FIELDS.has(k) ? [] : SL_ITEM_MAP_FIELDS.has(k) ? {} : null;
       if (it.children) row.children = it.children.map((k) => ({ id: k.id, type: k.type, authored: slAuthoredFields(k) }));
       return row;
     }),
@@ -44670,6 +45092,9 @@ function slShowCmd(claudeDir) {
       warnings: v.warnings,
       preview,
       hook,
+      refresh_interval: slRefreshInterval(hook, slBoard()),
+      needs_refresh: (lockNow && lockNow.needs_refresh_interval) || null,
+      animated,
       dense_prefix: "A line may hold a component only if every line above it holds at least one.",
     }, v.ok ? 0 : 1);
   console.log("");
@@ -44761,8 +45186,18 @@ function slPreviewCmd(claudeDir) {
       if (k) overrides[k] = val;
     }
   }
+  // v2.0.4 — an animated preview: the same program at successive instants.
+  const nFrames = flag("--frames") === undefined ? 1 : Number(flag("--frames"));
+  const frameMs = flag("--frame-ms") === undefined ? 1000 : Number(flag("--frame-ms"));
+  if (!Number.isInteger(nFrames) || nFrames < 1 || nFrames > 24 || !Number.isInteger(frameMs) || frameMs < 1) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "bad-frames", hint: "--frames takes 1 to 24, --frame-ms a whole number of milliseconds" }, 2);
+    console.error("--frames takes 1 to 24, and --frame-ms takes a whole number of milliseconds");
+    process.exit(2);
+  }
   const { compiled } = slCompile(layout);
   const base = slPreview(compiled, state, cols, overrides);
+  const frames = [base.text];
+  for (let i = 1; i < nFrames; i++) frames.push(slPreview(compiled, state, cols, overrides, 1767225600000 + i * frameMs).text);
   // R4: every design must survive three strippings, and the panel shows all
   // three as small rows under the main preview — not as an afterthought tab.
   const strip = (env) => {
@@ -44793,6 +45228,8 @@ function slPreviewCmd(claudeDir) {
     fixture: (SL_FIXTURES[state] || SL_FIXTURES.healthy).label,
     fixtures: Object.fromEntries(Object.entries(SL_FIXTURES).map(([k, f]) => [k, f.label])),
     text: base.text,
+    frames,
+    frame_ms: frameMs,
     strippings: {
       no_color: strip({ NO_COLOR: "1" }),
       ascii: strip({ ORC_STATUSLINE_ASCII: "1" }),
@@ -44875,6 +45312,61 @@ function slSetCmd(claudeDir, p) {
   if (hide === "") delete item.hide_when;
   else if (typeof hide === "string") item.hide_when = hide === "never" ? [] : hide.split(",").map((s) => s.trim()).filter(Boolean);
   if (flag("--draw-empty") === true) item.draw_empty = true;
+  // v2.0.4 — the design fields. Same rules: "" clears, `inherit` clears a
+  // colour, and the validator judges every value.
+  const DESIGN_COLORS = new Set(["caption_color", "fill_color", "empty_color"]);
+  for (const [k, f] of [["label_pos", "--label-pos"], ["value_pos", "--value-pos"], ["caption", "--caption"], ["caption_pos", "--caption-pos"], ["caption_align", "--caption-align"], ["caption_color", "--caption-color"], ["caption_case", "--caption-case"], ["fill_color", "--fill-color"], ["empty_color", "--empty-color"], ["fill_char", "--fill-char"], ["empty_char", "--empty-char"], ["align", "--align"], ["sign", "--sign"], ["unknown", "--unknown"]]) {
+    const v = slFlag(f);
+    if (typeof v !== "string") continue;
+    if (v === "" || (DESIGN_COLORS.has(k) && v === "inherit")) delete item[k];
+    else item[k] = v;
+  }
+  for (const [k, f] of [["threshold", "--threshold"], ["max_len", "--max-len"]]) {
+    const v = slFlag(f);
+    if (v === "") delete item[k];
+    else if (typeof v === "string") item[k] = Number(v);
+  }
+  for (const [i, f] of [[0, "--pad-left"], [1, "--pad-right"]]) {
+    const v = slFlag(f);
+    if (typeof v !== "string") continue;
+    const pad = Array.isArray(item.padding) ? item.padding.slice(0, 2) : [0, 0];
+    pad[i] = v === "" ? 0 : Number(v);
+    if (!pad[0] && !pad[1]) delete item.padding;
+    else item.padding = [pad[0] || 0, pad[1] || 0];
+  }
+  const csv = (v) => v.split(",").map((s) => s.trim()).filter(Boolean);
+  for (const [k, f, conv] of [["ramp_colors", "--ramp-colors", csv], ["ramp_stops", "--ramp-stops", (v) => csv(v).map(Number)], ["brackets", "--brackets", (v) => v.split(",")]]) {
+    const v = slFlag(f);
+    if (v === "") delete item[k];
+    else if (typeof v === "string") item[k] = conv(v);
+  }
+  for (const [k, f] of [["color_by_state", "--state-color"], ["glyph_by_state", "--state-glyph"]]) {
+    const v = slFlag(f);
+    if (v === "") delete item[k];
+    else if (typeof v === "string") {
+      const map = {};
+      for (const pair of csv(v)) {
+        const eq = pair.indexOf("=");
+        if (eq > 0) map[pair.slice(0, eq)] = pair.slice(eq + 1);
+        else map[pair] = "";
+      }
+      item[k] = map;
+    }
+  }
+  // `--param k=v` is REPEATABLE; `--param k=` deletes that one key.
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] !== "--param" || typeof args[i + 1] !== "string") continue;
+    const pv = args[i + 1];
+    const eq = pv.indexOf("=");
+    const key = eq === -1 ? pv : pv.slice(0, eq);
+    if (!key) continue;
+    const val = eq === -1 ? "" : pv.slice(eq + 1);
+    const prm = Object.assign({}, item.params || {});
+    if (val === "") delete prm[key];
+    else prm[key] = val;
+    if (Object.keys(prm).length) item.params = prm;
+    else delete item.params;
+  }
   if (!existing) {
     line.items = line.items || [];
     line.items.splice(Math.min(pi - 1, line.items.length), 0, item);
@@ -44939,6 +45431,13 @@ function slLineCmd(claudeDir, p) {
   if (typeof pre === "string") line.prefix = pre;
   const mw = slFlag("--max-width");
   if (typeof mw === "string") line.max_width = Number(mw) || 0;
+  // v2.0.4 — the line's alignment and its separator colour. "" clears.
+  const al = slFlag("--align");
+  if (al === "") delete line.align;
+  else if (typeof al === "string") line.align = al;
+  const sc = slFlag("--sep-color");
+  if (sc === "" || sc === "inherit") delete line.sep_color;
+  else if (typeof sc === "string") line.sep_color = sc;
   const th = slFlag("--theme");
   if (typeof th === "string") {
     if (!STATUSLINE_THEMES[th]) {
@@ -45121,6 +45620,7 @@ function slHookInfo(claudeDir, board) {
   const b = board || SL_BOARDS.status;
   const needle = b.id === "subagent" ? "orc-subagent-line" : "orc-statusline";
   let hookPath = null;
+  let settings = null;
   for (const sp of [path.join(claudeDir, "settings.json"), path.join(os.homedir(), ".claude", "settings.json")]) {
     const st = slReadJson(sp);
     const cmd = st && st[b.setting] && typeof st[b.setting].command === "string" ? st[b.setting].command : null;
@@ -45128,6 +45628,7 @@ function slHookInfo(claudeDir, board) {
     const quoted = cmd.match(/"([^"]+)"/g);
     const q = quoted && quoted.map((x) => x.slice(1, -1)).find((x) => x.includes(needle));
     hookPath = path.resolve(q || cmd.trim().split(/\s+/).pop());
+    settings = sp;
     break;
   }
   const inst = hookPath ? slReadJson(path.join(path.dirname(hookPath), "orc-version.json")) : null;
@@ -45146,7 +45647,46 @@ function slHookInfo(claudeDir, board) {
     fix = hookPath.toLowerCase().startsWith(home) ? "orc update --global" : "orc update";
   } else if (!hookPath) fix = null;
   else if (!lockOk || fallback) fix = "orc statusline compile";
-  return { path: hookPath, version, catalog_hash, cli_version: cli, match, fallback, fix };
+  return { path: hookPath, version, catalog_hash, cli_version: cli, match, fallback, fix, settings };
+}
+
+// The `refreshInterval` in force for this board, or null.
+function slRefreshInterval(hook, board) {
+  const st = hook && hook.settings ? slReadJson(hook.settings) : null;
+  const v = st && st[board.setting] ? st[board.setting].refreshInterval : null;
+  return typeof v === "number" ? v : null;
+}
+
+// v2.0.4 — `orc statusline refresh <seconds|off>`: set or remove the timer in
+// the settings file that holds ORC's hook. The rest of the file is kept.
+function slRefreshCmd(claudeDir, p) {
+  const board = slBoard();
+  const arg = String(p[2] == null ? "" : p[2]);
+  const secs = arg === "off" ? null : Number(arg);
+  if (arg !== "off" && (!Number.isInteger(secs) || secs < 1 || secs > 60)) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "bad-arg", hint: "use a whole number of seconds from 1 to 60, or off" }, 2);
+    console.error("usage: orc statusline refresh <seconds 1-60|off> [--board status|subagent]");
+    process.exit(2);
+  }
+  const hook = slHookInfo(claudeDir, board);
+  const refuse = (reason, msg) => {
+    if (wantsJson()) return emitJson({ ok: false, reason, settings: hook.settings || null, hint: msg }, 1);
+    console.error(msg);
+    process.exit(1);
+  };
+  if (!hook.settings) return refuse("not-wired", `ORC's ${board.setting} hook is not in a settings.json. Run: orc update`);
+  let st;
+  try {
+    st = JSON.parse(fs.readFileSync(hook.settings, "utf8").replace(/^\uFEFF/, ""));
+  } catch (_) {
+    return refuse("settings-unparsed", `${hook.settings} is not valid JSON. Correct the file, then try again.`);
+  }
+  if (!st || typeof st[board.setting] !== "object" || st[board.setting] === null) return refuse("not-wired", `ORC's ${board.setting} hook is not in ${hook.settings}. Run: orc update`);
+  if (secs == null) delete st[board.setting].refreshInterval;
+  else st[board.setting].refreshInterval = secs;
+  fs.writeFileSync(hook.settings, JSON.stringify(st, null, 2) + "\n");
+  if (wantsJson()) return emitJson({ ok: true, refresh_interval: secs, settings: hook.settings }, 0);
+  console.log("  " + ui.mark.ok(secs == null ? `the refresh timer is off (${hook.settings})` : `the status line refreshes every ${secs} s (${hook.settings})`));
 }
 
 function slHookSentence(h) {
