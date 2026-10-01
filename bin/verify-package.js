@@ -223,6 +223,14 @@ const required = [
   // v2.0.0 W6b — `orc run snapshot` + `orc undo`. A publish that drops it
   // leaves every end-of-run card printing an undo command that crashes.
   "bin/run-undo.js",
+  // v2.1.0 W7 — `orc clear logs` and the FINISH sweep. A publish that drops it
+  // breaks the Maintenance row, and `orc trace write` loses the sweep (it
+  // never blocks, so the loss would be silent).
+  "bin/clear-logs.js",
+  // v2.1.0 W6 — `orc fix classify|record|list`, the deterministic half of
+  // /orc-fix. A publish that drops it leaves the lane naming a command that
+  // crashes, and no fix ever reaches the review card.
+  "bin/fix.js",
 
   // The two DATED data files (v0.50.0). Both ship inside the package and both
   // are load-bearing on absence rather than on content: without the catalog
@@ -372,6 +380,7 @@ const required = [
   "templates/commands/orc-export.md",
   "templates/skills/orc-route/SKILL.md",
   "templates/skills/orc-explain/SKILL.md",
+  "templates/skills/orc-fix/SKILL.md",
   "templates/skills/orc-analyze/references/thin-input.md",
   // v1.0.0 W7 — the ONE config doc. `orc/config.md` stopped restating 72 key
   // defaults and now points here for the ranks, the families, the gates, the
@@ -445,6 +454,7 @@ const required = [
   "templates/commands/orc-grill.md",
   "templates/commands/orc-route.md",
   "templates/commands/orc-explain.md",
+  "templates/commands/orc-fix.md",
   "templates/commands/orc.md",
   "templates/commands/orc-quick.md",
   "templates/commands/orc-diy.md",
@@ -458,7 +468,7 @@ const required = [
   "templates/agents/MODEL-MAPPING.md",
   "templates/agents/orc-advisor-opus-5-xhigh.md",
   "templates/agents/orc-judge-opus-5-xhigh.md",
-  "templates/agents/orc-claude-writer-opus-4-8-high.md",
+  "templates/agents/orc-claude-writer-opus-5-low.md",
   "templates/agents/orc-learn-writer-opus-5-low.md",
   "templates/agents/orc-trace-writer-haiku-4-5.md",
   // v1.8.0 — the code graph's notes writer (Layer 2).
@@ -470,7 +480,7 @@ const required = [
   // guards their content; this list still guards that each one ships.)
   "templates/agents/orc-system-analyst-opus-5-high.md",
   "templates/agents/orc-planner-opus-5-med.md",
-  "templates/agents/orc-reviewer-opus-5-med.md",
+  "templates/agents/orc-reviewer-opus-5-low.md",
   "templates/agents/orc-verifier-opus-5-med.md",
   "templates/agents/orc-scout-sonnet-4-6-high.md",
   // v1.9.0 — the /orc-quick recon pair. Both halves must ship: the gate offers
@@ -480,7 +490,7 @@ const required = [
   "templates/agents/orc-test-author-opus-5-med.md",
   "templates/agents/orc-pattern-codifier-sonnet-5-high.md",
   "templates/agents/orc-retro-sonnet-5-high.md",
-  "templates/agents/orc-wiki-scanner-opus-4-8-high.md",
+  "templates/agents/orc-wiki-scanner-opus-5-low.md",
   // v0.46.0 — the LIGHT half of the wiki scan tier ladder. Both halves must ship:
   // the ladder resolves at dispatch time, so a missing light scanner makes every
   // small-delta refresh dispatch a nonexistent agent.
@@ -498,8 +508,6 @@ const required = [
   "templates/agents/orc-planner-mini-opus-5-med.md",
   "templates/agents/orc-scout-opus-5-low.md",
   "templates/agents/orc-pattern-codifier-opus-5-med.md",
-  "templates/agents/orc-wiki-scanner-opus-5-med.md",
-  "templates/agents/orc-claude-writer-opus-5-med.md",
   "templates/agents/orc-retro-opus-5-med.md",
   // v0.47.0 — the three /orc-challenge agents. All THREE must ship: a cycle that
   // cannot dispatch the reader silently loses D4, and one that cannot dispatch
@@ -647,7 +655,9 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // hatch survives on the menu as line 3 (model only). Both names earn an
 // explicit guard entry above and a MODEL-MAPPING row; `opus5_only` adds no
 // pair, because orc-quick is the lane that key is inert in.
-if (skillCount < 39) missing.push(`templates/skills (expected >=39 SKILL.md, found ${skillCount})`);
+// v2.1.0 W6: +1 skill (orc-fix, a rider lane) and NO new agent — the no-run
+// fix reuses the /orc-quick dispatch gate and its shipped executors.
+if (skillCount < 41) missing.push(`templates/skills (expected >=41 SKILL.md, found ${skillCount})`);
 if (agentCount < 50) missing.push(`templates/agents (expected >=50 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:

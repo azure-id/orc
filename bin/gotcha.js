@@ -63,6 +63,13 @@ const SEVERITIES = ["P0", "P1", "P2", "P3"];
 const POLARITIES = ["flag", "suppress"];
 const OUTCOMES = ["addressed", "open", "disputed", "wontfix", "flaky"];
 const AUTHORS = ["human", "bot", "orc"];
+// v2.1.0 §4.2 — a FIX record (`orc fix record`). `introduced_by` is who wrote
+// the bad lines; `cause` is a REQUIRED ledger field already, so it is not reused.
+const INTRODUCED_BY = ["orc", "ai", "human", "unknown"];
+const FIX_VIA = ["orc-fix", "orc-quick", "import"];
+// The fields a fix record keeps when a later import upserts the same row.
+const FIX_FIELDS = ["introduced_by", "fix_run", "via", "miss", "missed_by", "class_by", "run"];
+const SCOPE_CAP = 500; // review-scope.jsonl keeps the last 500 reviews (DE-13)
 // The 8 required fields, in their FIXED order (v1, unchanged) …
 const REQUIRED = ["trigger", "symptom", "cause", "fix", "scope", "origin", "hits", "last_seen"];
 // … then the optional ones, fixed order when present. `cwe` rides beside
@@ -642,12 +649,93 @@ function suppressLine(v) {
 }
 
 // ── Quality (acceptance of ORC's own findings) ──────────────────────────────
-function quality(obs, entries, windowDays, nowMs) {
+// v2.1.0 — A REVIEW IS ALSO READ FROM THE TRACES. Until 2.1.0 a review counted
+// only when a lane piped an observation with `run`, and no lane did so in
+// practice: the panel said "5 reviews needed — 0 so far" over 23 reviewer
+// returns. A trace run in the window that has a `FINDING-OUTCOME` line OR a
+// hook `RETURN orc-reviewer-*` line (a reviewer the user spawned directly gets a
+// bootstrap trace with that pair) is a review. A clean review (zero findings)
+// counts as a review and adds to nothing else (DE-11). Acceptance and the
+// categories still come from the observations only.
+const TRACE_REVIEW = /^\[[^\]]*\]\s+(?:\S+\s+FINDING-OUTCOME\b|hook\s+RETURN\s+orc-reviewer-)/m;
+function tracedReviewRuns(claudeDir, deps, windowDays, nowMs) {
+  if (!deps || typeof deps.listTraces !== "function") return [];
+  let runs = [];
+  try {
+    runs = deps.listTraces(claudeDir).runs;
+  } catch (_) {
+    return [];
+  }
+  const out = [];
+  for (const r of runs) {
+    const t = r.date ? Date.parse(r.date + "T00:00:00Z") : r.mtime;
+    if (Number.isFinite(t) && nowMs - t > windowDays * DAY) continue;
+    let text = "";
+    try {
+      text = fs.readFileSync(r.path, "utf8");
+    } catch (_) {
+      continue;
+    }
+    if (TRACE_REVIEW.test(text)) out.push(r.name.replace(/\.txt$/, ""));
+  }
+  return out;
+}
+function fixSummary(fixes) {
+  const by = (key, vocab) => {
+    const out = {};
+    for (const v of vocab) out[v] = 0;
+    for (const o of fixes) {
+      const k = o[key] || "unknown";
+      out[k] = (out[k] || 0) + 1;
+    }
+    return out;
+  };
+  // `share` is the bar width, so the panel computes no number itself.
+  const causes = FIX_CAUSES.map((id) => {
+    const n = fixes.filter((o) => fixCause(o) === id).length;
+    return { id, n, share: fixes.length ? Math.round((n / fixes.length) * 1000) / 1000 : 0 };
+  });
+  return { total: fixes.length, by_introduced_by: by("introduced_by", INTRODUCED_BY), by_source: by("source", []), causes };
+}
+function missSummary(fixes) {
+  const miss = fixes.filter((o) => o.miss === true);
+  const cats = {};
+  for (const o of miss) {
+    const c = o.category || "uncategorized";
+    cats[c] = (cats[c] || 0) + 1;
+  }
+  return {
+    total: miss.length,
+    by_category: Object.entries(cats)
+      .map(([category, n]) => ({ category, n }))
+      .sort((a, b) => b.n - a.n || a.category.localeCompare(b.category)),
+    list: miss
+      .slice()
+      .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+      .slice(0, 10)
+      .map((o) => ({ obs: o.obs.slice(0, 8), at: o.at, path: o.path, lines: o.lines, source: o.source, rule: o.rule, category: o.category, introduced_by: o.introduced_by || null, missed_by: o.missed_by || null, fix_run: o.fix_run || null })),
+  };
+}
+function quality(obs, entries, windowDays, nowMs, traced) {
+  const fixes = fixesIn(obs, windowDays, nowMs);
   const orc = obs.filter((o) => o.author === "orc" && (() => {
     const t = dateMs(o.at);
     return !Number.isFinite(t) || nowMs - t <= windowDays * DAY;
   })());
-  const runs = [...new Set(orc.map((o) => o.run).filter(Boolean))];
+  // v2.1.0 §3.4 — the headline counts ORC reviews. A review the project asked for
+  // (`reviewer: "<name>"`) is counted in its own line, `by_reviewer`.
+  const external = orc.filter((o) => o.reviewer);
+  const own = orc.filter((o) => !o.reviewer);
+  const observedRuns = [...new Set(own.map((o) => o.run).filter(Boolean))];
+  const tracedRuns = [...new Set(traced || [])];
+  const runs = [...new Set(observedRuns.concat(tracedRuns))];
+  const byReviewer = { orc: runs.length };
+  for (const o of external) {
+    const k = o.reviewer;
+    byReviewer[k] = byReviewer[k] || new Set();
+    byReviewer[k].add(o.run || o.ref);
+  }
+  for (const k of Object.keys(byReviewer)) if (byReviewer[k] instanceof Set) byReviewer[k] = byReviewer[k].size;
   const cats = {};
   for (const o of orc) {
     const c = o.category || "uncategorized";
@@ -680,6 +768,14 @@ function quality(obs, entries, windowDays, nowMs) {
   return {
     window_days: windowDays,
     reviews: runs.length,
+    reviews_traced: tracedRuns.length,
+    reviews_observed: observedRuns.length,
+    by_reviewer: byReviewer,
+    project_reviews: Object.entries(byReviewer).filter(([k]) => k !== "orc").reduce((n, [, v]) => n + v, 0),
+    // v2.1.0 §4.2 — the fixes made after a review (`orc fix record`). A fix's
+    // author is the finder, so none of these is ever counted as a review above.
+    fixes: fixSummary(fixes),
+    misses: missSummary(fixes),
     floor: QUALITY_FLOOR,
     below_floor: runs.length < QUALITY_FLOOR,
     findings: orc.length,
@@ -788,6 +884,13 @@ function normalizeObservation(b, now) {
   if (!b.ref || typeof b.ref !== "string") return bad("ref", "is required (e.g. \"PR 142 · thread 3\")");
   if (!OUTCOMES.includes(b.outcome)) return bad("outcome", `must be one of: ${OUTCOMES.join(", ")}`);
   if (!AUTHORS.includes(b.author)) return bad("author", `must be one of: ${AUTHORS.join(", ")}`);
+  // v2.1.0 — an ORC finding without its run counted as a finding and never as a
+  // review. A `ref` that starts with the run id fills `run`; otherwise refuse.
+  if (b.author === "orc" && !b.run) {
+    const m = typeof b.ref === "string" && /^(run-[a-z0-9][a-z0-9-]*-\d{6}-\d{6})\b/.exec(b.ref);
+    if (m) b = Object.assign({}, b, { run: m[1] });
+    else return bad("run", "is required when author is orc (the trace name, e.g. run-orc-add-billing-050826-141233)");
+  }
   if (b.category !== undefined && b.category !== null && !CATEGORIES.includes(b.category)) return bad("category", `must be one of: ${CATEGORIES.join(", ")}`);
   if (b.severity !== undefined && b.severity !== null && !SEVERITIES.includes(b.severity)) return bad("severity", "must be P0, P1, P2 or P3");
   if (b.cwe !== undefined && b.cwe !== null && !/^CWE-\d+$/.test(b.cwe)) return bad("cwe", "must be CWE-<number>");
@@ -819,7 +922,140 @@ function normalizeObservation(b, now) {
   if (b.reproduced === true) o.reproduced = true;
   if (b.miss === true) o.miss = true;
   if (b.gotcha) o.gotcha = b.gotcha;
+  // v2.1.0 — a review the PROJECT asked for (review-slice.md §0 option 2). An
+  // OPTIONAL field after the nine, so a 1.9.2 / 2.0.x reader still reads the row.
+  if (b.reviewer && typeof b.reviewer === "string" && b.reviewer !== "orc") o.reviewer = oneLine(b.reviewer).slice(0, 60);
+  // v2.1.0 §4.2 — a FIX record. OPTIONAL fields after the existing ones. The
+  // author is the FINDER (bot or human), never orc: an orc author would make
+  // Review Quality count the fix as an ORC review.
+  if (b.introduced_by !== undefined && b.introduced_by !== null) {
+    if (!INTRODUCED_BY.includes(b.introduced_by)) return bad("introduced_by", `must be one of: ${INTRODUCED_BY.join(", ")}`);
+    o.introduced_by = b.introduced_by;
+  }
+  if (b.via !== undefined && b.via !== null) {
+    if (!FIX_VIA.includes(b.via)) return bad("via", `must be one of: ${FIX_VIA.join(", ")}`);
+    o.via = b.via;
+  }
+  if (b.fix_run) o.fix_run = oneLine(b.fix_run).slice(0, 120);
+  if (b.missed_by) o.missed_by = oneLine(b.missed_by).slice(0, 120);
+  if (b.class_by === "user" || b.class_by === "evidence") o.class_by = b.class_by;
+  if ((o.introduced_by || o.via || o.fix_run) && o.author === "orc")
+    return bad("author", "of a fix is the FINDER (bot or human) — never orc, or Review Quality counts the fix as an ORC review");
   return { o };
+}
+const isFixRecord = (o) => !!(o && (o.via || o.introduced_by));
+
+// ── The reviewed ranges (DE-13) ─────────────────────────────────────────────
+// `.claude/orc/review-scope.jsonl`: one line per review close,
+// `{run, commit, at, files: {path: [[start,end],…]}}`. Class b user data: never
+// pruned by age, never in the install manifest. The last SCOPE_CAP reviews are
+// kept; what is dropped is COUNTED in the first line (`{"meta": …, "dropped": n}`).
+function scopeFile(claudeDir) {
+  return path.join(claudeDir, "orc", "review-scope.jsonl");
+}
+function readScopes(claudeDir) {
+  const f = scopeFile(claudeDir);
+  const out = { rows: [], dropped: 0 };
+  if (!fs.existsSync(f)) return out;
+  for (const line of fs.readFileSync(f, "utf8").replace(/\r\n/g, "\n").split("\n")) {
+    if (!line.trim()) continue;
+    let r;
+    try {
+      r = JSON.parse(line);
+    } catch (_) {
+      continue;
+    }
+    if (r && r.meta === "review-scope") out.dropped = Number(r.dropped) || 0;
+    else if (r && r.run && r.files) out.rows.push(r);
+  }
+  return out;
+}
+// A body → { row } or { field, err }. Pure.
+function normalizeScope(b, now) {
+  const bad = (field, err) => ({ field, err });
+  if (!b.run || typeof b.run !== "string") return bad("run", "is required (the trace name of the review's run)");
+  if (!b.files || typeof b.files !== "object" || Array.isArray(b.files)) return bad("files", "must be {path: [[start,end], …]}");
+  const files = {};
+  for (const [p, ranges] of Object.entries(b.files)) {
+    if (!Array.isArray(ranges)) return bad("files", `${p}: must be a list of [start,end] pairs`);
+    const list = [];
+    for (const r of ranges) {
+      const pair = Array.isArray(r) ? r : [r, r];
+      const s = pair[0];
+      const e = pair.length > 1 ? pair[1] : pair[0];
+      if (!Number.isInteger(s) || !Number.isInteger(e) || s < 1 || e < s) return bad("files", `${p}: ${JSON.stringify(r)} is not a [start,end] line pair`);
+      list.push([s, e]);
+    }
+    if (list.length) files[posix(p)] = list;
+  }
+  if (!Object.keys(files).length) return bad("files", "names no reviewed range");
+  return { row: { run: oneLine(b.run).slice(0, 120), commit: b.commit ? oneLine(b.commit).slice(0, 40) : null, at: new Date(now).toISOString(), files } };
+}
+function recordScope(claudeDir, row) {
+  const f = scopeFile(claudeDir);
+  const cur = readScopes(claudeDir);
+  const rows = cur.rows.concat(row);
+  const over = Math.max(0, rows.length - SCOPE_CAP);
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  if (!over) {
+    fs.appendFileSync(f, JSON.stringify(row) + "\n");
+    return { kept: rows.length, dropped: cur.dropped, dropped_now: 0 };
+  }
+  const dropped = cur.dropped + over;
+  const body = [JSON.stringify({ meta: "review-scope", dropped })].concat(rows.slice(over).map((r) => JSON.stringify(r))).join("\n") + "\n";
+  const tmp = f + ".tmp";
+  fs.writeFileSync(tmp, body);
+  fs.renameSync(tmp, f);
+  return { kept: rows.length - over, dropped, dropped_now: over };
+}
+// The latest stored review of an EARLIER run whose ranges overlap the fix's
+// lines → that scope row, or null. A review older than the commit that wrote
+// the bad lines could not have seen them, so it is never a miss.
+function findMiss(scopes, o, introducedMs) {
+  if (!o || !o.path || !Array.isArray(o.lines) || !o.lines.length) return null;
+  const s = o.lines[0];
+  const e = o.lines.length > 1 ? o.lines[1] : o.lines[0];
+  let best = null;
+  for (const r of scopes) {
+    if (!r.run || (o.fix_run && r.run === o.fix_run)) continue;
+    const ranges = r.files && r.files[o.path];
+    if (!Array.isArray(ranges) || !ranges.some((x) => x[0] <= e && s <= x[1])) continue;
+    const at = Date.parse(r.at);
+    if (Number.isFinite(introducedMs) && Number.isFinite(at) && at < introducedMs) continue;
+    if (!best || at > Date.parse(best.at)) best = r;
+  }
+  return best;
+}
+
+// The CLI computes `miss` for a fix record (§4.2 item 4) from the stored scopes.
+function applyMiss(claudeDir, o, introducedMs) {
+  const hit = findMiss(readScopes(claudeDir).rows, o, introducedMs);
+  return hit ? Object.assign({}, o, { miss: true, missed_by: hit.run }) : o;
+}
+
+// ── The fix records in a window: the card line and the quality block ────────
+function fixesIn(obs, windowDays, nowMs) {
+  return obs.filter((o) => {
+    if (!isFixRecord(o)) return false;
+    const t = dateMs(o.at);
+    return !Number.isFinite(t) || nowMs - t <= windowDays * DAY;
+  });
+}
+const FIX_LABEL = { sonar: "Sonar", ci: "CI", defect: "defect", pr: "PR review", review: "review", sarif: "SARIF" };
+function fixLine(o, n) {
+  const what = o.rule ? o.rule.replace(/^sonar:/, "") : o.sig ? o.sig.slice(0, 60) : "a fix";
+  const after =
+    o.introduced_by === "orc" ? ` after ORC run ${o.run || "(run unknown)"}` : o.introduced_by === "ai" ? " after AI-written code" : "";
+  return `fix: ${o.path} — ${FIX_LABEL[o.source] || o.source} ${what}${o.category ? ` (${o.category})` : ""}${after}${o.miss ? " · missed by review" : ""}${n > 1 ? ` (+${n - 1} more)` : ""}`;
+}
+// The cause buckets the panel draws, in its order. Computed HERE, so the panel
+// computes no number the CLI could give.
+const FIX_CAUSES = ["sonar", "orc", "ai", "other"];
+function fixCause(o) {
+  if (o.source === "sonar") return "sonar";
+  if (o.introduced_by === "orc") return "orc";
+  if (o.introduced_by === "ai") return "ai";
+  return "other";
 }
 
 // Append each normalized observation, bump what an active entry already covers,
@@ -831,8 +1067,15 @@ function recordObservations(store, led, list, now, opts) {
   const changes = { bumped: [], promoted: [], helpful: [], harmful: [] };
   const recorded = [];
   let unchanged = 0;
-  for (const o of list) {
+  for (let o of list) {
     const prev = known.get(o.obs) || null;
+    // v2.1.0 §4.2 — an import that upserts a FIX record's row (the same id,
+    // `sha1("sonar|sonar <key>")`) adds its outcome and keeps the fix fields.
+    if (prev && isFixRecord(prev)) {
+      const keep = {};
+      for (const k of FIX_FIELDS) if (prev[k] !== undefined && prev[k] !== null && (o[k] === undefined || o[k] === null)) keep[k] = prev[k];
+      if (Object.keys(keep).length) o = Object.assign({}, o, keep);
+    }
     if (skipUnchanged && prev && prev.outcome === o.outcome) {
       unchanged++;
       continue;
@@ -878,7 +1121,8 @@ const USAGE =
   "       orc gotcha match --files <csv>           the executor block (exit 0 · 1 no match · 4 off)\n" +
   "       orc gotcha card --files <csv> [--lane <l>] [--full]   the reviewer card (exit 0 · 1 no match)\n" +
   "       orc gotcha filter --findings <file|->    drop suppressed / folded / noisy advice; never a P0 or P1\n" +
-  "       orc gotcha observe <file|->              append one observation, then run promotion (exit 0 · 2 malformed)\n" +
+  "       orc gotcha observe <file|->              append one observation, then run promotion (exit 0 · 2 malformed);\n" +
+  "                                                a {kind: \"review-scope\"} body stores the ranges a review read\n" +
   "       orc gotcha list --candidates             computed candidates and proposed suppressions (exit 0 · 1 none)\n" +
   "       orc gotcha accept <C-id>                 a person promotes a candidate (exit 0 · 2 unknown)\n" +
   "       orc gotcha quality [--window <days>]     acceptance per category (exit 0 · 1 below the 5-review floor)\n" +
@@ -1002,8 +1246,19 @@ function gotchaCmd(deps, sub) {
     const cands = candidates(led.entries, obs, now).filter((c) => c.watch && files.some((f) => inScope(c.scope, f)));
     for (const c of cands)
       rows.push({ id: c.id, type: "watch", text: watchLine(c), rank: (SEV_W[c.severity] || 2) * Math.log(1 + c.addressed) * specificity(c.scope), first: false });
+    // v2.1.0 §4.2 item 5 — ONE `fix` line per changed file that has a fix
+    // record in the window: the newest, a miss first. Inside the budget; a line
+    // that does not fit is counted like any other.
+    const fixes = fixesIn(obs, WINDOW_DAYS, now);
+    for (const f of files) {
+      const mine = fixes.filter((o) => o.path === f);
+      if (!mine.length) continue;
+      mine.sort((a, b) => (b.miss ? 1 : 0) - (a.miss ? 1 : 0) || String(b.at).localeCompare(String(a.at)));
+      rows.push({ id: "fix:" + f, type: "fix", text: fixLine(mine[0], mine.length), rank: mine.length, first: !!mine[0].miss, miss: !!mine[0].miss });
+    }
     const byRank = (a, b) => (b.first ? 1 : 0) - (a.first ? 1 : 0) || b.rank - a.rank || a.id.localeCompare(b.id);
     const ordered = rows.filter((r) => r.type === "flag").sort(byRank)
+      .concat(rows.filter((r) => r.type === "fix").sort(byRank))
       .concat(rows.filter((r) => r.type === "watch").sort(byRank))
       .concat(rows.filter((r) => r.type === "suppress").sort(byRank));
     const matched = ordered.length;
@@ -1021,7 +1276,7 @@ function gotchaCmd(deps, sub) {
         r.dropped = "watch cap";
         continue;
       }
-      if (r.type !== "suppress" && nFlag + nWatch >= CARD_FLAG_CAP) {
+      if ((r.type === "flag" || r.type === "watch") && nFlag + nWatch >= CARD_FLAG_CAP) {
         r.dropped = "line cap";
         continue;
       }
@@ -1037,7 +1292,7 @@ function gotchaCmd(deps, sub) {
       kept.push(r);
       if (r.type === "flag") nFlag++;
       else if (r.type === "watch") nWatch++;
-      else nSup++;
+      else if (r.type === "suppress") nSup++;
     }
     const dropped = matched - kept.length;
     const text = [headerFor(matched, dropped)].concat(kept.map((k) => k.text)).join("\n");
@@ -1124,11 +1379,23 @@ function gotchaCmd(deps, sub) {
   if (sub === "observe") {
     const inp = readInput(pos[2] || (args.includes("-") ? "-" : undefined));
     if (inp.err) return fail(2, "malformed", `gotcha observe: the input ${inp.err}`, { field: "body" });
+    // v2.1.0 DE-13 — a review close stores the ranges it read. Not an
+    // observation: it goes to review-scope.jsonl, which `orc fix record` reads.
+    if (inp.value && inp.value.kind === "review-scope") {
+      const s = normalizeScope(inp.value, now);
+      if (s.err) return fail(2, "malformed", `gotcha observe: review-scope field \`${s.field}\` ${s.err}`, { field: s.field });
+      const w = recordScope(claudeDir, s.row);
+      return out({ ok: true, kind: "review-scope", run: s.row.run, files: Object.keys(s.row.files).length, kept: w.kept, dropped: w.dropped, cap: SCOPE_CAP, file: scopeFile(claudeDir) }, 0, () =>
+        console.log(`✓ review scope stored for ${s.row.run} (${Object.keys(s.row.files).length} file(s) · ${w.kept} of the last ${SCOPE_CAP} reviews kept${w.dropped ? ` · ${w.dropped} older dropped` : ""})`)
+      );
+    }
     const n = normalizeObservation(inp.value, now);
     if (n.err) return fail(2, "malformed", `gotcha observe: field \`${n.field}\` ${n.err}`, { field: n.field });
-    const o = n.o;
+    let o = n.o;
+    if (isFixRecord(o) && !o.miss) o = applyMiss(claudeDir, o, NaN);
     const { recorded, changes, all } = recordObservations(store, led, [o], now);
     const prev = recorded[0].prev;
+    o = recorded[0].o;
     const after = candidates(led.entries, all, now);
     const mine = after.find((c) => c.obs.includes(o.obs));
     const payload = {
@@ -1195,7 +1462,7 @@ function gotchaCmd(deps, sub) {
   if (sub === "quality") {
     const w = Number(valueOf("--window"));
     const windowDays = Number.isInteger(w) && w > 0 ? w : WINDOW_DAYS;
-    const q = quality(obs, led.entries, windowDays, now);
+    const q = quality(obs, led.entries, windowDays, now, tracedReviewRuns(claudeDir, deps, windowDays, now));
     return out(Object.assign({ ok: true }, q), q.below_floor ? 1 : 0, () => {
       if (q.below_floor) console.log(`gotcha quality: ${q.reviews} review(s) in ${windowDays} days — below the ${QUALITY_FLOOR}-review floor, no answer yet`);
       for (const c of q.categories) console.log(`  ${c.category.padEnd(28)} ${c.findings} findings · acceptance ${c.acceptance === null ? "—" : Math.round(c.acceptance * 100) + " %"}${c.noisy ? " · noisy" : ""}`);
@@ -1281,6 +1548,19 @@ module.exports = {
   makeStore,
   normalizeObservation,
   recordObservations,
+  // v2.1.0 W6 — `orc fix` (bin/fix.js) records through these.
+  INTRODUCED_BY,
+  FIX_CAUSES,
+  SCOPE_CAP,
+  isFixRecord,
+  readScopes,
+  normalizeScope,
+  recordScope,
+  findMiss,
+  applyMiss,
+  fixesIn,
+  fixLine,
+  dateMs,
   redact,
   sha1,
 };

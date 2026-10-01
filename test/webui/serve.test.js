@@ -523,6 +523,11 @@ test("api: restarts_ui is DECLARED per maintenance action, never inferred", () =
   }
   const g = block.slice(block.indexOf('"update-global": {'));
   assert.ok(!/restarts_ui/.test(g.slice(0, 400)), "update-global targets ~/.claude, not the running panel");
+  // v2.1.0 W7 — clearing logs changes no code the panel runs.
+  const c = block.slice(block.indexOf('"clear-logs": {'));
+  assert.ok(block.includes('"clear-logs": {'), "the clear-logs row exists");
+  assert.match(c.slice(0, 200), /restarts_ui: false/, "clear-logs never restarts the panel");
+  assert.match(c.slice(0, 600), /names_files: true/, "a delete names every file");
   // Reported only on success, so a failed upgrade never reloads the page.
   assert.match(src, /restart_pending: !!\(job\.restart_ui && !job\.running && job\.exit_code === 0\)/);
 });

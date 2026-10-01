@@ -49,7 +49,7 @@ ORC · extra — the positions
   fast-executor       claude · orc-executor-sonnet-4-6-high   /orc-fast
   doc-writer          claude · orc-doc-writer-opus-5-med      /orc-doc
   doc-checker         claude · orc-doc-checker-opus-5-low     /orc-doc
-  wiki-scanner-deep   claude · orc-wiki-scanner-opus-4-8-high /orc-wiki
+  wiki-scanner-deep   claude · orc-wiki-scanner-opus-5-low /orc-wiki
   wiki-scanner-light  claude · orc-wiki-scanner-sonnet-5-high /orc-wiki
 
   what each position is

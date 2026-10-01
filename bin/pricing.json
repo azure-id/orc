@@ -28,7 +28,7 @@
     "it has no rate for. A pair with no rate reports `usd: null` forever, never a",
     "guess and never a family fallback."
   ],
-  "as_of": "2026-08-01",
+  "as_of": "2026-10-01",
   "currency": "USD",
   "unit": "per_million_tokens",
   "server_tools": {
@@ -43,34 +43,40 @@
       "output": 20
     },
     "claude-opus-5": {
-      "input": 15,
-      "cache_write": 18.75,
-      "cache_read": 1.5,
-      "output": 75
+      "input": 5,
+      "cache_write": 6.25,
+      "cache_read": 0.5,
+      "output": 25
     },
     "claude-opus-4-8": {
-      "input": 15,
-      "cache_write": 18.75,
-      "cache_read": 1.5,
-      "output": 75
+      "input": 5,
+      "cache_write": 6.25,
+      "cache_read": 0.5,
+      "output": 25
     },
     "claude-opus-4-7": {
-      "input": 15,
-      "cache_write": 18.75,
-      "cache_read": 1.5,
-      "output": 75
+      "input": 5,
+      "cache_write": 6.25,
+      "cache_read": 0.5,
+      "output": 25
     },
     "claude-fable-5": {
-      "input": 15,
-      "cache_write": 18.75,
-      "cache_read": 1.5,
-      "output": 75
+      "input": 10,
+      "cache_write": 12.5,
+      "cache_read": 1,
+      "output": 50
+    },
+    "claude-sonnet-5-5": {
+      "input": 2,
+      "cache_write": 2.5,
+      "cache_read": 0.2,
+      "output": 10
     },
     "claude-sonnet-5": {
-      "input": 3,
-      "cache_write": 3.75,
-      "cache_read": 0.3,
-      "output": 15
+      "input": 2,
+      "cache_write": 2.5,
+      "cache_read": 0.2,
+      "output": 10
     },
     "claude-sonnet-4-6": {
       "input": 3,
@@ -142,6 +148,7 @@
     "claude-opus-4-8": 200000,
     "claude-opus-4-7": 200000,
     "claude-fable-5": 200000,
+    "claude-sonnet-5-5": 200000,
     "claude-sonnet-5": 200000,
     "claude-sonnet-4-6": 200000,
     "claude-haiku-4-5": 200000

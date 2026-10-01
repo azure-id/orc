@@ -48,8 +48,9 @@ async function armed(p, band, model) {
   f.stop();
 }
 
-// Every edge of the default 6-band table and of the opus5_only 2-band ladder.
-const EDGES = [0, 29, 30, 39, 40, 54, 55, 64, 65, 69, 70, 79, 80, 89, 90, 100];
+// Every edge of the default 5-band table (v2.1.0) and of the opus5_only 2-band
+// ladder — plus the retired six-band edges, which must still resolve cleanly.
+const EDGES = [0, 20, 21, 29, 30, 31, 39, 40, 41, 54, 55, 64, 65, 69, 70, 79, 80, 89, 90, 100];
 const agentAt = (rows, score) =>
   (rows.find((r) => score >= r.from && (r.inclusive_to ? score <= r.to : score < r.to)) || {}).agent;
 
@@ -388,7 +389,7 @@ test("orc extra lanes: a fixed-executor lane resolves BOTH EDGES, and disagreeme
   assert.equal(pinged.status, 0, pinged.stdout + pinged.stderr);
   fs.writeFileSync(path.join(p.root, ".claude", "orc.config.yaml"), "extra_enabled: true\nextra_roles: [executor]\n");
 
-  // A row covering only PART of `/orc-mini`'s band [55,65): one edge foreign,
+  // A row covering only PART of `/orc-mini`'s band [31,41) (v2.1.0; it was [55,65)): one edge foreign,
   // one edge not. The lane stays on Claude and NAMES the row that partially
   // covered it — a midpoint would have captured the whole lane on the strength
   // of a few scores out of ten.
@@ -397,18 +398,18 @@ test("orc extra lanes: a fixed-executor lane resolves BOTH EDGES, and disagreeme
   // mini SCORES its tasks and then pins one executor over them, so both edges
   // of that agent's band is a question about numbers the run really produced.
   // `/orc-fast` produces none, so it became a POSITION instead.
-  run(p, ["extra", "route", "set", "55-58", "w/m1", "--json"]);
+  run(p, ["extra", "route", "set", "31-34", "w/m1", "--json"]);
   j = json(run(p, ["extra", "lanes", "--json"]));
   let mini = j.lanes.find((l) => l.lane === "/orc-mini");
   assert.equal(mini.shape, "fixed-executor");
-  assert.deepEqual(mini.edges, [55, 64]);
+  assert.deepEqual(mini.edges, [31, 40]);
   assert.equal(mini.agree, false);
   assert.equal(mini.routes, "claude");
   assert.match(mini.detail, /covers only part of this band/);
 
   // Widen it to the whole band and both edges agree, so the lane goes foreign.
-  run(p, ["extra", "route", "rm", "55-58", "--json"]);
-  run(p, ["extra", "route", "set", "55-65", "w/m1", "--json"]);
+  run(p, ["extra", "route", "rm", "31-34", "--json"]);
+  run(p, ["extra", "route", "set", "31-41", "w/m1", "--json"]);
   j = json(run(p, ["extra", "lanes", "--json"]));
   mini = j.lanes.find((l) => l.lane === "/orc-mini");
   assert.equal(mini.agree, true);

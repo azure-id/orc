@@ -285,5 +285,6 @@
   "hookui.animSetOff": "The redraw timer is off.",
   "hookui.animFailed": "The timer did not change.",
   "hookui.animCost": "Cost: with the timer on, the status line runs every N seconds, also when you do nothing. Each run starts node.",
+  "hookui.animFloor": "Below the Claude Code floor: Claude Code runs the status line at most once a second (refreshInterval minimum: 1). A lower value does not start the timer.",
   "hookui.animNeeds": "This layout has moving parts. They move only when the status line redraws. Set a timer to make them move."
 }

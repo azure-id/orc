@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — calls bin/webui/api.js in-process, which may shell the CLI; does not bind a port
 // v2.0.4 — the redraw timer and the animated preview in the CLI Hook Interface.
 const test = require("node:test");
 const assert = require("node:assert");

@@ -609,8 +609,16 @@ test("the refusal list and the target set are closed, and the CLI is their only 
     /const EXTRA_RESUME_REFUSALS = \[\s*"not-resumable",\s*"in-flight",\s*"reverted-file",\s*"slice-drifted",\s*"resume-cap",\s*"resume-disabled",\s*\];/
   );
   assert.match(src, /const EXTRA_RESUME_TARGETS = \["extra", "claude", "hold", "off"\];/);
-  // Every refusal name the code can emit is in the registered list.
-  const emitted = [...src.matchAll(/refuse\(\s*"([a-z-]+)"/g)].map((m) => m[1]);
+  // Every refusal name the code can emit is in the registered list. Only the
+  // resume function is scanned: other commands keep their own `refuse` helper.
+  const start = src.indexOf("function extraResumeSlice(");
+  assert.ok(start >= 0, "extraResumeSlice not found");
+  // `\n}` and not `\n}\n`: a Windows checkout of cli.js is CRLF.
+  const end = src.indexOf("\n}", start);
+  assert.ok(end > start, "end of extraResumeSlice not found");
+  const body = src.slice(start, end);
+  const emitted = [...body.matchAll(/refuse\(\s*"([a-z-]+)"/g)].map((m) => m[1]);
+  assert.ok(emitted.length > 0, "no refusal found in extraResumeSlice");
   for (const e of emitted)
     assert.ok(
       e === "no-journal" || /"not-resumable"|"in-flight"|"reverted-file"|"slice-drifted"|"resume-cap"|"resume-disabled"/.test(`"${e}"`),

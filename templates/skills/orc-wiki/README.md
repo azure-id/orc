@@ -8,7 +8,7 @@ crosslink mechanics in `references/crosslink.md`.
 
 ## What the wiki is
 
-`/orc-wiki` scans the codebase with Opus 4.8 high and writes `wiki/orc-feature-*`,
+`/orc-wiki` scans the codebase with Opus 5.5 low and writes `wiki/orc-feature-*`,
 `wiki/orc-reference-*`, and `wiki/orc-architecture-overview.md`, an `INDEX.md`, and
 the machine manifest `.claude/orc/wiki-meta.json`. Future ORC runs consult it —
 precedence `code > fresh wiki > stale wiki (hints) > model priors`. Freshness is

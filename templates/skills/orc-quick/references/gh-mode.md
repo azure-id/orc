@@ -176,8 +176,10 @@ orc gotcha import sarif <file> --json
 - Sonar exit 5 → the token is missing or refused. Tell the user to set
   `SONAR_TOKEN` in the environment. Never ask for the token in the chat. A saved
   answer also works: `--file <saved.json>`.
-- The import records each issue as an observation. After a green fix, the next
-  import records the group as `addressed`. Do not record it yourself.
+- The import records each issue as an observation. After a green fix, record
+  each fixed issue ONCE through the `/orc-fix` record step (`via: "orc-quick"`,
+  with its Sonar issue key — `../../_shared/gotchas.md` §10). It uses the
+  importer's own id, so the next import completes the SAME row with `addressed`.
 - **Never change an issue's status on the Sonar server.** ORC reads external
   systems. It does not write to them — the GitHub boundary, extended.
 

@@ -72,14 +72,11 @@ ORC · budget · TOKENS  (p50 → p90)
 
   band          model / count        input    cache-w    cache-r     output
   ────────────────────────────────────────────────────────────────────────────
-  [0,30)   ×2   haiku-4-5             1.2k       6.4k      11.8k       0.9k
-  [30,40)  ×1   sonnet-4-6-med        2.1k      14.0k      28.4k       2.2k
-  [40,55)  ×3   sonnet-4-6-high       7.8k      52.1k     104.0k       8.4k
-  [55,65)  ×2   sonnet-5-high         6.9k      48.3k      96.7k       9.1k
-  [65,70)  ×1   opus-4-7-med          4.4k      31.0k      62.5k       6.8k
-  [70,80)  ×1   opus-4-7-high         5.7k      40.2k      81.0k       9.3k
-  [80,90)  ×1   opus-4-8-high         7.1k      49.8k     101.4k      12.0k
-  [90,100] ×1   opus-5-high           8.0k      56.0k     114.0k      14.2k
+  [0,21)   ×1   sonnet-5-low          0.6k       3.2k       5.9k       0.4k
+  [21,31)  ×1   sonnet-5-med          0.6k       3.2k       5.9k       0.5k
+  [31,41)  ×1   sonnet-5-high         2.1k      14.0k      28.4k       2.2k
+  [41,90)  ×8   opus-5-low           31.9k     221.4k     445.6k      45.6k
+  [90,100] ×1   opus-5-med            8.0k      56.0k     114.0k      14.2k
   fixed roles   analyst · planner · reviewer · verifier · trace writer
                                      18.2k     121.0k     248.0k      26.4k
   ────────────────────────────────────────────────────────────────────────────
@@ -101,7 +98,7 @@ ORC · budget · the other views
 
 ORC · budget · CONTEXT RISK — 1 of 12 tasks
 
-  T12  backfill 1.4M rows   opus-5-high   est. peak 189k / 200k   95%   ⚠
+  T12  backfill 1.4M rows   opus-5-med    est. peak 189k / 200k   95%   ⚠
        what is in the slice:
          3 wiki docs                58k    ← orc-reference-config.md used 2/20
          code pattern (typescript)  11k
@@ -117,6 +114,11 @@ ORC · budget · CONTEXT RISK — 1 of 12 tasks
 
   Other 11 tasks: highest is T09 at 142k / 200k (71%). Fine.
 ```
+
+> The dollar figures in this walkthrough are illustrative. The token counts
+> add up. The dated price table sets the real dollars: Sonnet 5 is
+> $2 / $2.50 / $0.20 / $10 per MTok (input / cache write / cache read /
+> output), Opus 5.5 is $4 / $5 / $0.20 / $20, Haiku 4.5 is $1 / $5.
 
 ```
 ORC · budget · the same plan, on other lanes
@@ -143,17 +145,14 @@ ORC · budget · how sure am I
 
   band          past dispatches   confidence
   ─────────────────────────────────────────────
-  [0,30)              41          good
-  [30,40)             27          good
-  [40,55)             38          good
-  [55,65)             31          good
-  [65,70)             14          fair
-  [70,80)              9          fair
-  [80,90)              4          LOW — insufficient history
+  [0,21)              23          good
+  [21,31)             18          good
+  [31,41)             27          good
+  [41,90)             96          good
   [90,100]             2          LOW — insufficient history
 
-  Two bands have very little history. Their p90 is shaped by the band next
-  to them, not measured. Treat the top of the range as soft.
+  One band has very little history. Its p90 is shaped by the band next
+  to it, not measured. Treat the top of the range as soft.
 
   Cache-read has its own range and it is the widest part of the forecast —
   it depends on how much of your repo is already warm. Do not budget on the
@@ -229,13 +228,11 @@ BUDGET · actual vs forecast · run-orc-partial-refunds-100826-171450
 
   band        forecast p50 (weighted)   actual     diff      note
   ────────────────────────────────────────────────────────────────────────
-  [0,30)              9k                  9k       on target
-  [30,40)            21k                 20k       -5%
-  [40,55)            92k                 79k       -14%
-  [55,65)            86k                121k       +41%      T08 2 repair rounds
-  [65,70)            57k                 54k       -6%
-  [70,80)            74k                186k      +151%      T04 requeued twice
-  [80,90)            96k                101k       +5%
+  [0,21)              4k                  4k       on target
+  [21,31)             5k                  5k       on target
+  [31,41)            21k                 20k       -5%
+  [41,90)           405k                541k       +34%      T04 requeued twice (+151%)
+                                                             T08 2 repair rounds
   [90,100]            —                   —        not run   T12 blocked
   fixed roles       178k                187k       +5%
   ────────────────────────────────────────────────────────────────────────
@@ -257,7 +254,7 @@ BUDGET · actual vs forecast · run-orc-partial-refunds-100826-171450
 
     Same finding from three angles. Cheap fix: write the test for PACT-006.
 
-  Fed to /orc-retro. Band [70,80) now has 10 samples.
+  Fed to /orc-retro. Band [41,90) now has 104 samples.
 ```
 
 **Why both weighted and raw are reported:** raw is what fills a context window
@@ -308,7 +305,7 @@ was used in 2 of the last 20 runs.
 
 ## Confidence
 
-Bands `[80,90)` and `[90,100]` have fewer than 5 samples. Their p90 is derived,
+Band `[90,100]` has fewer than 5 samples. Its p90 is derived,
 not measured. `unattributed` = 2.6%.
 
 ## Assumptions
@@ -376,7 +373,6 @@ $ orc budget forecast plan.md --json
     }
   ],
   "bands": [
-    { "band": "[80,90)", "samples": 4, "confidence": "low", "reason": "insufficient history" },
     { "band": "[90,100]", "samples": 2, "confidence": "low", "reason": "insufficient history" }
   ],
   "exit": 2
@@ -431,9 +427,9 @@ BAND RATES · from 189 dispatches
 
   band          n    input   cache-w   cache-r   output   weighted p50
   ──────────────────────────────────────────────────────────────────────
-  [0,30)       41    0.6k     3.2k       5.9k     0.5k      4.4k
-  [40,55)      38    2.6k    17.4k      34.7k     2.8k     30.6k
-  [70,80)       9    5.7k    40.2k      81.0k     9.3k     74.0k   fair
+  [0,21)       23    0.6k     3.2k       5.9k     0.4k      4.8k
+  [31,41)      27    2.1k    14.0k      28.4k     2.2k     21.1k
+  [41,90)      96    4.0k    27.7k      55.7k     5.7k     43.0k
   [90,100]      2    8.0k    56.0k     114.0k    14.2k    103.0k   LOW
 ```
 
@@ -458,7 +454,7 @@ Intake · confirm before we start
   Forecast   1.42M raw / 652k weighted tokens
              21% → 32% of your 5-hour window
              $6.76 → $10.50 · 18 → 31 minutes
-             (from your own 31 runs; 2 bands have low confidence)
+             (from your own 31 runs; 1 band has low confidence)
 
   ⚠ T12 is forecast at 95% of its context window and will probably compact.
 
@@ -526,7 +522,7 @@ says so, then sharpens. That is a good shape for a product: it rewards staying.
 
 **It closes a loop with `/orc-retro`.** Forecast vs actual per band is exactly
 the signal retro needs to tune the score→model table. Today retro sees that a
-band retried a lot. Now it also sees that the band cost 151% more — and that
+band retried a lot. Now it also sees that one task in the band cost 151% more — and that
 the overage was mostly *output* tokens, which points straight at retries rather
 than at big context.
 

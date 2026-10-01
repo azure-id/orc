@@ -89,7 +89,7 @@ Pause every 2 waves. OK to start?
 ```
 ▶ W1  orc-executor-sonnet-5-high (T1)
       40% … 100%   returned: build green, `npx vitest run db/` exit 0
-      answered as: claude-sonnet-5 / high          ✓ matches what I asked for
+      answered as: claude-sonnet-5-5 / high          ✓ matches what I asked for
 
 ▶ W2  two agents at the same time
       T3 asked me a question: "note max length?"  → your call:
@@ -113,7 +113,7 @@ Pause every 2 waves. OK to start?
 ### Phases 5–6 — Review, then verify
 
 ```
-Review (orc-reviewer-opus-5-med):
+Review (orc-reviewer-opus-5-low):
   P1  note is not length-checked on the server — api/orders/create.ts:44
       I re-read line 44 myself. The quote matches. Fix it?   > yes
   P3  naming nit ×2  (counted, not fixed)

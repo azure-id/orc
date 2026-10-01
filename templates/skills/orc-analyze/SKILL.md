@@ -91,7 +91,9 @@ without the manifest (`../_shared/lane-contract.md` §Phases).
 
 ## Phase A — Ingest & detect source mode
 
-Read the source. **Auto-detect** which of three modes applies:
+First `orc lane config orc-analyze --json`. **`habits{}` in it → print
+`habits.line`, read `../_shared/habits.md` NOW**; none → ignore every `(H …)`.
+Then read the source. **Auto-detect** which of three modes applies:
 - **prose/spec** — a document of narrative requirements, or
 - **audit/structured** — a document with columns like expectation / notes / result, or
 - **requirement** — NO document; the user's plain-language request is the source
@@ -213,7 +215,7 @@ exist). Menu rules, relatedness gate, combiner handling:
 - **Config:** `orc lane config orc-analyze --json`. Obey `effective`, print every line
   in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
   Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
-- **Habits:** `habits{}` in that answer → `../_shared/habits.md`; else ignore `(H …)`.
+- **Habits:** Phase A, first step.
 - **Rules:** `orc rules slice --lane orc-analyze --json` is the ONLY assembler
   (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
 

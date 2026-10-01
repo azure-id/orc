@@ -50,11 +50,11 @@ test("stats: questions per run, per lane and per point, from a fixture trace wit
     assert.deepStrictEqual(q.by, { user: 1, ledger: 1, learned: 1, config: 1, default: 0 });
     assert.strictEqual(q.per_run_p50, 1, "per run 3 · 1 · 0 → median 1");
     assert.deepStrictEqual(q.per_run_trend.map((x) => x.asked), [3, 1, 0], "oldest first");
-    assert.strictEqual(q.by_lane.quick.asked, 3);
-    assert.strictEqual(q.by_lane.mini.runs, 2);
-    assert.strictEqual(q.by_lane.mini.per_run_p50, 0.5);
-    assert.deepStrictEqual(q.by_point["quick.q3.offer.review"], { asked: 1, answered_for_you: 1, lanes: ["quick"] });
-    assert.deepStrictEqual(q.by_point["mini.phase-x.mock"], { asked: 1, answered_for_you: 1, lanes: ["mini"] });
+    assert.strictEqual(q.by_lane["orc-quick"].asked, 3);
+    assert.strictEqual(q.by_lane["orc-mini"].runs, 2);
+    assert.strictEqual(q.by_lane["orc-mini"].per_run_p50, 0.5);
+    assert.deepStrictEqual(q.by_point["quick.q3.offer.review"], { asked: 1, answered_for_you: 1, lanes: ["orc-quick"] });
+    assert.deepStrictEqual(q.by_point["mini.phase-x.mock"], { asked: 1, answered_for_you: 1, lanes: ["orc-mini"] });
 
     // --since filters on the filename date, the same as every other stats row.
     const s = JSON.parse(cli(["stats", "--dir", root, "--since", "2026-09-26", "--json"]).stdout).questions;

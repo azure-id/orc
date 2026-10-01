@@ -63,6 +63,7 @@ const waitLanes = {
     // A `none` row KEEPS ITS SLOT. Filtering it out would make "this lane has
     // nothing to checkpoint" and "this lane does not support a wait" identical.
     { lane: "/orc-explain", checkpoint: "none", safe_point: "read-only, seconds long", modes: ["safe", "soft", "hard"], modes_differ: false, detail: "nothing to checkpoint — one dispatch, or a read. safe, soft and hard behave identically here." },
+    { lane: "/orc-fix", checkpoint: "none", safe_point: "after the record is written", modes: ["safe", "soft", "hard"], modes_differ: false, detail: "nothing to checkpoint — one dispatch, or a read. safe, soft and hard behave identically here." },
     { lane: "/orc-verify", checkpoint: "none", safe_point: "single dispatch", modes: ["safe", "soft", "hard"], modes_differ: false, detail: "nothing to checkpoint — one dispatch, or a read. safe, soft and hard behave identically here." },
   ],
   note: "A lane not in this list does not support a wait.",

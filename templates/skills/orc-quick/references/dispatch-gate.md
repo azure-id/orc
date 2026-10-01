@@ -12,7 +12,7 @@ what is about to be spent, before it is spent.
 |------|-------|--------------------|-----------------|
 | Writes code | `orc-executor-sonnet-4-6-med` · `orc-executor-opus-5-low` · **a third option when a `quick-executor` position is held** | yes | yes (a foreign return has no `actual_model` — §2b) |
 | Read only (recon) | `orc-recon-sonnet-4-6-med` · `orc-recon-opus-5-low` · **other — name a model** | yes · yes · no | yes |
-| Review | `orc-reviewer-opus-5-med` · or ad-hoc | yes / no | yes |
+| Review | `orc-reviewer-opus-5-low` · or ad-hoc | yes / no | yes |
 | Build repair, round 1–2 | *reused — not asked* | yes | yes |
 | Build repair, round 3 | asked again | yes | yes |
 
@@ -20,7 +20,8 @@ what is about to be spent, before it is spent.
 `../../_shared/review-slice.md` (`--lane orc-quick`): the §1 free check first,
 then the §2 fields, and its §3 after-filter on the return. No disprove pass here.
 A finding the user calls "not a problem here" is a `disputed` outcome; record
-each outcome and the `FINDING-OUTCOME` line (`../../_shared/gotchas.md` §10).
+each outcome with `orc gotcha observe` (one per finding, with `run`) and the
+`FINDING-OUTCOME` line (`../../_shared/gotchas.md` §10).
 
 ### Writing code
 

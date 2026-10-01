@@ -131,7 +131,7 @@ test("GOLDEN: a hand-edited rubric_bands_override is reported shadowed, and read
 // leaves this golden only when the release that removed it says so — never in
 // passing.
 
-test("GOLDEN: the 106 config keys, their tiers and their defaults", () => {
+test("GOLDEN: the 109 config keys, their tiers and their defaults", () => {
   const { root } = freshInstall();
   try {
     const j = json(cli(["config", "list", "--json", "--dir", root]));
@@ -140,7 +140,7 @@ test("GOLDEN: the 106 config keys, their tiers and their defaults", () => {
     // ORDER is part of it: CONFIG_META's order is the order the human menu
     // walks, and W6 regroups the FILE without reordering the registry.
     assert.deepStrictEqual(now, then);
-    assert.strictEqual(now.length, 106, "the key COUNT is a number the release reports"); // v1.8.2: +code_graph_ignore · v2.0.0 W2: +habits and the three offer keys · W4: +gotcha_card_budget, gotcha_sync_hours, sonar_url, sonar_project, sonar_org · W6c: +notify, rules_card_compact
+    assert.strictEqual(now.length, 109, "the key COUNT is a number the release reports"); // v2.1.0 W8: +statusline_refresh · v2.1.0 W7: +log_retention_days, log_retention_auto · v1.8.2: +code_graph_ignore · v2.0.0 W2: +habits and the three offer keys · W4: +gotcha_card_budget, gotcha_sync_hours, sonar_url, sonar_project, sonar_org · W6c: +notify, rules_card_compact
   } finally {
     rmrf(root);
   }
@@ -393,27 +393,32 @@ test("GOLDEN: the compiled DIY flow at the wizard's default config", () => {
 // The edge is 90 and it is ROUND (D13). Every other edge in the default table
 // is round and half-open, so a score of exactly 90 resolves to `med`.
 
+// v2.1.0 — FIVE bands. The user's closed ranges 0–20 · 21–30 · 31–40 · 41–89 ·
+// 90–100 are exact because a score is always a whole number.
 const DEFAULT_TABLE = [
-  [0, 30, "orc-executor-haiku-4-5"],
-  [30, 40, "orc-executor-sonnet-4-6-med"],
-  [40, 55, "orc-executor-sonnet-4-6-high"],
-  [55, 65, "orc-executor-sonnet-5-high"],
-  [65, 90, "orc-executor-opus-5-low"],
+  [0, 21, "orc-executor-sonnet-5-low"],
+  [21, 31, "orc-executor-sonnet-5-med"],
+  [31, 41, "orc-executor-sonnet-5-high"],
+  [41, 90, "orc-executor-opus-5-low"],
   [90, 101, "orc-executor-opus-5-med"],
 ];
 const OPUS5_LADDER = [
   [0, 90, "orc-executor-opus-5-low"],
   [90, 101, "orc-executor-opus-5-med"],
 ];
-// Named by no band since W4, and still shipped (D14). They are reachable only
+// Named by no band since W4 (and since v2.1.0 also haiku-4-5, sonnet-4-6-med,
+// sonnet-4-6-high), and still shipped (D14). They are reachable only
 // when a user names one explicitly, so the SET is frozen: an agent quietly
 // rejoining a default table, or quietly disappearing from disk, are both
 // changes somebody has to mean.
 const UNBANDED_EXECUTORS = [
+  "orc-executor-haiku-4-5",
   "orc-executor-opus-4-7-high",
   "orc-executor-opus-4-7-med",
   "orc-executor-opus-4-8-high",
   "orc-executor-opus-5-high",
+  "orc-executor-sonnet-4-6-high",
+  "orc-executor-sonnet-4-6-med",
 ];
 
 // The constants are read out of the source because bin/cli.js is a script, not
@@ -430,12 +435,17 @@ function constTable(name) {
   ]);
 }
 
-test("GOLDEN: DIY_SCORE_TABLE is the 6-band default ladder", () => {
+test("GOLDEN: DIY_SCORE_TABLE is the 5-band default ladder", () => {
   assert.deepStrictEqual(constTable("DIY_SCORE_TABLE"), DEFAULT_TABLE);
 });
 
 test("GOLDEN: the opus5_only ladder is TWO bands, and there is now only ONE copy", () => {
   assert.deepStrictEqual(constTable("OPUS5_SCORE_TABLE"), OPUS5_LADDER);
+  // v2.1.0 item 4: the user's 0–89 low · 90–100 medium. The default table moved
+  // under it; this ladder did not, and a later table change must not move it.
+  const edges = constTable("OPUS5_SCORE_TABLE").flatMap((r) => [r[0], r[1]]);
+  assert.deepStrictEqual([...new Set(edges)], [0, 90, 101], "opus5_only keeps ONLY the 0 · 90 · 100 edges");
+  for (const e of [21, 31, 41]) assert.ok(!edges.includes(e), "a default-table edge leaked into opus5_only: " + e);
   // W4's single-source gate. Before it, OPUS5_BANDS was a second array with the
   // same rows — v0.50.0's own comment recorded that the two had already drifted
   // in NAME. It is now an alias, asserted by IDENTITY (`===`) and not by deep
@@ -513,7 +523,7 @@ test("GOLDEN: every band edge in the source appears in the two payload copies", 
   }
   // And the reverse: a RETIRED edge must not still be documented as live. This
   // is the half that catches a half-finished table change.
-  for (const dead of ["[65,70)", "[70,80)", "[80,90)", "[40,80)", "[0,40)", "[80,100]"]) {
+  for (const dead of ["[65,70)", "[70,80)", "[80,90)", "[40,80)", "[0,40)", "[80,100]", "[0,30)", "[30,40)", "[40,55)", "[55,65)", "[65,90)"]) {
     assert.ok(!config.includes(dead), `orc/config.md still documents the retired band ${dead}`);
     assert.ok(!mapping.includes(dead), `MODEL-MAPPING.md still documents the retired band ${dead}`);
   }

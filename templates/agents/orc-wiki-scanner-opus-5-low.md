@@ -1,9 +1,9 @@
 ---
-name: orc-wiki-scanner-opus-4-8-high
+name: orc-wiki-scanner-opus-5-low
 description: >
-  ORC Wiki Scanner — claude-opus-4-8, high effort. Dispatched by orc-wiki per scan-task (DEEP tier), ONE coverage area each.
-model: claude-opus-4-8
-effort: high
+  ORC Wiki Scanner — claude-opus-5-5, low effort. Dispatched by orc-wiki per scan-task (DEEP tier), ONE coverage area each.
+model: claude-opus-5-5
+effort: low
 tools: Read, Glob, Grep, Bash
 ---
 

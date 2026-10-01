@@ -451,6 +451,29 @@ const gotchaQuality = {
   ok: true,
   window_days: 90,
   reviews: 12,
+  reviews_traced: 12,
+  reviews_observed: 9,
+  by_reviewer: { orc: 12, "/code-review": 2 },
+  project_reviews: 2,
+  // v2.1.0 W6 — `orc fix record`: the fixes made after a review, and the misses.
+  fixes: {
+    total: 5,
+    by_introduced_by: { orc: 2, ai: 1, human: 1, unknown: 1 },
+    by_source: { sonar: 2, defect: 2, ci: 1 },
+    causes: [
+      { id: "sonar", n: 2, share: 0.4 },
+      { id: "orc", n: 1, share: 0.2 },
+      { id: "ai", n: 1, share: 0.2 },
+      { id: "other", n: 1, share: 0.2 },
+    ],
+  },
+  misses: {
+    total: 1,
+    by_category: [{ category: "functional.logic", n: 1 }],
+    list: [
+      { obs: "9f2c41ab", at: new Date(NOW - 3 * DAY).toISOString().slice(0, 10), path: "src/orders/total.ts", lines: [40, 58], source: "sonar", rule: "sonar:typescript:S3776", category: "functional.logic", introduced_by: "orc", missed_by: "run-mini-total-290926-101500", fix_run: "run-quick-total-fix-021026-091200" },
+    ],
+  },
   floor: 5,
   below_floor: false,
   findings: 118,
@@ -473,6 +496,13 @@ const gotchaQualityLow = {
   ok: true,
   window_days: 30,
   reviews: 3,
+  // v2.1.0 — one review counted from its trace only (a clean review).
+  reviews_traced: 3,
+  reviews_observed: 2,
+  by_reviewer: { orc: 3 },
+  project_reviews: 0,
+  fixes: { total: 0, by_introduced_by: { orc: 0, ai: 0, human: 0, unknown: 0 }, by_source: {}, causes: [{ id: "sonar", n: 0, share: 0 }, { id: "orc", n: 0, share: 0 }, { id: "ai", n: 0, share: 0 }, { id: "other", n: 0, share: 0 }] },
+  misses: { total: 0, by_category: [], list: [] },
   floor: 5,
   below_floor: true,
   findings: 19,

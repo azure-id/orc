@@ -865,6 +865,20 @@ const MAINTENANCE = {
     label: "Recompile AGENTS.md from the wiki, patterns, PACT.md and boundary cards",
     preview: ["export", "--check"],
   },
+  // v2.1.0 W7 — clear old logs. The preview is the CLI's own print mode, which
+  // names EVERY file it would delete and every file it keeps, with the reason
+  // (a count is not consent). The day value comes from config
+  // (`log_retention_days`): the panel sends only this id. `status` is the
+  // no-scan summary the row shows before any preview (days, last sweep).
+  "clear-logs": {
+    apply: ["clear", "logs", "--apply"],
+    restarts_ui: false,
+    label: "Delete finished traces and run folders older than log_retention_days (never user data, never a waiting run)",
+    preview: ["clear", "logs"],
+    status: ["clear", "logs", "--summary"],
+    names_files: true,
+    danger: true,
+  },
   // ADVANCED (v0.44.0) — the one action on this panel that does not target the
   // project. Every other route pins `--dir <projectRoot>`; `--global` outranks
   // `--dir` in `resolveClaudeDir`, so this pair reaches ~/.claude and its
@@ -1242,6 +1256,9 @@ async function handleApi(req, res, url, ctx) {
         names_files: !!m.names_files,
         advanced: !!m.advanced,
         restarts_ui: !!m.restarts_ui,
+        danger: !!m.danger,
+        // The CLI's own no-scan summary (v2.1.0 W7) — never a number the panel computes.
+        status: m.status ? readCli(m.status, ctx).data || null : null,
       }));
       return json(res, 200, { ok: true, exit_code: 0, data: { actions } });
     }
@@ -1259,6 +1276,7 @@ async function handleApi(req, res, url, ctx) {
           network: !!m.network,
           names_files: !!m.names_files,
           advanced: !!m.advanced,
+          danger: !!m.danger,
           // Said in the confirmation, not discovered afterwards. A panel that
           // reloads itself without warning reads as a crash.
           restarts_ui: !!m.restarts_ui,

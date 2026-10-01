@@ -45,31 +45,31 @@ lane wrote:
 `run-orc-feat-auth-090726-144001.txt` (full pipeline — the rich one; every
 non-hook line was written by the trace writer from a phase packet):
 ```
-[090726 14:40:02.300] writer   SCORE task=T3 score=72 band=[65,90) model=opus-5 :: multi-file, judgment
+[090726 14:40:02.300] writer   SCORE task=T3 score=72 band=[41,90) model=opus-5 :: multi-file, judgment
 [090726 14:40:03.010] writer   DISPATCH orc-executor-opus-5-low :: T3 expect=opus-5/low
 [090726 14:44:12.900] writer   VERIFY T3 actual=opus-5/low ✅ MATCH
 [090726 14:44:13.000] writer   VERIFY T5 actual=sonnet-4-6/high ⛔ DOWNGRADE expected=opus-5/med
 [090726 15:02:00.000] reviewer FINDING p0=1 p1=0 p2=3 p3=2
 [090726 15:04:10.000] writer   GATE coverage bounce :: T4 unowned (no owning req)
 [090726 15:10:00.000] verifier VERDICT pass :: 8/8 acceptance criteria
-[090726 15:11:30.000] writer   OUTCOME task=T3 score=72 band=[65,90) model=opus-5 retries=1 requeues=0 needs_context=0 unmet=0
+[090726 15:11:30.000] writer   OUTCOME task=T3 score=72 band=[41,90) model=opus-5 retries=1 requeues=0 needs_context=0 unmet=0
 [090726 15:12:00.000] writer   FINISH :: shipped PR #123
 ```
 
 `run-claude-readme-100726-091401.txt` (single-dispatch lane — ONE end-of-run
 packet; its meaningful signal is the writer's tier honesty):
 ```
-[100726 09:14:02.110] writer   DISPATCH orc-claude-writer :: refresh expect=opus-4-8/high
-[100726 09:14:02.230] hook     SPAWN orc-claude-writer-opus-4-8-high
+[100726 09:14:02.110] writer   DISPATCH orc-claude-writer :: refresh expect=opus-5/low
+[100726 09:14:02.230] hook     SPAWN orc-claude-writer-opus-5-low
 [100726 09:15:47.900] hook     RETURN
-[100726 09:15:48.010] writer   VERIFY writer actual=sonnet-4-6/high ⛔ DOWNGRADE expected=opus-4-8/high
+[100726 09:15:48.010] writer   VERIFY writer actual=sonnet-4-6/high ⛔ DOWNGRADE expected=opus-5/low
 [100726 09:15:48.120] writer   FINISH :: refresh CLAUDE.md v0.0.3
 ```
 
 ### Step 2 — dispatch the miner (never mines itself)
 
 ```
-C: Spawning orc-retro-sonnet-5-high → claude-sonnet-5 / high
+C: Spawning orc-retro-sonnet-5-high → claude-sonnet-5-5 / high
    slice: trace_files=[3 paths] + verb_reference=_shared/phases/trace-verbs.md
    (This lane writes NO run pointer and emits NO markers — tracing the retro
     would pollute the very data it mines.)
@@ -82,23 +82,23 @@ verb set, and returns EXACTLY the contract:
 runs_analyzed: 3
 tasks_analyzed: 6
 band_stats:
-  - {band: "[65,90)", model: opus-5, tasks: 2, avg_retries: 0.5, avg_requeues: 0, avg_needs_context: 0, avg_unmet: 0}
-  - {band: "[55,65)", model: sonnet-5, tasks: 3, avg_retries: 1.3, avg_requeues: 0.7, avg_needs_context: 1.0, avg_unmet: 0.3}
+  - {band: "[41,90)", model: opus-5, tasks: 2, avg_retries: 0.5, avg_requeues: 0, avg_needs_context: 0, avg_unmet: 0}
+  - {band: "[31,41)", model: sonnet-5, tasks: 3, avg_retries: 1.3, avg_requeues: 0.7, avg_needs_context: 1.0, avg_unmet: 0.3}
 downgrades:
   - {agent: orc-executor-opus-5-low,        expected: opus-5/low,   actual: sonnet-4-6/high, run: feat-auth-090726}
-  - {agent: orc-claude-writer-opus-4-8-high, expected: opus-4-8/high, actual: sonnet-4-6/high, run: orc-claude-100726}
+  - {agent: orc-claude-writer-opus-5-low, expected: opus-5/low, actual: sonnet-4-6/high, run: orc-claude-100726}
 leaks:
   - {kind: verdict-fail, evidence: "run-orc-feat-auth-090726-144001.txt:L31 (FINDING p0=1)", count: 1}
   - {kind: gate-bounce,  evidence: "run-orc-feat-auth-090726-144001.txt:L33 (coverage bounce)", count: 1}
   - {kind: context-gap,  evidence: "run-mini-fix-cache-110726-101200.txt:L4,L7", count: 2}
 recommendations:
-  - finding: "Both downgrades share a fingerprint: an opus-4-8/high pin ran as sonnet-4-6 — the main session was below Opus when the child spawned."
-    suggested_change: "Not a rubric issue — surface to the user: run the pinned lanes from an Opus 4.8 session. No config edit."
+  - finding: "Both downgrades share a fingerprint: an opus-5/low pin ran as sonnet-4-6 — the main session was below Opus when the child spawned."
+    suggested_change: "Not a rubric issue — surface to the user: run the pinned lanes from an Opus 5.5 session. No config edit."
     confidence: strong
-  - finding: "sonnet-5 band [55,65) shows avg_needs_context=1.0 across 3 tasks — slices may be under-specified."
-    suggested_change: "config.md — tighten the planner's declared-files discipline, or nudge the [55,65) band slice detail."
+  - finding: "sonnet-5 band [31,41) shows avg_needs_context=1.0 across 3 tasks — slices may be under-specified."
+    suggested_change: "config.md — tighten the planner's declared-files discipline, or nudge the [31,41) band slice detail."
     confidence: weak      # n<3 in this band
-actual_model: claude-sonnet-5
+actual_model: claude-sonnet-5-5
 actual_effort: high
 ```
 
@@ -113,8 +113,8 @@ C: Return validates. Writing report →
    level to run traces + their sidecars)
 
 ── orc-retro summary (n=3 runs, 6 tasks) ──────────────────────────────
-Scoring calibrated?  ~ mostly — [65,90) clean; [40,65) shows a context-gap (weak, n=3)
-Workers honest?      ⛔ NO — 2 silent downgrades (opus-4-8 → sonnet-4-6)
+Scoring calibrated?  ~ mostly — [41,90) clean; [31,41) shows a context-gap (weak, n=3)
+Workers honest?      ⛔ NO — 2 silent downgrades (opus-5 → sonnet-4-6)
 Where it leaks?      1 coverage-gate bounce, 1 P0 review finding, 2 context-gaps
 Narrated?            11/12 phases had a writer dispatch (1 execution phase blind)
 Recommendations: 2 (1 strong, 1 weak)

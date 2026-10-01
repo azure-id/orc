@@ -56,7 +56,7 @@ Two files, two jobs:
       "override_reason": null, "model": "sonnet-5", "effort": "medium",
       "spawned_at": "020726 14:24:01.100",
       // claimed-vs-actual (only when logging_enabled): what the worker reported
-      "actual_model": "claude-sonnet-5", "actual_effort": "medium",
+      "actual_model": "claude-sonnet-5-5", "actual_effort": "medium",
       "verify": "match" },      // match | downgrade
 
     { "task_id": "T6", "computed_score": 88, "override_score": 62,

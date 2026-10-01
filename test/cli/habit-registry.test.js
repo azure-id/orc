@@ -101,6 +101,26 @@ test("zero-token: every sentence that points at habits.md is conditional on habi
   assert.deepStrictEqual(hits, [], "a pointer at habits.md with no `habits{}` condition beside it");
 });
 
+// v2.1.0 W5 (A4, A5) — the v2.0.1 rule, now for every lane: the pointer lives
+// in the step that READS `orc lane config`, never only in a reference block.
+test("the habits pointer sits in the step that reads lane config (fast, analyze, diy, quick, mini)", () => {
+  const STEP = {
+    "orc-fast": "## Phase F0",
+    "orc-analyze": "## Phase A —",
+    "orc-diy": "## Step 2",
+    "orc-quick": "## Q0",
+    "orc-mini": "## Mini flow",
+  };
+  for (const [lane, heading] of Object.entries(STEP)) {
+    const text = fs.readFileSync(path.join(TEMPLATES, "skills", lane, "SKILL.md"), "utf8").replace(/\r\n/g, "\n");
+    const sections = text.split(/\n(?=## )/);
+    const sec = sections.find((s) => s.startsWith(heading));
+    assert.ok(sec, `${lane}: no section "${heading}"`);
+    assert.match(sec, /lane config/, `${lane}: "${heading}" reads lane config`);
+    assert.match(sec, /habits\{\}[^\n]*\n?[^\n]*habits\.md/, `${lane}: "${heading}" carries the habits pointer`);
+  }
+});
+
 test("zero-token: the default config answers with no `habits` key in any habit lane", () => {
   const root = tmpdir();
   try {

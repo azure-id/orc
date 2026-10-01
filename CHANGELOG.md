@@ -10,6 +10,212 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v2.1.0 — the review counts, the score table moves up, and old logs can go _(2026-10-02)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+This release has eight parts. It moves the score table up to newer models, it
+makes Review quality count the reviews that really ran, and it adds a way to
+delete old logs.
+
+**1. Opus 4.x leaves the roles that do not write code**
+
+- The deep wiki scanner and the CLAUDE.md writer now use **Opus 5.5 low**. They
+  used Opus 4.8 high. An agent's model change is always a rename, so the files
+  change name:
+  - `orc-wiki-scanner-opus-4-8-high` → `orc-wiki-scanner-opus-5-low`
+  - `orc-claude-writer-opus-4-8-high` → `orc-claude-writer-opus-5-low`
+- The `opus5_only` twins of these two roles are **deleted**
+  (`orc-wiki-scanner-opus-5-med`, `orc-claude-writer-opus-5-med`). The defaults
+  are already Opus 5.5 low, so `opus5_only` has nothing to change. Under
+  `opus5_only`, a wiki scan and a CLAUDE.md write are now low effort, not medium
+  (cheaper).
+- The coding lanes and the `/orc` main-session baseline do not change. Opus 4.6
+  is used nowhere.
+
+**2. Sonnet 5 runs on `claude-sonnet-5-5`**
+
+- Every Sonnet 5 agent now has `model: claude-sonnet-5-5`. The agent names keep
+  `-sonnet-5-`, as Opus did in v1.9.2. A config that names `claude-sonnet-5` is
+  still valid.
+
+**3. A new score table with five bands**
+
+| Score | Agent | Model · effort |
+|---|---|---|
+| `[0,21)` | `orc-executor-sonnet-5-low` (new) | Sonnet 5 · low |
+| `[21,31)` | `orc-executor-sonnet-5-med` (new) | Sonnet 5 · medium |
+| `[31,41)` | `orc-executor-sonnet-5-high` | Sonnet 5 · high |
+| `[41,90)` | `orc-executor-opus-5-low` | Opus 5.5 · low |
+| `[90,100]` | `orc-executor-opus-5-med` | Opus 5.5 · medium |
+
+- The table had six bands. Seven executors now have no band
+  (`haiku-4-5`, `sonnet-4-6-med`, `sonnet-4-6-high`, `opus-4-7-med`,
+  `opus-4-7-high`, `opus-4-8-high`, `opus-5-high`). They still ship.
+  `rubric_bands_override`, `orc diy`'s `fixed_executor` and
+  `extra_fallback_agent` can still name them.
+- **The cost effect:**
+  - Scores 41–64 move from Sonnet (Sonnet 4.6 high $3/$15, Sonnet 5 high $2/$10)
+    to **Opus 5.5 low ($4/$20)**. This is the largest change.
+  - Scores 0–29 move from Haiku 4.5 ($1/$5) to Sonnet 5 low or medium ($2/$10).
+  - Scores 30–39 move from Sonnet 4.6 medium ($3/$15) to Sonnet 5 high ($2/$10).
+  - **Every band from 41 needs an Opus 5.5 main session.** Before, this was from
+    65. A lower main session runs these tasks on the session model, and the tier
+    line says so.
+  - Sandbox sample (14 scored tasks): the Opus share goes from 6 to 7 of 14, and
+    the Haiku share from 6 to 0. The sample is small. Measure your own project
+    with `orc stats`.
+- **`opus5_only` does not change** (`[0,90)` low · `[90,100]` medium). It now
+  differs from the default table only below score 41. The `opus5_only` text in
+  `orc config` showed an old three-band ladder; it now shows the real two bands.
+- A user route row in `orc diy` that spans two Claude bands now names both
+  agents.
+
+**4. The price table is correct** (`bin/pricing.json`, dated 2026-10-01)
+
+- `claude-sonnet-5-5` is added: $2 input · $2.50 cache write · $0.20 cache read
+  · $10 output per MTok.
+- `claude-sonnet-5` was $3/$15; it is now $2 / $2.50 / $0.20 / $10.
+- `claude-opus-5`, `claude-opus-4-8` and `claude-opus-4-7` are now
+  $5 / $6.25 / $0.50 / $25.
+- `claude-fable-5` is now $10 / $12.50 / $1 / $50.
+- `claude-sonnet-5-5` has a context window row, so `orc budget` shows its
+  context risk.
+
+**5. Review**
+
+- **The reviewer is `orc-reviewer-opus-5-low`** (renamed from
+  `orc-reviewer-opus-5-med`; low effort). In the live eval, low effort found
+  100% of the seeded defects that were still in the diff. **A script that names
+  the old file breaks.** `orc update` removes the old file.
+- **Review quality no longer says "0 so far" after real reviews.** It read only
+  `observations.jsonl`, and no lane wrote that file. Now a run with a
+  `FINDING-OUTCOME` line or a reviewer return in its trace counts as a review. A
+  clean review counts too. `orc gotcha quality --json` has two new fields:
+  `reviews_traced` and `reviews_observed`.
+- **An observation with `author: orc` must name its `run`.** Without it, `orc
+  gotcha observe` exits 2 and names `run`. A `ref` that starts with the run id
+  fills `run` for you.
+- **Your project's own review rule.** New command **`orc review policy`**. It
+  reads CLAUDE.md and AGENTS.md for a line that asks for a different review (for
+  example "All code review must go through /code-review"). When it finds one,
+  every coding lane that changed code asks: ORC review, that review, or skip.
+  The answer goes in a new trace line, `REVIEW-WHICH`. An external review is
+  counted as "Project reviews" and never in the ORC headline.
+- **Fixes the review can see.** An observation can now carry `introduced_by`
+  (`orc` · `ai` · `human` · `unknown`, from `git blame`), and a fix after a
+  review is recorded. The reviewer card shows a `fix` line for each changed file.
+  A review that missed a later fix is counted as a miss.
+- **New lane `/orc-fix`** with the commands **`orc fix classify`**, **`orc fix
+  record`** and **`orc fix list`**. Inside a paused run, `/orc-fix` only records:
+  one observation and one `FIX` line in the trace of that run. With no run open,
+  it fixes the way `/orc-quick` does, and it asks which agent to use. It refuses
+  while a dispatch is in flight.
+
+**6. The Behaviour tab**
+
+- The gate habit now proposes: one agent name written three ways now counts as
+  one answer.
+- `/orc-fast` reads its lane config first, so it records your answers.
+  `/orc-analyze` and `/orc-diy` do the same.
+- With `habits: off` you still see the Review quality and Gotchas tabs. Review
+  learning is always on.
+- The answer log shows the question, not only its id.
+- A run is dated from its file name. Rows say `orc-quick`, not `quick`. An empty
+  row is not shown.
+- At the end of a run, `orc trace write` names a question whose key you set in
+  your config when the lane wrote no answer for it.
+
+**7. Clear old logs**
+
+- New command **`orc clear logs`**. It shows the old traces and finished run
+  folders that it can delete, and why it keeps the rest. **`orc clear logs
+  --apply`** deletes them.
+- New key **`log_retention_days`**: 30 · 60 · 90 · 120 · 240 · 360 days
+  (default 90). The cutoff is never shorter than `aftermath_window_days`.
+- It never deletes your data, a waiting run, the active trace, a file younger
+  than 6 hours, or a trace with a habit answer that is younger than 180 days.
+- `orc stats` keeps the totals of a deleted run in `.claude/orc/logs-rollup.json`
+  and says "includes N pruned runs".
+- **The promise "log_dir is never deleted automatically" changes.** It is still
+  true by default. New key **`log_retention_auto`** (default `off`): `on` runs
+  the delete after a lane's last trace packet, at most once per 24 hours.
+- `orc ui` ▸ Maintenance has a **Clear old logs** row with a full preview.
+
+**8. The status line timer**
+
+- New key **`statusline_refresh`**: `off` · `1` · `2` · `3` · `5` · `10` seconds
+  (3 is new). It writes `statusLine.refreshInterval` in `settings.json`, the same
+  as `orc statusline refresh`, and `orc config list` reads it from there.
+- **The floor is 1 second.** Claude Code gives no timer below 1 second. A value
+  below 1 is refused, and the message names the nearest value. In `orc ui` ▸ CLI
+  Hook Interface, 0.2 · 0.5 · 0.7 are disabled.
+- With a timer, a pet moves one step for each redraw. `usage.json` is written
+  only when the numbers change.
+- `orc doctor` tells you when the value is below the floor, when a moving part
+  has no timer, and when the timer is on the sub-agent board.
+
+**Defects found in the live evals, and fixed**
+
+- **D1:** `/orc-fast` refused to record review observations. Every lane that
+  runs a review now records them.
+- **D2:** a free-text `FINDING` line (`FINDING 9 findings — P0×2 …`) was
+  accepted. The CLI now checks the count head (`FINDING p0= p1= p2= p3=`).
+- **D3:** a `REVIEW-WHICH` line was written with no project rule and no name.
+  The CLI now checks the format, and refuses it when `orc review policy` says
+  "orc".
+- **D4:** the question "which review" was asked with no project rule. It is now
+  refused by name.
+- **D5:** a `FINDING-OUTCOME` line used its own category names. The categories
+  are now checked against the closed set of the review return.
+- **D6:** an `/orc` run skipped review and verify for a small change. At the
+  end, `orc trace write` now names the skipped phase. `/orc` always runs both.
+- **D7:** an `/orc-quick` run wrote its trace lines by hand. No CLI check and no
+  end-of-run reminder ran, and the lane then said the findings were recorded.
+  The session hook now stops the turn once when a trace has more narration lines
+  than its `.jsonl` twin, and names `orc trace write` and `orc gotcha observe`.
+- **D8:** an `/orc` run ignored the end-of-run reminder to record its review
+  outcomes. The session hook now stops the turn once when a finished run had a
+  review with findings and no observation names the run.
+
+**Live evals.** Five rounds ran `/orc-mini`, `/orc-fast`, `/orc-quick` and `/orc`
+in a sandbox (17 sessions, about 43 USD). The reviewer at low effort found every
+seeded defect that was still in the diff, habit capture and the review count
+passed, and D1–D8 were each found live, fixed, and checked again in a later
+round. The `/orc-fix` eval (E-F1) is still to do. The result
+files are in `eval/results/2.1.0/` (maintainer copy, not in the package).
+
+**What you have to do**
+
+| You have … | What happens |
+|---|---|
+| any install | Run `orc update`. It removes the three renamed agent files and the two deleted twins. |
+| a compiled `orc diy` flow | The status line shows `STALE→recompile`, and `/orc-diy` refuses. Run `orc diy compile`. |
+| `rubric_bands_override`, `fixed_executor` or `extra_fallback_agent` with an old executor | It works. Those executors still ship. |
+| a main session on Opus 4.8 or Sonnet | Scores 41–64 now run on the session model (before, from 65). The tier line says so. |
+| a config or old traces that name `claude-sonnet-5` | They still work and still price. |
+| old traces that name the old reviewer | `orc stats` and `/orc-retro` still read them. |
+| a script that names `orc-reviewer-opus-5-med` | It breaks. Change it to `orc-reviewer-opus-5-low`. |
+| a script that observes with `author: orc` and no `run` | It exits 2 and names `run`. Add `run`. |
+| a 2.0.4 CLI on the same project | It reads the new observation fields. If it writes the same observation again, it drops `introduced_by` for that one row. |
+| Review quality in the panel | The review count goes up, because traces count now. Acceptance does not change. |
+| `refreshInterval` 1–60 in `settings.json` | `orc update` keeps it. |
+| habits off | `orc lane config --json --no-probes` is byte-identical. |
+
+New files `review-scope.jsonl` and `logs-rollup.json` are your data: they are not
+in the install manifest, they survive `orc update`, `--prune` and `doctor --fix`,
+and `orc clear logs` never deletes them.
+
+---
+
 ### v2.0.4 — design the status line to the last cell _(2026-09-30)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

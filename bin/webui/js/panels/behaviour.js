@@ -19,6 +19,8 @@
    and every static request here needs the per-launch session token. */
 
 const BH_TABS = ["habits", "rhythm", "gotchas", "quality", "log"];
+// v2.1.0 (A13): the tabs that stay under `habits: off` — review learning is always on.
+const BH_TABS_OFF = ["quality", "gotchas"];
 const BH_WINDOWS = ["30d", "90d", "all"];
 const BH_SVG = "http://www.w3.org/2000/svg";
 let bhTab = "habits";
@@ -90,22 +92,31 @@ async function bhLoad(body, right, focusId) {
   }
   const d = hab.data || {};
   right.replaceChildren(bhModeSwitch(d, body, right));
-  // `habits: off` (exit 3) — ONE card instead of the tabs.
+  // `habits: off` (exit 3) — the off card INSTEAD of the habit tabs. v2.1.0 (A13):
+  // review learning is ALWAYS on, so Review quality and Gotchas stay below it.
   if (d.ok === false && Array.isArray(d.on)) {
+    const [gotchas, quality, cands] = await Promise.all([
+      read("/api/gotchas").catch(() => ({ data: null })),
+      read("/api/gotcha/quality?window=" + encodeURIComponent(bhWindow)).catch(() => ({ data: null })),
+      read("/api/gotcha/candidates").catch(() => ({ data: null })),
+    ]);
+    const tabs = bhTabs({ d: {}, tabs: BH_TABS_OFF, gotchas: gotchas.data, quality: quality.data, cands: cands.data, body, right });
     body.classList.toggle("bh-quiet", bhPainted);
-    body.replaceChildren(bhOffCard(d), bhFooter(null, true));
+    body.replaceChildren(bhOffCard(d), tabs.bar, tabs.panel, bhFooter(null, true));
+    tabs.fill();
     bhPainted = true;
     return;
   }
   right.append(bhWindowSwitch(body, right));
-  const [log, states, gotchas, quality, cands] = await Promise.all([
+  const [log, states, gotchas, quality, cands, points] = await Promise.all([
     read("/api/habits/log").catch(() => ({ data: null })),
     read("/api/habits/states").catch(() => ({ data: null })),
     read("/api/gotchas").catch(() => ({ data: null })),
     read("/api/gotcha/quality?window=" + encodeURIComponent(bhWindow)).catch(() => ({ data: null })),
     read("/api/gotcha/candidates").catch(() => ({ data: null })),
+    read("/api/habits/points").catch(() => ({ data: null })),
   ]);
-  const ctx = { d, log: log.data, states: states.data, gotchas: gotchas.data, quality: quality.data, cands: cands.data, body, right };
+  const ctx = { d, log: log.data, states: states.data, gotchas: gotchas.data, quality: quality.data, cands: cands.data, points: points.data, body, right };
   body.classList.toggle("bh-quiet", bhPainted);
   const out = frag();
   out.append(bhHero(d));
@@ -285,8 +296,9 @@ function bhTabs(ctx) {
     gotchas: g ? g.rows.length : null,
     log: ctx.log && ctx.log.events ? ctx.log.events.length : null,
   };
+  const TABS = ctx.tabs || BH_TABS;
   const btns = [];
-  for (const id of BH_TABS) {
+  for (const id of TABS) {
     const b = el("button", "bh-tab");
     b.type = "button";
     b.id = "bh-tab-" + id;
@@ -300,12 +312,12 @@ function bhTabs(ctx) {
     }
     b.addEventListener("click", () => select(id, false));
     b.addEventListener("keydown", (e) => {
-      const i = BH_TABS.indexOf(id);
+      const i = TABS.indexOf(id);
       const to =
-        e.key === "ArrowRight" ? BH_TABS[(i + 1) % BH_TABS.length]
-        : e.key === "ArrowLeft" ? BH_TABS[(i - 1 + BH_TABS.length) % BH_TABS.length]
-        : e.key === "Home" ? BH_TABS[0]
-        : e.key === "End" ? BH_TABS[BH_TABS.length - 1]
+        e.key === "ArrowRight" ? TABS[(i + 1) % TABS.length]
+        : e.key === "ArrowLeft" ? TABS[(i - 1 + TABS.length) % TABS.length]
+        : e.key === "Home" ? TABS[0]
+        : e.key === "End" ? TABS[TABS.length - 1]
         : null;
       if (!to) return;
       e.preventDefault();
@@ -335,7 +347,7 @@ function bhTabs(ctx) {
     ({ habits: bhHabits, rhythm: bhRhythm, gotchas: bhGotchas, quality: bhQuality, log: bhLog })[id](panel, ctx);
     requestAnimationFrame(moveInk);
   }
-  return { bar, panel, fill: () => select(BH_TABS.includes(bhTab) ? bhTab : "habits", false) };
+  return { bar, panel, fill: () => select(TABS.includes(bhTab) ? bhTab : TABS[0], false) };
 }
 
 // ── Habits ──────────────────────────────────────────────────────────────────
@@ -866,6 +878,8 @@ function bhQuality(slot, ctx) {
   const floor = (c) => c.append(el("div", "bh-floor", Q.floor_line || ""));
   const g = el("div", "grid grid-2");
   const cc = card(t("behaviour.q.cats"), el("span", "note", tn(Q.reviews || 0, "behaviour.q.reviews")));
+  // v2.1.0 — a review the project asked for is counted on its own line (the CLI sums it).
+  if (Q.project_reviews) cc.append(el("div", "note", t("behaviour.q.projectReviews").replace("{n}", String(Q.project_reviews))));
   if (Q.below_floor) floor(cc);
   else {
     const bands = Q.bands || {};
@@ -948,19 +962,70 @@ function bhQuality(slot, ctx) {
   }
   g2.append(sp);
   slot.append(g2);
+  bhFixes(slot, Q);
+}
+
+// v2.1.0 — "Fixes after review" (`orc fix record`). Every number is the CLI's:
+// the count, each cause's `n` and its bar `share`, and the misses list.
+function bhFixes(slot, Q) {
+  const F = Q.fixes;
+  if (!F) return;
+  const M = Q.misses || { total: 0, list: [] };
+  const g = el("div", "grid grid-2");
+  const fc = card(t("behaviour.q.fixes"), el("span", "note", tn(F.total || 0, "behaviour.q.fixCount")));
+  if (!F.total) fc.append(empty(t("behaviour.q.fixesNone")));
+  else {
+    (F.causes || []).forEach((c, i) => {
+      const row = el("div", "bh-cat");
+      const bar = el("div", "bh-cat-bar");
+      const s = el("span", "bh-grow-x");
+      s.style.width = Math.round((c.share || 0) * 100) + "%";
+      s.dataset.band = c.id === "other" ? "warn" : "bad";
+      s.style.animationDelay = i * 90 + "ms";
+      bar.append(s);
+      const label = { sonar: t("behaviour.q.cause.sonar"), orc: t("behaviour.q.cause.orc"), ai: t("behaviour.q.cause.ai"), other: t("behaviour.q.cause.other") }[c.id] || c.id;
+      row.append(el("div", "bh-cat-name", label), bar, el("div", "bh-cat-num mono", String(c.n)));
+      fc.append(row);
+    });
+    fc.append(el("div", "note", t("behaviour.q.fixesNote")));
+  }
+  g.append(fc);
+  const mc = card(t("behaviour.q.misses"), el("span", "note", String(M.total || 0)));
+  if (!(M.list || []).length) mc.append(empty(t("behaviour.q.missesNone")));
+  for (const m of M.list || []) {
+    const row = el("div", "bh-lesson");
+    row.append(el("div", "bh-lesson-id mono", m.obs || ""));
+    const mid = el("div");
+    mid.append(el("div", "bh-lesson-rule mono", `${m.path || "—"}${m.lines && m.lines.length ? ":" + m.lines.join("-") : ""}`));
+    const sub = el("div", "bh-lesson-sub");
+    if (m.rule) sub.append(el("span", "mono", m.rule));
+    if (m.category) sub.append(el("span", "mono", m.category));
+    if (m.missed_by) sub.append(el("span", null, t("behaviour.q.missedBy", { run: m.missed_by })));
+    mid.append(sub);
+    row.append(mid);
+    mc.append(row);
+  }
+  g.append(mc);
+  slot.append(g);
 }
 
 // ── Answer log ──────────────────────────────────────────────────────────────
 function bhLog(slot, ctx) {
   const c = card(t("behaviour.log.title"), el("span", "note", t("behaviour.log.from")));
   const events = (ctx.log && ctx.log.events) || [];
+  const titles = {};
+  for (const p of (ctx.points && ctx.points.points) || []) titles[p.qid] = p.title;
   if (!events.length) c.append(empty(t("behaviour.emptyTitle"), t("behaviour.emptyHint")));
   const list = el("div", "bh-log");
   events.forEach((e, i) => {
     const row = el("div", "bh-log-row");
     row.style.animationDelay = Math.min(i, 12) * 70 + "ms";
     const q = el("span", "bh-log-q");
-    q.append(el("span", "mono", e.qid), document.createTextNode(" → "), el("b", null, e.chose));
+    // v2.1.0 (A12): the question's title from the registry, the id kept as a hint.
+    const title = titles[e.qid];
+    const qn = el("span", title ? null : "mono", title || e.qid);
+    if (title) qn.title = e.qid;
+    q.append(qn, document.createTextNode(" → "), el("b", null, e.chose));
     const by = chip(e.by);
     by.dataset.by = e.by;
     row.append(el("span", "t mono", new Date(e.at).toLocaleString()), el("span", "ln mono", e.lane), q, by);

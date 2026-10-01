@@ -34,8 +34,9 @@ const OUT_DIR = path.join(ROOT, "templates", "agents");
 // together). `effort: null` = a model with NO effort ladder (haiku): the
 // generator omits the `effort:` frontmatter line entirely.
 //
-// v1.0.0 W4 — the table is SIX bands, not eight, and the `opus5_only` ladder is
-// TWO, not three. Four of these agents are named by NO default row:
+// v1.0.0 W4 — the table was SIX bands, not eight, and the `opus5_only` ladder is
+// TWO, not three. v2.1.0 made the table FIVE bands (Sonnet 5 low/med/high, then
+// Opus 5.5 low/med). Seven of these agents are named by NO default row:
 // names them, and they ship anyway (D14). They stay reachable through
 // `rubric_bands_override`, `orc diy` `fixed_executor` and `extra_fallback_agent`,
 // and deleting a generated file that no row happens to name today would be a
@@ -44,13 +45,15 @@ const OUT_DIR = path.join(ROOT, "templates", "agents");
 // lies is worse than one that admits it is unreachable by default.
 const VARIANTS = [
   { name: "orc-executor-opus-5-med",     model: "claude-opus-5-5",     effort: "medium", band: "highest-complexity [90,100]" },
-  { name: "orc-executor-opus-5-low",     model: "claude-opus-5-5",     effort: "low",    band: "upper-complexity [65,90)" },
-  { name: "orc-executor-sonnet-5-high",  model: "claude-sonnet-5",  effort: "high",   band: "mid-complexity [55,65)" },
-  { name: "orc-executor-sonnet-4-6-high", model: "claude-sonnet-4-6", effort: "high",  band: "low-mid-complexity [40,55)" },
-  { name: "orc-executor-sonnet-4-6-med", model: "claude-sonnet-4-6", effort: "medium", band: "low-complexity [30,40)" },
-  { name: "orc-executor-haiku-4-5",      model: "claude-haiku-4-5",  effort: null,     band: "lowest-complexity [0,30)" },
-  // NAMED BY NO BAND since v1.0.0 W4 (D14) — kept on disk, dispatched only when a
-  // user names one explicitly.
+  { name: "orc-executor-opus-5-low",     model: "claude-opus-5-5",     effort: "low",    band: "upper-complexity [41,90)" },
+  { name: "orc-executor-sonnet-5-high",  model: "claude-sonnet-5-5",  effort: "high",   band: "mid-complexity [31,41)" },
+  { name: "orc-executor-sonnet-5-med",   model: "claude-sonnet-5-5",  effort: "medium", band: "low-complexity [21,31)" },
+  { name: "orc-executor-sonnet-5-low",   model: "claude-sonnet-5-5",  effort: "low",    band: "lowest-complexity [0,21)" },
+  // NAMED BY NO BAND since v1.0.0 W4 / v2.1.0 (D14) — kept on disk, dispatched
+  // only when a user names one explicitly.
+  { name: "orc-executor-sonnet-4-6-high", model: "claude-sonnet-4-6", effort: "high",  band: "none (opt-in only, see MODEL-MAPPING.md)" },
+  { name: "orc-executor-sonnet-4-6-med", model: "claude-sonnet-4-6", effort: "medium", band: "none (opt-in only, see MODEL-MAPPING.md)" },
+  { name: "orc-executor-haiku-4-5",      model: "claude-haiku-4-5",  effort: null,     band: "none (opt-in only, see MODEL-MAPPING.md)" },
   { name: "orc-executor-opus-5-high",    model: "claude-opus-5-5",    effort: "high",   band: "none (opt-in only, see MODEL-MAPPING.md)" },
   { name: "orc-executor-opus-4-8-high",  model: "claude-opus-4-8",  effort: "high",   band: "none (opt-in only, see MODEL-MAPPING.md)" },
   { name: "orc-executor-opus-4-7-high",  model: "claude-opus-4-7",  effort: "high",   band: "none (opt-in only, see MODEL-MAPPING.md)" },
@@ -66,20 +69,20 @@ const VARIANTS = [
 const TWIN_DIR = path.join(ROOT, "agents-src", "twins");
 const TWINS = [
   { family: "analyze-mini", variants: [
-    { name: "orc-analyze-mini-sonnet-5-high", model: "claude-sonnet-5", effort: "high", who: "Sonnet 5, high",
-      desc: "ORC mini System Analyst — claude-sonnet-5, high effort. Dispatched by /orc-mini and /orc-analyze-mini at analysis: single pass, no deep mode, no scouts." },
+    { name: "orc-analyze-mini-sonnet-5-high", model: "claude-sonnet-5-5", effort: "high", who: "Sonnet 5, high",
+      desc: "ORC mini System Analyst — claude-sonnet-5-5, high effort. Dispatched by /orc-mini and /orc-analyze-mini at analysis: single pass, no deep mode, no scouts." },
     { name: "orc-analyze-mini-opus-5-med", model: "claude-opus-5-5", effort: "medium", who: "Opus 5.5, medium",
       desc: "ORC mini System Analyst — claude-opus-5-5, medium effort. Dispatched by /orc-mini and /orc-analyze-mini, instead of orc-analyze-mini-sonnet-5-high when `opus5_only: true`." },
   ] },
   { family: "planner-mini", variants: [
-    { name: "orc-planner-mini-sonnet-5-high", model: "claude-sonnet-5", effort: "high", who: "Sonnet 5, high",
-      desc: "ORC mini Requirement Planner — claude-sonnet-5, high effort. Dispatched by /orc-mini at planning." },
+    { name: "orc-planner-mini-sonnet-5-high", model: "claude-sonnet-5-5", effort: "high", who: "Sonnet 5, high",
+      desc: "ORC mini Requirement Planner — claude-sonnet-5-5, high effort. Dispatched by /orc-mini at planning." },
     { name: "orc-planner-mini-opus-5-med", model: "claude-opus-5-5", effort: "medium", who: "Opus 5.5, medium",
       desc: "ORC mini Requirement Planner — claude-opus-5-5, medium effort. Dispatched by /orc-mini at planning, instead of orc-planner-mini-sonnet-5-high when `opus5_only: true`." },
   ] },
   { family: "pattern-codifier", variants: [
-    { name: "orc-pattern-codifier-sonnet-5-high", model: "claude-sonnet-5", effort: "high",
-      desc: "ORC Pattern Codifier — claude-sonnet-5, high effort. Dispatched by orc-pattern (lazy /orc miss, eager orc-wiki, or manual /orc-pattern) for ONE language." },
+    { name: "orc-pattern-codifier-sonnet-5-high", model: "claude-sonnet-5-5", effort: "high",
+      desc: "ORC Pattern Codifier — claude-sonnet-5-5, high effort. Dispatched by orc-pattern (lazy /orc miss, eager orc-wiki, or manual /orc-pattern) for ONE language." },
     { name: "orc-pattern-codifier-opus-5-med", model: "claude-opus-5-5", effort: "medium",
       desc: "ORC Pattern Codifier — claude-opus-5-5, medium effort. Dispatched by orc-pattern, instead of orc-pattern-codifier-sonnet-5-high when `opus5_only: true`." },
   ] },
@@ -90,8 +93,8 @@ const TWINS = [
       desc: "ORC Recon — claude-opus-5-5, low effort. Dispatched by /orc-quick at the dispatch gate, for a WIDE or SUBTLE read-only question. It never edits." },
   ] },
   { family: "retro", variants: [
-    { name: "orc-retro-sonnet-5-high", model: "claude-sonnet-5", effort: "high", who: "Sonnet 5, high",
-      desc: "ORC Retro miner — claude-sonnet-5, high effort. Dispatched by /orc-retro to mine the behavior traces. Read-only, report-only." },
+    { name: "orc-retro-sonnet-5-high", model: "claude-sonnet-5-5", effort: "high", who: "Sonnet 5, high",
+      desc: "ORC Retro miner — claude-sonnet-5-5, high effort. Dispatched by /orc-retro to mine the behavior traces. Read-only, report-only." },
     { name: "orc-retro-opus-5-med", model: "claude-opus-5-5", effort: "medium", who: "Opus 5.5, medium",
       desc: "ORC Retro miner — claude-opus-5-5, medium effort. Dispatched by /orc-retro, instead of orc-retro-sonnet-5-high when `opus5_only: true`. Read-only." },
   ] },
@@ -102,16 +105,12 @@ const TWINS = [
       desc: "ORC Code Scout — claude-opus-5-5, low effort. Dispatched by orc in the analyst's DEEP mode, instead of orc-scout-sonnet-4-6-high when `opus5_only: true`." },
   ] },
   { family: "claude-writer", variants: [
-    { name: "orc-claude-writer-opus-4-8-high", model: "claude-opus-4-8", effort: "high", who: "Opus 4.8, high",
-      desc: "ORC CLAUDE.md Writer — claude-opus-4-8, high effort. Dispatched by /orc-claude to create, update or refresh the repo-root CLAUDE.md." },
-    { name: "orc-claude-writer-opus-5-med", model: "claude-opus-5-5", effort: "medium", who: "Opus 5.5, medium",
-      desc: "ORC CLAUDE.md Writer — claude-opus-5-5, medium effort. Dispatched by /orc-claude, instead of orc-claude-writer-opus-4-8-high when `opus5_only: true`." },
+    { name: "orc-claude-writer-opus-5-low", model: "claude-opus-5-5", effort: "low", who: "Opus 5.5, low",
+      desc: "ORC CLAUDE.md Writer — claude-opus-5-5, low effort. Dispatched by /orc-claude to create, update or refresh the repo-root CLAUDE.md." },
   ] },
   { family: "wiki-scanner", variants: [
-    { name: "orc-wiki-scanner-opus-4-8-high", model: "claude-opus-4-8", effort: "high",
-      desc: "ORC Wiki Scanner — claude-opus-4-8, high effort. Dispatched by orc-wiki per scan-task (DEEP tier), ONE coverage area each." },
-    { name: "orc-wiki-scanner-opus-5-med", model: "claude-opus-5-5", effort: "medium",
-      desc: "ORC Wiki Scanner — claude-opus-5-5, medium effort. Dispatched by orc-wiki per scan-task, for BOTH tiers when `opus5_only: true`." },
+    { name: "orc-wiki-scanner-opus-5-low", model: "claude-opus-5-5", effort: "low",
+      desc: "ORC Wiki Scanner — claude-opus-5-5, low effort. Dispatched by orc-wiki per scan-task (DEEP tier), ONE coverage area each." },
   ] },
 ];
 

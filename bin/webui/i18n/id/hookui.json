@@ -285,5 +285,6 @@
   "hookui.animSetOff": "Pengatur waktu gambar ulang mati.",
   "hookui.animFailed": "Pengatur waktu tidak berubah.",
   "hookui.animCost": "Biaya: dengan pengatur waktu hidup, baris status berjalan setiap N detik, juga saat Anda tidak melakukan apa pun. Setiap proses menjalankan node.",
+  "hookui.animFloor": "Di bawah batas Claude Code: Claude Code menjalankan baris status paling sering sekali per detik (refreshInterval minimum: 1). Nilai yang lebih rendah tidak memulai pengatur waktu.",
   "hookui.animNeeds": "Tata letak ini punya bagian yang bergerak. Bagian itu bergerak hanya saat baris status digambar ulang. Atur pengatur waktu agar bergerak."
 }

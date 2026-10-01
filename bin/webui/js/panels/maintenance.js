@@ -63,6 +63,10 @@ async function renderMaintenance(body) {
       versionInfo().then(paint).catch(() => status.replaceChildren(el("span", "note", t("maintenance.couldNotCheck"))));
     }
 
+    // v2.1.0 W7 — the clear-logs row says WHICH age it deletes at and when the
+    // automatic sweep last ran. Every number is the CLI's (`clear logs --summary`).
+    if (a.id === "clear-logs" && a.status) left.append(clearLogsStatus(a.status));
+
     if (a.advanced) left.append(el("div", "note", t("maintenance.globalNote")));
 
     const btn = el("button", "btn btn-sm", t("maintenance.preview"));
@@ -84,6 +88,86 @@ async function renderMaintenance(body) {
   out.append(job);
   body.replaceChildren(out);
   refreshJob();
+}
+
+// "Older than 90 days (Settings ▸ log retention). Last automatic sweep: …" —
+// the day value links to the Settings row that sets it.
+function clearLogsStatus(s) {
+  const box = el("div", "note");
+  const [pre, post] = t("maintenance.clearLogs.olderThan", { days: "\u0000" }).split("\u0000");
+  const link = el("a", null, t("maintenance.clearLogs.days", { n: s.older_than_days }));
+  link.href = "#/settings?key=log_retention_days";
+  box.append(document.createTextNode(pre || ""), link, document.createTextNode(post || ""));
+  box.append(document.createTextNode(" "));
+  box.append(
+    document.createTextNode(
+      s.last_sweep
+        ? t("maintenance.clearLogs.lastSweep", { date: s.last_sweep.date, files: s.last_sweep.files })
+        : s.auto === "on"
+          ? t("maintenance.clearLogs.noSweepYet")
+          : t("maintenance.clearLogs.autoOff")
+    )
+  );
+  if (s.pruned_runs) box.append(document.createTextNode(" " + t("maintenance.clearLogs.pruned", { n: s.pruned_runs })));
+  return box;
+}
+
+// The third preview shape (v2.1.0 W7): `orc clear logs --json`. A table of
+// what it would delete, the kept list with its reasons (collapsed), the totals
+// and the old default folder. Rendered as the CLI wrote it.
+function clearLogsPreview(b, pv) {
+  b.append(
+    kvList([
+      [t("maintenance.clearLogs.cutoff"), `${pv.cutoff} (${t("maintenance.clearLogs.days", { n: pv.effective_days })})`],
+      ["log_dir", pv.log_dir],
+      ["run_dir", pv.run_dir],
+      [t("maintenance.clearLogs.totals"), t("maintenance.clearLogs.totalsValue", { units: (pv.totals || {}).units || 0, files: (pv.totals || {}).files || 0, bytes: (pv.totals || {}).bytes || 0 })],
+    ])
+  );
+  // The CLI's own sentences (cutoff moved, the old default folder) — shown as written.
+  for (const n of pv.notes || []) b.append(el("div", "note", n));
+  const del = pv.delete || [];
+  if (!del.length) b.append(el("div", "note", t("maintenance.clearLogs.none")));
+  else {
+    b.append(el("div", "note", t("maintenance.wouldDelete", { n: (pv.totals || {}).files || 0 })));
+    const tbl = el("table", "md-table");
+    const hr = el("tr");
+    for (const h of [t("maintenance.clearLogs.colPath"), t("maintenance.clearLogs.colKind"), t("maintenance.clearLogs.colLast"), t("maintenance.clearLogs.colBytes")]) hr.append(el("th", null, h));
+    tbl.append(hr);
+    for (const d of del) {
+      const tr = el("tr");
+      const p = el("td");
+      // EVERY file is named — a unit is several files, and a count is not consent.
+      const fl = el("div", "file-list");
+      for (const f of d.files || [d.path]) fl.append(el("div", null, f));
+      if (d.ref) fl.append(el("div", null, "git ref " + d.ref));
+      p.append(fl);
+      tr.append(p, el("td", null, d.kind), el("td", null, d.last_activity), el("td", null, String(d.bytes)));
+      tbl.append(tr);
+    }
+    b.append(tbl);
+  }
+  const keep = pv.keep || [];
+  if (keep.length) {
+    const det = el("details");
+    det.append(el("summary", null, t("maintenance.clearLogs.kept", { n: keep.length })));
+    const fl = el("div", "file-list");
+    for (const k of keep) fl.append(el("div", null, `${k.path} — ${k.reason}`));
+    det.append(fl);
+    b.append(det);
+  }
+  if (pv.default_dir)
+    b.append(
+      el(
+        "div",
+        "note",
+        t(pv.default_dir.included ? "maintenance.clearLogs.defaultIncluded" : "maintenance.clearLogs.defaultDir", {
+          path: pv.default_dir.path,
+          files: pv.default_dir.files,
+          bytes: pv.default_dir.bytes,
+        })
+      )
+    );
 }
 
 async function previewAction(action, body) {
@@ -115,7 +199,15 @@ async function previewAction(action, body) {
     const warn = el("div", "banner banner-bad");
     const inner = el("div");
     inner.append(el("strong", null, t("maintenance.waitingRuns", { n: d.waiting_runs.length })));
-    inner.append(el("div", null, t("maintenance.waitingBody", { slugs: d.waiting_runs.join(", ") })));
+    inner.append(
+      el(
+        "div",
+        null,
+        action === "clear-logs"
+          ? t("maintenance.clearLogs.waitingBody", { slugs: d.waiting_runs.join(", ") })
+          : t("maintenance.waitingBody", { slugs: d.waiting_runs.join(", ") })
+      )
+    );
     const lbl = el("label", "note");
     const cb = el("input");
     cb.type = "checkbox";
@@ -138,7 +230,9 @@ async function previewAction(action, body) {
   }
 
   const pv = d.preview || {};
-  if (action === "upgrade") {
+  if (action === "clear-logs") {
+    clearLogsPreview(b, pv);
+  } else if (action === "upgrade") {
     b.append(
       kvList([
         [t("maintenance.installed"), pv.version],
@@ -196,8 +290,15 @@ async function previewAction(action, body) {
       onClick: () => toast(t("maintenance.checkOnlyDone"), "ok"),
     });
   actions.push({
-    label: action === "prune" ? t("maintenance.applyPrune") : action === "upgrade" ? t("maintenance.applyUpgrade") : t("maintenance.apply"),
-    cls: action === "prune" || action === "upgrade" ? "btn-danger" : "btn-primary",
+    label:
+      action === "prune"
+        ? t("maintenance.applyPrune")
+        : action === "upgrade"
+          ? t("maintenance.applyUpgrade")
+          : action === "clear-logs"
+            ? t("maintenance.clearLogs.apply")
+            : t("maintenance.apply"),
+    cls: action === "prune" || action === "upgrade" || d.danger ? "btn-danger" : "btn-primary",
     id: "apply-btn",
     disabled: !ackWaiting,
     onClick: async (close) => {

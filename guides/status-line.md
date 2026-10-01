@@ -247,6 +247,31 @@ orc statusline presets | apply <name> | reset | compile
 `explain` is the one worth knowing about: after a theme change it tells you
 which of your own settings are still yours.
 
+### The refresh timer (moving parts)
+
+Claude Code redraws the status line when something happens in the session. While
+the session is idle, nothing redraws it, so a pet or a clock stops. The setting
+`statusLine.refreshInterval` adds a timer that redraws it while idle.
+
+```
+orc statusline refresh 3             redraw every 3 seconds
+orc statusline refresh off           remove the timer
+orc config set statusline_refresh 3  the same write, from the config editor
+```
+
+- The values are `off`, `1`, `2`, `3`, `5` and `10` seconds (`3` is new in v2.1.0).
+- **The floor is 1 second.** Claude Code gives no timer below 1 second (a test
+  with 0.25 s gave no redraw). So ORC refuses `0.2`, `0.5` and `0.7`. The message
+  names the floor and the nearest value (`1`), and the file stays as it was. In
+  `orc ui` ▸ CLI Hook Interface, the 0.2 · 0.5 · 0.7 buttons are disabled and
+  their tooltip gives the reason.
+- With a timer, a pet moves one step for each redraw. Without a timer, it moves
+  with the clock.
+- `orc doctor` tells you when a value is below the floor, when your layout has a
+  moving part and no timer, and when the timer is on the sub-agent board.
+- `statusline_refresh` is not stored in `orc.config.yaml`. It is always read from
+  `settings.json`, so the two can never disagree.
+
 Turn the whole thing on and off with:
 
 ```
@@ -265,7 +290,7 @@ row too. Open the same panel and switch to **One row per agent**.
 
 ```
 ● orc-executor-opus-5-low   O5/low   84K   ███▎░░░░  42%   for 17m
-✓ orc-reviewer-opus-5-med   O5/med   31K   █▌░░░░░░  16%   for  4m
+✓ orc-reviewer-opus-5-low   O5/med   31K   █▌░░░░░░  16%   for  4m
 ```
 
 Everything above still applies — the same shapes, the same colours, the same

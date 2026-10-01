@@ -24,6 +24,9 @@ const stats = {
   downgrades: 3,
   unfinished: 2,
   unknown_lane: 1,
+  // v2.1.0 W7 — runs `orc clear logs --apply` pruned; their counts live in
+  // logs-rollup.json and are already inside every total above.
+  pruned_runs: 17,
   // v1.8.2 W4b — the code-graph row. `paid` is exact; the avoided pair is an
   // ESTIMATE and always a RANGE, which is why the panel never shows one number.
   graph: { calls: 41, runs: 6, paid: 4912, avoided_low: 18900, avoided_high: 71400, estimate: true },
@@ -69,9 +72,9 @@ const budgetForecast = {
   // A task at CONTEXT RISK — the state that cannot be designed on a small plan.
   context_risk: [{ task: "T12", agent: "orc-executor-opus-5-med", peak: 189000, window: 200000, pct: 95 }],
   bands: [
-    { band: "[0,30)", agent: "orc-executor-haiku-4-5", count: 2, tasks: ["T01", "T02"], samples: 9, p50: { input: 1200, cache_write: 6400, cache_read: 11800, output: 900 }, p90: { input: 1800, cache_write: 9200, cache_read: 17000, output: 1400 } },
-    { band: "[40,55)", agent: "orc-executor-sonnet-4-6-high", count: 3, tasks: ["T03", "T05", "T07"], samples: 12, p50: { input: 7800, cache_write: 52100, cache_read: 104000, output: 8400 }, p90: { input: 11000, cache_write: 75000, cache_read: 150000, output: 12000 } },
-    { band: "[65,90)", agent: "orc-executor-opus-5-low", count: 1, tasks: ["T04"], samples: 6, p50: { input: 5700, cache_write: 40200, cache_read: 81000, output: 9300 }, p90: { input: 8100, cache_write: 58000, cache_read: 117000, output: 13400 } },
+    { band: "[0,21)", agent: "orc-executor-sonnet-5-low", count: 2, tasks: ["T01", "T02"], samples: 9, p50: { input: 1200, cache_write: 6400, cache_read: 11800, output: 900 }, p90: { input: 1800, cache_write: 9200, cache_read: 17000, output: 1400 } },
+    { band: "[31,41)", agent: "orc-executor-sonnet-5-high", count: 3, tasks: ["T03", "T05", "T07"], samples: 12, p50: { input: 7800, cache_write: 52100, cache_read: 104000, output: 8400 }, p90: { input: 11000, cache_write: 75000, cache_read: 150000, output: 12000 } },
+    { band: "[41,90)", agent: "orc-executor-opus-5-low", count: 1, tasks: ["T04"], samples: 6, p50: { input: 5700, cache_write: 40200, cache_read: 81000, output: 9300 }, p90: { input: 8100, cache_write: 58000, cache_read: 117000, output: 13400 } },
     // A band with insufficient history — the low-confidence warning is not
     // optional chrome, so the fixture has to be able to trigger it.
     { band: "[90,100]", agent: "orc-executor-opus-5-med", count: 1, tasks: ["T12"], samples: 2, p50: { input: 9100, cache_write: 61000, cache_read: 128000, output: 17000 }, p90: { input: 14000, cache_write: 94000, cache_read: 198000, output: 26000 } },
@@ -107,9 +110,9 @@ const budgetRates = {
   dispatches_joined: 96,
   price_table_as_of: "2026-08-01",
   bands: {
-    "[0,30)": { samples: 9, p50: { input: 1200, cache_write: 6400, cache_read: 11800, output: 900 }, p90: { input: 1800, cache_write: 9200, cache_read: 17000, output: 1400 }, peak_p50: 24000, peak_p90: 38000 },
-    "[40,55)": { samples: 12, p50: { input: 7800, cache_write: 52100, cache_read: 104000, output: 8400 }, p90: { input: 11000, cache_write: 75000, cache_read: 150000, output: 12000 }, peak_p50: 78000, peak_p90: 121000 },
-    "[70,80)": { samples: 6, p50: { input: 5700, cache_write: 40200, cache_read: 81000, output: 9300 }, p90: { input: 8100, cache_write: 58000, cache_read: 117000, output: 13400 }, peak_p50: 96000, peak_p90: 142000 },
+    "[0,21)": { samples: 9, p50: { input: 1200, cache_write: 6400, cache_read: 11800, output: 900 }, p90: { input: 1800, cache_write: 9200, cache_read: 17000, output: 1400 }, peak_p50: 24000, peak_p90: 38000 },
+    "[31,41)": { samples: 12, p50: { input: 7800, cache_write: 52100, cache_read: 104000, output: 8400 }, p90: { input: 11000, cache_write: 75000, cache_read: 150000, output: 12000 }, peak_p50: 78000, peak_p90: 121000 },
+    "[41,90)": { samples: 6, p50: { input: 5700, cache_write: 40200, cache_read: 81000, output: 9300 }, p90: { input: 8100, cache_write: 58000, cache_read: 117000, output: 13400 }, peak_p50: 96000, peak_p90: 142000 },
     "[90,100]": { samples: 2, p50: { input: 9100, cache_write: 61000, cache_read: 128000, output: 17000 }, p90: { input: 14000, cache_write: 94000, cache_read: 198000, output: 26000 }, peak_p50: 151000, peak_p90: 189000 },
   },
   roles: {

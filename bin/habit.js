@@ -76,6 +76,13 @@ const ASK_POINTS = {
   "quick.q3.offer.review": { lanes: ["orc-quick"], phase: "q3", file: "orc-quick/SKILL.md", title: "Code review before commit", options: { "review-first": "review first", "commit-direct": "commit directly", stop: "stop" }, class: "suggest", careful: "review-first", key: null, ctx: ["kind", "branch"], why: "a review is a dispatch, so its gate is still asked — the habit only orders the offer" },
   "quick.q1.too-big": { lanes: ["orc-quick"], phase: "q1", file: "orc-quick/SKILL.md", title: "A request too big for quick", options: { mini: "move to /orc-mini", "keep-going": "keep going" }, class: "suggest", careful: null, key: null, ctx: [], why: "the habit only orders the offer" },
   "fast.f0.stale-wiki": { lanes: ["orc-fast"], phase: "f0", file: "orc-fast/SKILL.md", title: "A stale wiki at preflight", options: { refresh: "refresh the wiki", mini: "fall back to /orc-mini", continue: "continue" }, class: "suggest", careful: null, key: null, ctx: [], never_option: ["continue"], why: "a habit toward `continue` is never proposed (a stale wiki is a risk taken each time); otherwise the habit only orders the offer" },
+  // v2.1.0 — the project names its own review (`orc review policy`). Asked EVERY
+  // time a coding lane is about to ship changed code under `policy: project`; a
+  // habit may only ORDER the three options, and REVIEW-WHICH is always written.
+  "any.review.which": { lanes: ["orc", "orc-mini", "orc-fast", "orc-quick", "orc-diy"], phase: "review", file: "_shared/review-slice.md", title: "Which review — ORC or the project's own", options: { orc: "ORC review", project: "the project's review", skip: "skip review" }, class: "suggest", careful: null, key: null, ctx: [], why: "a CLAUDE.md rule only adds an option; the habit only orders the options and the question is asked every time" },
+  // v2.1.0 W6 — `/orc-fix` F1. What a fix fixes is a FACT about this change,
+  // and a fact is never a habit: observed and shown, never proposed.
+  "fix.f1.class": { lanes: ["orc-fix"], phase: "f1", file: "orc-fix/SKILL.md", title: "Confirm the class of a fix", options: { confirm: "confirm the class", change: "change the class", cancel: "cancel" }, class: "never", careful: null, key: null, ctx: [], why: "a fact is never a habit — the class of a fix is decided each time from evidence" },
   "any.analysis.depth": { lanes: ["orc", "orc-analyze"], phase: "analysis", file: ["orc/references/phases/intake.md", "orc-analyze/SKILL.md"], title: "Analysis depth", options: { standard: "standard", deep: "deep" }, class: "suggest", careful: null, key: null, ctx: [], why: "deep analysis needs consent every time, so the habit only orders the offer" },
 };
 
@@ -132,6 +139,58 @@ const QUESTION_RE = /(?:^|\s)QUESTION\s+count=(\d+)/;
 // ad-hoc model, so any plain id is an offered option; only `chose=` is counted.
 const AGENT_RE = /^[a-z0-9][a-z0-9.:-]*$/;
 
+// v2.1.0 (A1) — ONE agent, ONE spelling. A live gate wrote the same executor
+// three ways (`orc-executor-sonnet-4-6-med`, `sonnet-4-6-med`, `sonnet`), so a
+// 15-of-15 choice read as 5/7 and was never proposed. A short form is mapped to
+// the full SHIPPED agent name only when it can mean exactly one agent of the
+// gate's role (a family word like `sonnet` is settled by the `offered=` list);
+// anything else — an extra slot (`deepseek-v4-flash`), an ad-hoc model — stays
+// as written. Applied on READ (history counts) and at `orc trace write`.
+let SHIPPED_AGENTS = null;
+function shippedAgents() {
+  if (SHIPPED_AGENTS) return SHIPPED_AGENTS;
+  try {
+    SHIPPED_AGENTS = fs
+      .readdirSync(path.join(__dirname, "..", "templates", "agents"))
+      .filter((f) => /^orc-.*\.md$/.test(f))
+      .map((f) => f.replace(/\.md$/, ""));
+  } catch (_) {
+    SHIPPED_AGENTS = [];
+  }
+  return SHIPPED_AGENTS;
+}
+const GATE_ROLE = { "quick.q2.gate.code": "orc-executor-", "quick.q2.gate.recon": "orc-recon-" };
+function canonicalAgent(id, qid, offered) {
+  const all = shippedAgents();
+  if (!id || all.includes(id) || id === "other" || id === "none") return id;
+  const role = GATE_ROLE[qid] || "orc-";
+  const pool = all.filter((a) => a.startsWith(role));
+  const exact = pool.filter((a) => a.endsWith("-" + id));
+  if (exact.length === 1) return exact[0];
+  const family = pool.filter((a) => a.endsWith("-" + id) || a.includes("-" + id + "-"));
+  if (family.length === 1) return family[0];
+  if (family.length > 1 && Array.isArray(offered)) {
+    // The family word is settled only when the menu itself held ONE of them.
+    const named = new Set();
+    for (const o of offered) {
+      if (o === id) continue;
+      const strict = all.includes(o) ? o : (() => { const e = pool.filter((a) => a.endsWith("-" + o)); return e.length === 1 ? e[0] : null; })();
+      if (strict && family.includes(strict)) named.add(strict);
+    }
+    if (named.size === 1) return [...named][0];
+  }
+  return id;
+}
+function canonicalAsk(p) {
+  const pt = ASK_POINTS[p.qid];
+  if (!p.ok || !pt || pt.open !== "agent") return p;
+  const raw = p.offered;
+  const c = (x) => (x == null ? x : canonicalAgent(x, p.qid, raw));
+  const offered = [];
+  for (const o of raw.map(c)) if (!offered.includes(o)) offered.push(o);
+  return Object.assign({}, p, { offered, rec: c(p.rec), chose: c(p.chose), pre: p.pre === null ? null : c(p.pre) });
+}
+
 function pointFor(qid) {
   if (ASK_POINTS[qid]) return ASK_POINTS[qid];
   return { lanes: [], phase: null, file: null, title: qid, options: {}, class: "never", careful: null, key: null, ctx: [], why: "not in the registry — an unknown point is never proposed", unknown: true };
@@ -174,7 +233,7 @@ function parseAskLine(line) {
       ctx[k] = v;
     }
   }
-  return { ok: true, qid, meta, known: !!pt || meta, offered, rec: f.rec, chose: f.chose, by: f.by, pre: f.pre === undefined ? null : f.pre, ctx };
+  return canonicalAsk({ ok: true, qid, meta, known: !!pt || meta, offered, rec: f.rec, chose: f.chose, by: f.by, pre: f.pre === undefined ? null : f.pre, ctx });
 }
 
 // ── The statistics (§3.2 – §3.3) ────────────────────────────────────────────
@@ -376,7 +435,7 @@ function collect(claudeDir, deps) {
       if (/(?:^|\s)ASK\s/m.test(text)) excluded.push({ run: r.name, reason: why });
       continue;
     }
-    const row = { run: r.name, lane: r.lane, date: r.date || null, at: r.mtime || 0, questions: 0 };
+    const row = { run: r.name, lane: laneName(r.lane), date: r.date || null, at: nameTime(r) || r.mtime || 0, questions: 0 };
     seen.push(row);
     for (const line of text.split(/\r?\n/)) {
       const q = QUESTION_RE.exec(line);
@@ -392,8 +451,8 @@ function collect(claudeDir, deps) {
         if (!unknown[a.qid].runs.includes(r.name)) unknown[a.qid].runs.push(r.name);
         continue;
       }
-      const ts = deps.traceTs(line) || r.mtime || 0;
-      events.push({ run: r.name, lane: r.lane, at: ts, qid: a.qid, offered: a.offered, rec: a.rec, chose: a.chose, by: a.by, pre: a.pre, ctx: a.ctx });
+      const ts = deps.traceTs(line) || nameTime(r) || r.mtime || 0;
+      events.push({ run: r.name, lane: laneName(r.lane), at: ts, qid: a.qid, offered: a.offered, rec: a.rec, chose: a.chose, by: a.by, pre: a.pre, ctx: a.ctx });
     }
   }
   events.sort((x, y) => x.at - y.at);
@@ -545,8 +604,28 @@ function inverseOf(h) {
   return null;
 }
 
+// v2.1.0 (A11) — ONE lane name everywhere. The trace name carries a short token
+// (`quick`, `mini`, `ultra`); the cards and the registry say `orc-quick`. Rhythm,
+// the log and `--lane` now all use the full name, and `--lane` takes either.
+function laneName(tok) {
+  const t = String(tok || "");
+  if (!t || t === "unknown") return t || null;
+  if (t === "orc" || t === "ultra") return "orc";
+  return t.startsWith("orc-") ? t : `orc-${t}`;
+}
+
+// v2.1.0 (A10) — a run is dated by the date and time in its trace NAME
+// (`…-DDMMYY-HHMMSS.txt`, written in local time). The file mtime is used only
+// when the name has none: a copied log folder moves every mtime to the copy.
+function nameTime(r) {
+  const m = /-(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.txt$/.exec((r && (r.name || r.run)) || "");
+  if (!m) return 0;
+  const t = new Date(2000 + Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4]), Number(m[5]), Number(m[6])).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
 // The panel's numbers for ONE window (`show`). Runs are dated by their trace
-// file's mtime; the heat map is local time, Monday first.
+// NAME (see nameTime); the heat map is local time, Monday first.
 const WEEKS = 12;
 function panelStats(col, rows, windowDays, now, lane) {
   const inLane = (x) => !lane || x.lane === lane;
@@ -609,8 +688,8 @@ function panelStats(col, rows, windowDays, now, lane) {
     portrait.push({
       k: "questions",
       line: tiles.qpr_prev !== null && tiles.qpr_prev !== undefined
-        ? `You answered ${tiles.qpr} questions per run, against ${tiles.qpr_prev} in the window before.`
-        : `You answered ${tiles.qpr} questions per run.`,
+        ? `You answered ${tiles.qpr} ${tiles.qpr === 1 ? "question" : "questions"} per run, against ${tiles.qpr_prev} in the window before.`
+        : `You answered ${tiles.qpr} ${tiles.qpr === 1 ? "question" : "questions"} per run.`,
     });
   for (const r of rows.filter((x) => x.state === "applied").slice(0, 2))
     portrait.push({ k: "usual", line: `${r.title}: usually ${label(ASK_POINTS[r.qid], r.option)} (${r.count} of ${r.total}).` });
@@ -743,6 +822,9 @@ function computeRows(claudeDir, deps, opts = {}) {
       why = `your config sets ${pt.key}: ${map[pt.key]} — the file wins, so this habit is shown and inert (was: ${state})`;
       state = "shadowed";
     }
+    // v2.1.0 (A14): an EMPTY bucket (no counted answer, nothing decided — what a
+    // purge leaves) is not a row. It printed `0/0 "no counted answers yet"`.
+    if (state === "observed" && !ev.top && !ev.total && !rec) continue;
     const applied = state === "applied" && rec;
     rows.push({
       id: g.id,
@@ -1170,7 +1252,7 @@ function habitCmd(deps) {
     const w = flag("--window");
     const window_days = w === "30d" ? 30 : w === "90d" ? 90 : null;
     const c = computeRows(claudeDir, deps, { map, mode, window_days: window_days || undefined });
-    const lane = typeof flag("--lane") === "string" ? flag("--lane") : null;
+    const lane = typeof flag("--lane") === "string" && flag("--lane") ? laneName(flag("--lane")) : null;
     const rows = (lane ? c.rows.filter((r) => r.lanes.includes(lane)) : c.rows.slice()).sort((a, b) => PANEL_ORDER.indexOf(a.state) - PANEL_ORDER.indexOf(b.state));
     const counts = {};
     for (const s of STATE_WORDS) counts[s] = rows.filter((r) => r.state === s).length;
@@ -1221,7 +1303,7 @@ function habitCmd(deps) {
         if (r.undo) console.log(`      undo: ${r.undo}`);
       }
       console.log(`\n  states: ${STATE_WORDS.map((s) => `${s} ${counts[s]}`).join(" · ")}`);
-      console.log(`  tiles: ${tiles.runs} run(s) · ${tiles.answers} answer(s) · ${tiles.saved} answered for you · ${tiles.qpr === null ? "—" : tiles.qpr} questions per run`);
+      console.log(`  tiles: ${tiles.runs} run(s) · ${tiles.answers} answer(s) · ${tiles.saved} answered for you · ${tiles.qpr === null ? "—" : tiles.qpr} ${tiles.qpr === 1 ? "question" : "questions"} per run`);
       console.log(`  rhythm (14 days): ${days.map((x) => x.answers).join(" ")}`);
       for (const p of portrait) console.log(`  portrait: ${p.line}`);
       for (const x of obj.excluded_runs) console.log(`  excluded run: ${x.run} (${x.reason})`);
@@ -1417,6 +1499,9 @@ function habitCmd(deps) {
 }
 
 module.exports = {
+  nameTime,
+  laneName,
+  canonicalAgent,
   ASK_POINTS,
   HABIT_META_QIDS,
   HABIT_RULE,

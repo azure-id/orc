@@ -32,18 +32,22 @@ You see the whole table before anything is dispatched.
 
 ## 2. The score → model table
 
-The default table has 8 bands (`skills/orc/config.md`):
+The default table has 5 bands (`skills/orc/config.md`):
 
 | Score | Model | Effort | Agent |
 |---|---|---|---|
-| `[0,30)` | `claude-haiku-4-5` | — | `orc-executor-haiku-4-5` |
-| `[30,40)` | `claude-sonnet-4-6` | medium | `orc-executor-sonnet-4-6-med` |
-| `[40,55)` | `claude-sonnet-4-6` | high | `orc-executor-sonnet-4-6-high` |
-| `[55,65)` | `claude-sonnet-5` | high | `orc-executor-sonnet-5-high` |
-| `[65,70)` | `claude-opus-4-7` | medium | `orc-executor-opus-4-7-med` |
-| `[70,80)` | `claude-opus-4-7` | high | `orc-executor-opus-4-7-high` |
-| `[80,90)` | `claude-opus-4-8` | high | `orc-executor-opus-4-8-high` |
-| `[90,100]` | `claude-opus-5-5` | high | `orc-executor-opus-5-high` |
+| `[0,21)` | `claude-sonnet-5-5` | low | `orc-executor-sonnet-5-low` |
+| `[21,31)` | `claude-sonnet-5-5` | medium | `orc-executor-sonnet-5-med` |
+| `[31,41)` | `claude-sonnet-5-5` | high | `orc-executor-sonnet-5-high` |
+| `[41,90)` | `claude-opus-5-5` | low | `orc-executor-opus-5-low` |
+| `[90,100]` | `claude-opus-5-5` | medium | `orc-executor-opus-5-med` |
+
+Every band from score 41 needs an Opus 5.5 main session. Seven executors are
+named by no band (`orc-executor-haiku-4-5`, `orc-executor-sonnet-4-6-med`,
+`orc-executor-sonnet-4-6-high`, `orc-executor-opus-4-7-med`,
+`orc-executor-opus-4-7-high`, `orc-executor-opus-4-8-high`,
+`orc-executor-opus-5-high`). They still ship. To use one, name it in
+`rubric_bands_override`, `orc diy`'s `fixed_executor` or `extra_fallback_agent`.
 
 `rubric_bands` (2–8) changes **how the report is grouped**, not the table.
 
@@ -54,15 +58,17 @@ the cost dial instead of the model:
 
 | Score | Model | Effort |
 |---|---|---|
-| `[0,40)` | `claude-opus-5-5` | low |
-| `[40,80)` | `claude-opus-5-5` | medium |
-| `[80,100]` | `claude-opus-5-5` | high |
+| `[0,90)` | `claude-opus-5-5` | low |
+| `[90,100]` | `claude-opus-5-5` | medium |
 
-Nine fixed roles switch to an Opus 5.5 variant too (mini executor, mini analyst,
-mini planner, scout, pattern codifier, wiki scanner, CLAUDE.md writer, retro
-miner). Two things are **never** forced: the Haiku trace writer (it transcribes
-a packet somebody else wrote) and `/orc-diy` (its executors come from the
-compiled flow).
+This ladder differs from the default table only below score 41.
+
+Eight fixed roles switch to an Opus 5.5 variant too (mini executor, fast
+executor, mini analyst, mini planner, scout, pattern codifier, the light wiki
+scanner, retro miner). The CLAUDE.md writer and the deep wiki scanner are
+already on Opus 5.5 low, so they do not change. Two things are **never** forced:
+the Haiku trace writer (it transcribes a packet somebody else wrote) and
+`/orc-diy` (its executors come from the compiled flow).
 
 While `opus5_only` is on it **outranks** the Fable 5 override and any
 hand-written band table. ORC never hides that: `orc config set` names every key
@@ -73,7 +79,7 @@ and a forcing mode would silently delete your answer.
 
 ### Resolution order
 
-`opus5_only` › a hand-written `rubric_bands_override` › the default 8-band
+`opus5_only` › a hand-written `rubric_bands_override` › the default 5-band
 table.
 
 ---
@@ -91,7 +97,7 @@ somewhere else (`orc extra role`, v0.55.0):
 | `fast-executor` | `/orc-fast` | `orc-executor-sonnet-4-6-high` |
 | `doc-writer` | `/orc-doc` | `orc-doc-writer-opus-5-med` |
 | `doc-checker` | `/orc-doc` | `orc-doc-checker-opus-5-low` |
-| `wiki-scanner-deep` | `/orc-wiki` | `orc-wiki-scanner-opus-4-8-high` |
+| `wiki-scanner-deep` | `/orc-wiki` | `orc-wiki-scanner-opus-5-low` |
 | `wiki-scanner-light` | `/orc-wiki` | `orc-wiki-scanner-sonnet-5-high` |
 
 A position with no row stays on the agent above, and it **keeps its row** in

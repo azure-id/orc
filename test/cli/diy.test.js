@@ -21,9 +21,9 @@ test("diy: compile roundtrip with a fable-5 session_tier (all executors fit)", (
     const comp = cli(["diy", "compile", "--dir", root]);
     assert.strictEqual(comp.status, 0, "fable-5 tier compiles");
     const flow = fs.readFileSync(path.join(claudeDir, "orc", "diy", "FLOW-COMPILED.md"), "utf8");
-    assert.match(flow, /orc-executor-haiku-4-5/, "haiku band present under a fable-5 tier");
+    assert.match(flow, /orc-executor-sonnet-5-low/, "the lowest band present under a fable-5 tier");
     assert.match(flow, /orc-executor-opus-5-med/, "top band unclipped under a fable-5 tier");
-    assert.match(flow, /orc-executor-opus-5-low/, "the [65,90) band is unclipped too");
+    assert.match(flow, /orc-executor-opus-5-low/, "the [41,90) band is unclipped too");
   } finally {
     rmrf(root);
   }
@@ -41,7 +41,7 @@ test("diy: the DEFAULT tier keeps both opus-5 bands, and an opus-4-8 tier clips 
     // every band in the table, so nothing is clipped out of the box.
     assert.strictEqual(cli(["diy", "compile", "--dir", root]).status, 0);
     const onDefault = fs.readFileSync(compiled, "utf8");
-    assert.match(onDefault, /\| \[65,90\) \| orc-executor-opus-5-low \|/, "the default tier keeps the low opus-5 band");
+    assert.match(onDefault, /\| \[41,90\) \| orc-executor-opus-5-low \|/, "the default tier keeps the low opus-5 band");
     assert.match(onDefault, /\| \[90,100\] \| orc-executor-opus-5-med \|/, "the default tier keeps the top band");
 
     // THE CLIP ITSELF IS STILL THE THING UNDER TEST. Moving a default must not
@@ -53,7 +53,7 @@ test("diy: the DEFAULT tier keeps both opus-5 bands, and an opus-4-8 tier clips 
     assert.strictEqual(cli(["diy", "compile", "--dir", root]).status, 0);
     const clipped = fs.readFileSync(compiled, "utf8");
     assert.doesNotMatch(clipped, /orc-executor-opus-5-(low|med|high)/, "every opus-5 band clipped under an opus-4-8 tier");
-    assert.match(clipped, /\| \[65,90\) \| orc-executor-opus-4-8-high \|/, "the [65,90) band falls back");
+    assert.match(clipped, /\| \[41,90\) \| orc-executor-opus-4-8-high \|/, "the [41,90) band falls back");
     assert.match(clipped, /\| \[90,100\] \| orc-executor-opus-4-8-high \|/, "the top band falls back");
     assert.match(clipped, /already clipped to this flow's session tier/, "and the clip is stated, never silent");
   } finally {
@@ -269,7 +269,7 @@ test("diy: the score table renders the COMPOSITE when extra is on, and is byte-i
     assert.match(j.score_table, /\[40,55\) \| extra/, "the routed band names the connection, not a Claude agent");
     assert.match(j.score_table, /big-pickle/);
     // A gap is not a hole — it is Claude, and it keeps its own rows.
-    assert.match(j.score_table, /orc-executor-haiku-4-5/);
+    assert.match(j.score_table, /orc-executor-sonnet-5-low/);
     // The execution step says how many bands leave Claude, or a stepper reads
     // `scored` on a flow routing half its work to a third party.
     const exec = j.steps.find((x) => x.block === "execution");
@@ -295,7 +295,9 @@ test("diy: a band that cannot route KEEPS ITS ROW and names its fall-through", (
     const table = JSON.parse(cli(["diy", "show", "--json", "--dir", root]).stdout).score_table;
     assert.match(table, /\[40,55\) \| extra/, "the row keeps its slot");
     assert.match(table, /unverified/);
-    assert.match(table, /stays on Claude: orc-executor-sonnet-4-6-high/);
+    // A 40-55 row spans [31,41) and [41,90) of the five-band table: both
+    // fall-back agents are named, never only the one at score 40.
+    assert.match(table, /stays on Claude: orc-executor-sonnet-5-high \/ orc-executor-opus-5-low\)/);
   } finally {
     rmrf(root);
   }

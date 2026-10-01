@@ -10,7 +10,7 @@ description: >
   template the user fills in themself. Refresh regenerates ONLY stale sections
   and bumps the file version by 0.0.1. Never trims user-authored content;
   never touches the orc-wiki pointer block. The skill dispatches the pinned
-  orc-claude-writer-opus-4-8-high agent — it never writes the file itself.
+  orc-claude-writer-opus-5-low agent — it never writes the file itself.
 ---
 
 # ORC-CLAUDE (standalone)
@@ -20,11 +20,11 @@ The target is ALWAYS `<repo root>/CLAUDE.md` of the current working directory �
 never `~/.claude/CLAUDE.md`, even if ORC is installed globally.
 
 **Dispatch, don't do.** Whatever model this chat runs on, the skill itself only
-selects the mode and spawns `orc-claude-writer-opus-4-8-high` (the pinned
-engine) — so the scan + writing always run at Opus 4.8 high regardless of the
-caller's tier. When `opus5_only: true` the engine is
-`orc-claude-writer-opus-5-med` instead (that mode FORCES it — see
-`../_shared/opus5-only.md`), and it then needs an Opus 5.5 main session.
+selects the mode and spawns `orc-claude-writer-opus-5-low` (the pinned
+engine) — so the scan + writing always run at Opus 5.5 low regardless of the
+caller's tier. `opus5_only` does not change this role. The writer is already
+Opus 5.5 low, so that mode has nothing to flip (see `../_shared/opus5-only.md`).
+The writer needs an Opus 5.5 main session in both modes.
 The one exception: the skill also writes the
 trace pointer + a few markers around that spawn (behavior-trace logging is
 permanent; see "Behavior trace"); that
@@ -70,18 +70,18 @@ set in "Behavior trace").
    `touch the trace file` of that name in the SAME step, BEFORE the spawn (a
    pointer to a file that does not exist reads as dangling — the hook rotates
    away from it and the run splits across two files).
-2. Spawn `orc-claude-writer-opus-4-8-high` — or `orc-claude-writer-opus-5-med`
-   when `opus5_only` — with: `mode`, `repo_root`,
+2. Spawn `orc-claude-writer-opus-5-low` (also under `opus5_only` — that mode
+   does not change this role) with: `mode`, `repo_root`,
    `budget` (from a `budget=N` argument, else null), and the paths to
    `references/template.md` + `references/refresh.md`. **Trace:** emit
-   `DISPATCH orc-claude-writer :: <mode> expect=opus-4-8/high` just before the
-   spawn (`expect=opus-5/medium` under `opus5_only` — the expectation is
-   derived from the agent NAME you actually dispatched, never from this line's
-   default; the hook then adds `SPAWN`/`RETURN` on its own).
+   `DISPATCH orc-claude-writer :: <mode> expect=opus-5/low` just before the
+   spawn (the expectation is derived from the agent NAME you actually
+   dispatched, never from this line's default; the hook then adds
+   `SPAWN`/`RETURN` on its own).
 3. On return, check `actual_model`/`actual_effort` against the pinned tier —
    mismatch → prepend a tier-downgrade warning to the report. **Trace:** emit
    `VERIFY writer actual=<model>/<effort> ✅ MATCH` (or
-   `⛔ DOWNGRADE expected=opus-4-8/high`).
+   `⛔ DOWNGRADE expected=opus-5/low`).
 4. Relay the Phase-3 report verbatim. **Trace:** emit
    `FINISH :: <mode_ran> CLAUDE.md v<X.Y.Z>` (mode_ran may be `noop`), then
    delete `log_dir/.current`. Then stop. The skill NEVER writes CLAUDE.md
@@ -175,7 +175,7 @@ Dispatch-only lane: emit ONLY the markers it can truthfully witness — **not**
 `PHASE`/`SCORE`/`FINDING`/`VERDICT`, because scan/generate/report run INSIDE
 the writer sub-agent and there is no scoring or review here. The marker set, in
 order (actor `orc`, plus the hook's `SPAWN`/`RETURN`): `DISPATCH
-orc-claude-writer :: <mode> expect=opus-4-8/high` before the spawn (the mode
+orc-claude-writer :: <mode> expect=opus-5/low` before the spawn (the mode
 rides in this tail and in `FINISH`, so no separate mode marker) · `VERIFY writer
 actual=<model>/<effort>` · `FINISH :: <mode_ran> CLAUDE.md v<X.Y.Z>`, where
 `mode_ran` may be `noop`. A noop refresh still traces the full cycle.

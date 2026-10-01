@@ -152,15 +152,15 @@ the delta was 2 lines or 2000. Five rows, in order, first match wins:
 
 | Condition | Tier | Agent |
 |---|---|---|
-| first scan of an area (no doc yet) | deep | `orc-wiki-scanner-opus-4-8-high` |
-| `STRUCTURAL` | deep | `orc-wiki-scanner-opus-4-8-high` |
-| ≥ `wiki_tier_deep_files` covered files touched (default 3) | deep | `orc-wiki-scanner-opus-4-8-high` |
-| a new exported symbol in a covered file | deep | `orc-wiki-scanner-opus-4-8-high` |
+| first scan of an area (no doc yet) | deep | `orc-wiki-scanner-opus-5-low` |
+| `STRUCTURAL` | deep | `orc-wiki-scanner-opus-5-low` |
+| ≥ `wiki_tier_deep_files` covered files touched (default 3) | deep | `orc-wiki-scanner-opus-5-low` |
+| a new exported symbol in a covered file | deep | `orc-wiki-scanner-opus-5-low` |
 | otherwise (small delta, no new surface) | **light** | **`orc-wiki-scanner-sonnet-5-high`** |
 
-- **`opus5_only` needs no new pair.** It already forces the wiki scanner to
-  `orc-wiki-scanner-opus-5-med`, which already ships, so **both tiers collapse onto
-  that one agent** while the flag is on. `OPUS5_ONLY_ROLES` gains no row and no
+- **`opus5_only` needs no new pair.** The deep tier is already
+  `orc-wiki-scanner-opus-5-low`. The flag flips the light tier to that same agent,
+  so **both tiers collapse onto that one agent** while the flag is on. `OPUS5_ONLY_ROLES` gains no row and no
   phantom pair — see `../../_shared/opus5-only.md`.
 - **`wiki_scan_tier: always_deep`** restores pre-v0.46.0 behaviour exactly.
 - **NEVER SILENT.** The resolved tier is printed in `orc wiki plan` and in the R1
@@ -173,6 +173,11 @@ the delta was 2 lines or 2000. Five rows, in order, first match wins:
 **Expected saving:** a delta refresh where 3 of 4 docs have a one-or-two-file delta
 goes from 4×deep to 1×deep + 3×light — roughly **40% off**, with the deep scan
 still doing the work that needs it.
+
+**Since v2.1.0 the deep tier is Opus 5.5 low** (it was Opus 4.8 high). Opus 5.5 low
+costs $4 / $20 per MTok and Sonnet 5 high costs $2 / $10, but at a higher effort.
+Nobody has measured the tokens of each tier yet, so the ladder stays. To see
+whether light is still cheaper, read the per-agent rows in `/orc-retro`.
 
 ## Budget cap (`wiki_refresh_budget`, default 0 = no cap)
 

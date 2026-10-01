@@ -5,7 +5,31 @@
 > `/orc-quick` review offer, the `/orc-mini` risk-high option, the `/orc-pr-driver`
 > per-layer gate, `/orc-ultra` gate 3). One slice, so a review in quick is the
 > same review as in `/orc`. The procedure and the return live in the agent file
-> (`.claude/agents/orc-reviewer-opus-5-med.md`), never here.
+> (`.claude/agents/orc-reviewer-opus-5-low.md`), never here.
+
+## §0 Which review — only when the project names its own (v2.1.0)
+
+When the `review-policy` probe of the lane config (or `orc review policy
+--json`) says `policy: project`, a coding lane that changed code asks this ONCE
+before ship — also `/orc-fast`, and `/orc-mini` without a risk-high row (DE-8).
+A CLAUDE.md line never picks the reviewer: it adds an OPTION (H `any.review.which`).
+
+```text
+Which review for this change?
+  1. ORC review — orc-reviewer-opus-5-low (traced, gotcha card, Review Quality)
+  2. <name> — the review <file>:<line> asks for            ← recommended
+  3. Skip review (not recommended: <file>:<line> asks for one)
+```
+
+- Write `REVIEW-WHICH chose=<orc|project|skip> name=<the named review> by=user ::
+  <file>:<line>` ALWAYS (habits off too) — and ONLY under `policy: project`. With habits on, also the ASK line.
+- **1** → this slice, as the lane already does. **2** → run the named skill or
+  command (the Skill tool takes both), then §3 on its findings with
+  `reviewer: "<name>"` on each observation — no ORC reviewer is dispatched.
+  **3** → no review; the summary says the project asked for one.
+- An external review has no hook trace, no gotcha card and no required
+  `category`/`scenario`/`pre_existing`: §3 fills `category: uncategorized` where
+  it cannot map one, and Review Quality counts it in its own line.
 
 Slice fields: changed_files[] · diff_ranges[] · acceptance_criteria[] · constraints[] · code_pattern · invariants[] · validation_gate[] · fe_rules[] · security_checklist[] · graph_changes · tool_findings[] · gotcha_card · rules_card · previous_findings[] · mode
 
@@ -74,6 +98,9 @@ The reviewer reports EVERY finding. Then, before the ladder acts:
 5. At review close, record one observation per finding and emit the
    `FINDING-OUTCOME` line — `gotchas.md` §10 "Review close" (`/orc` Phase 7,
    `/orc-mini` after its risk option, `/orc-quick` after the review offer).
+6. In the same step, store the reviewed ranges (`diff_ranges`) with ONE
+   `orc gotcha observe -` call, body `{"kind": "review-scope", run, commit,
+   files}` (DE-13, "Review close"). The CLI computes a later fix's `miss` from it.
 
 **Superpowers path** (DE-13): after the Superpowers review skill returns, run
 this §3 on its findings too, outcomes included — never a second reviewer dispatch.

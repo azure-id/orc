@@ -128,9 +128,33 @@ test("rule: the ratchet — away from `careful` an apply habit is class never", 
     if (p.class === "apply" && p.careful) assert.deepStrictEqual(Object.keys(p.values), [p.careful], qid + " learns only its careful option");
 });
 
+// v2.1.0 W5 (A1) — one agent, one spelling. A short form maps to the shipped
+// agent it can only mean; an extra slot and an ambiguous family word stay.
+test("parser: a gate answer is stored with the canonical agent name", () => {
+  const P = (t) => H.parseAskLine("[011026 10:00:00.000] quick  ASK quick.q2.gate.code :: " + t);
+  const a = P("offered=sonnet-4-6-med|opus-5-low|deepseek-v4-flash rec=sonnet-4-6-med chose=sonnet-4-6-med by=user");
+  assert.deepStrictEqual([a.chose, a.rec, a.offered], ["orc-executor-sonnet-4-6-med", "orc-executor-sonnet-4-6-med", ["orc-executor-sonnet-4-6-med", "orc-executor-opus-5-low", "deepseek-v4-flash"]]);
+  assert.strictEqual(P("offered=deepseek-v4-flash|opus-5-low rec=deepseek-v4-flash chose=deepseek-v4-flash by=user").chose, "deepseek-v4-flash", "an extra slot stays");
+  assert.strictEqual(P("offered=sonnet|sonnet-5-high|sonnet-4-6-med rec=sonnet chose=sonnet by=user").chose, "sonnet", "two Sonnet agents on the menu: the family word stays");
+  assert.strictEqual(P("offered=sonnet|opus|extra rec=sonnet chose=sonnet by=user").chose, "sonnet", "a bare family word with no menu match is never guessed");
+  const full = P("offered=orc-executor-sonnet-4-6-med|orc-executor-opus-5-low rec=orc-executor-sonnet-4-6-med chose=orc-executor-sonnet-4-6-med by=user");
+  assert.strictEqual(full.chose, a.chose, "the full and the short spelling are ONE option");
+  const recon = H.parseAskLine("[011026 10:00:00.000] quick  ASK quick.q2.gate.recon :: offered=sonnet-4-6-med|opus-5-low rec=sonnet-4-6-med chose=sonnet-4-6-med by=user");
+  assert.strictEqual(recon.chose, "orc-recon-sonnet-4-6-med", "the recon gate maps to the recon agent, never the executor");
+});
+
+// v2.1.0 W5 (A10, A11) — a run is dated by its trace NAME, and a lane has ONE name.
+test("panel data: the trace name dates a run (not mtime), and the lane name is the full one", () => {
+  const t = new Date(H.nameTime({ name: "run-quick-ping-route-280926-012109.txt" }));
+  assert.deepStrictEqual([t.getFullYear(), t.getMonth() + 1, t.getDate(), t.getHours(), t.getMinutes()], [2026, 9, 28, 1, 21], "local 28-09-2026 01:21");
+  assert.strictEqual(H.nameTime({ name: "notes.txt" }), 0, "no date in the name → the caller falls back to mtime");
+  assert.deepStrictEqual(["quick", "orc-quick", "orc", "ultra", "mini"].map(H.laneName), ["orc-quick", "orc-quick", "orc", "orc", "orc-mini"]);
+});
+
 // ── 2. The registry and the parser ──────────────────────────────────────────
-test("registry: 30 points; the parser is CRLF-safe and drops what it cannot read", () => {
-  assert.strictEqual(Object.keys(H.ASK_POINTS).length, 30);
+test("registry: 32 points (v2.1.0 adds any.review.which and fix.f1.class); the parser is CRLF-safe and drops what it cannot read", () => {
+  assert.strictEqual(Object.keys(H.ASK_POINTS).length, 32);
+  assert.strictEqual(H.ASK_POINTS["fix.f1.class"].class, "never", "a fact is never a habit");
   const ok = H.parseAskLine("[260926 10:00:00.000] quick  ASK quick.q3.offer.review :: offered=review-first|commit-direct|stop rec=review-first chose=review-first by=user ctx=kind=pr,branch=feature\r");
   assert.strictEqual(ok.ok, true);
   assert.deepStrictEqual(ok.ctx, { kind: "pr", branch: "feature" });
@@ -177,7 +201,7 @@ test("off: lane config carries NO habits key, and every 1.9.2 field is unchanged
       assert.ok(!o.announce.some((l) => /learned/.test(l)));
     }
     const adv = j(cli(["lane", "config", "orc-advisor", "--json", "--dir", off]));
-    assert.strictEqual(adv.not_read.length, 102, "the 1.9.2 not_read count + the 5 W4 gotcha engine keys + the 2 W6c keys (notify, rules_card_compact)");
+    assert.strictEqual(adv.not_read.length, 105, "the 1.9.2 not_read count + the 5 W4 gotcha engine keys + the 2 W6c keys (notify, rules_card_compact) + the 2 v2.1.0 W7 keys (log_retention_days, log_retention_auto) + the v2.1.0 W8 key (statusline_refresh)");
     assert.strictEqual(j(cli(["lane", "config", "orc-mini", "--json", "--dir", off])).effective.mock_example, "off");
     const show = cli(["habit", "show", "--json", "--dir", off]);
     assert.strictEqual(show.status, 3, "show exits 3 under off");
@@ -421,7 +445,7 @@ test("cli: every `orc habit` subcommand answers one object with its exit code", 
     assert.deepStrictEqual(Object.keys(j(show).rows[0]), ["id", "qid", "lanes", "title", "class", "effective_class", "careful", "key", "bucket", "state", "why", "stale_reason", "stale_detail", "top", "top_label", "count", "total", "n", "n_eff", "p", "lb", "last_agree", "passes", "proposable", "option", "value", "decided_at", "last_used", "line", "rule", "undo", "options", "share", "streak", "context", "effect", "commands"]);
 
     const pts = j(cli(["habit", "points", "--json", "--dir", root]));
-    assert.strictEqual(pts.count, 30);
+    assert.strictEqual(pts.count, 32);
     assert.deepStrictEqual(pts.classes, ["apply", "suggest", "never"]);
 
     const log = j(cli(["habit", "log", "--json", "--limit", "3", "--dir", root]));

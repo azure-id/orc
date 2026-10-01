@@ -49,13 +49,14 @@ unavailable, apply the same checks manually from
 
 ## Step 2 — dispatch the compiled flow
 
+First `orc lane config orc-diy --json`. **`habits{}` in it → print `habits.line`,
+read `../_shared/habits.md` NOW**; none → ignore every `(H …)`. Then:
 Read `.claude/orc/diy/FLOW-COMPILED.md` and follow it as your orchestrator
 spine for this run — it is self-contained: tier self-check, locked rules,
 phase sequence, and the references it cherry-picks from the installed orc
 skill. Honor its generated header: if its own self-gate fails, stop exactly
-as it says. Do not consult this stub again for the rest of the run, and do
-not load orc's SKILL.md as a spine (the compiled flow already references the
-exact orc subskills and schemas it needs).
+as it says. Never consult this stub again this run, and never load orc's
+SKILL.md as a spine — the flow names every subskill and schema it needs.
 
 ## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
@@ -64,8 +65,7 @@ exact orc subskills and schemas it needs).
 - **Config:** `orc lane config orc-diy --json`. Obey `effective`, print every line
   in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
   Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
-- **Habits:** `habits{}` in the config answer → read `../_shared/habits.md`. No
-  `habits{}` → ignore every `(H …)` mark.
+- **Habits:** Step 2, first.
 - **Rules:** `orc rules slice --lane orc-diy --json` is the ONLY assembler
   (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
 

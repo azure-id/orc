@@ -44,7 +44,7 @@ Codify which?  [both / express / react / none]
 
 ```
 Dispatching orc-pattern-codifier-sonnet-5-high (express) …
-returned as: claude-sonnet-5 / high        ✓
+returned as: claude-sonnet-5-5 / high        ✓
 
 PATTERN — express     source: reconciled     14 recent files read
 

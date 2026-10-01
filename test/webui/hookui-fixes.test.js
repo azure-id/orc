@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — calls bin/webui/api.js in-process, which may shell the CLI; does not bind a port
 // The CLI Hook Interface fixes: a clear reaches the write, Apply stops at the
 // first refusal, the gate card reads `show.hook`, chips prefer the item's own
 // sample, and "shared" is the CLI's inherit token.

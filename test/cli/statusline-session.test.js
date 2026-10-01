@@ -87,7 +87,7 @@ test("the second line reports agents, extra, duration, tokens and branch", () =>
   );
   fs.writeFileSync(
     path.join(logs, "run-wiki-old-010926-090000.txt"),
-    ["[010926 09:00:00.000] hook     SPAWN orc-wiki-scanner-opus-4-8-high :: old", ""].join("\n")
+    ["[010926 09:00:00.000] hook     SPAWN orc-wiki-scanner-opus-5-low :: old", ""].join("\n")
   );
 
   const second = runHook(claudeDir, "orc-statusline.js", payload(root, "s1", 69), NO_THROTTLE);

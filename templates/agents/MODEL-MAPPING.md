@@ -3,23 +3,24 @@
 Single-role, model-specific agents. The orchestrator dispatches BY AGENT NAME —
 model is pinned in frontmatter, not requested in prose. No agent is multi-role.
 
-## Executors (score-mapped by the single 6-band table in config.md)
+## Executors (score-mapped by the single 5-band table in config.md)
 
 | Score band | Agent | Model | Effort |
 |-----------|-------|-------|--------|
-| [0,30)   | orc-executor-haiku-4-5       | claude-haiku-4-5  | — (no ladder) |
-| [30,40)  | orc-executor-sonnet-4-6-med  | claude-sonnet-4-6 | medium |
-| [40,55)  | orc-executor-sonnet-4-6-high | claude-sonnet-4-6 | high |
-| [55,65)  | orc-executor-sonnet-5-high   | claude-sonnet-5   | high |
-| [65,90)  | orc-executor-opus-5-low      | claude-opus-5-5     | low |
-| [90,100] | orc-executor-opus-5-med      | claude-opus-5-5     | medium |
+| [0,21)   | orc-executor-sonnet-5-low    | claude-sonnet-5-5 | low |
+| [21,31)  | orc-executor-sonnet-5-med    | claude-sonnet-5-5 | medium |
+| [31,41)  | orc-executor-sonnet-5-high   | claude-sonnet-5-5 | high |
+| [41,90)  | orc-executor-opus-5-low      | claude-opus-5-5   | low |
+| [90,100] | orc-executor-opus-5-med      | claude-opus-5-5   | medium |
 
-Score→executor mapping lives in config.md (one canonical 6-band table;
+Score→executor mapping lives in config.md (one canonical 5-band table;
 `rubric_bands` is granularity only, not a preset selector).
 
 **Executors no band names — they still ship.**
-`orc-executor-opus-4-7-med`, `orc-executor-opus-4-7-high`,
-`orc-executor-opus-4-8-high` and `orc-executor-opus-5-high` are still generated
+`orc-executor-haiku-4-5`, `orc-executor-sonnet-4-6-med`,
+`orc-executor-sonnet-4-6-high`, `orc-executor-opus-4-7-med`,
+`orc-executor-opus-4-7-high`, `orc-executor-opus-4-8-high` and
+`orc-executor-opus-5-high` — seven agents — are still generated
 and still installed. They are reachable only when a user names one
 explicitly: `rubric_bands_override`, `orc diy`'s `fixed_executor`, or
 `extra_fallback_agent`. They are not deleted because a table change is not a
@@ -31,25 +32,25 @@ model change, and an agent's model change is always a RENAME.
 |-------|-------|--------|------|
 | orc-system-analyst-opus-5-high | claude-opus-5-5 | high | doc analysis |
 | orc-planner-opus-5-med | claude-opus-5-5 | medium | planning |
-| orc-reviewer-opus-5-med | claude-opus-5-5 | medium | review |
+| orc-reviewer-opus-5-low | claude-opus-5-5 | low | review (medium until v2.1.0; renamed from orc-reviewer-opus-5-med) |
 | orc-verifier-opus-5-med | claude-opus-5-5 | medium | verify (+ /orc-verify) |
 | orc-test-author-opus-5-med | claude-opus-5-5 | medium | test authoring (opt-in Phase 6.5; writes tests, never runs) |
-| orc-analyze-mini-sonnet-5-high | claude-sonnet-5 | high | mini analysis |
-| orc-planner-mini-sonnet-5-high | claude-sonnet-5 | high | mini planning |
+| orc-analyze-mini-sonnet-5-high | claude-sonnet-5-5 | high | mini analysis |
+| orc-planner-mini-sonnet-5-high | claude-sonnet-5-5 | high | mini planning |
 | orc-scout-sonnet-4-6-high | claude-sonnet-4-6 | high | deep-analysis code scout (read-only) |
 | orc-recon-sonnet-4-6-med | claude-sonnet-4-6 | medium | answer ONE repository question with file:line evidence (/orc-quick read-only entries; never edits, never plans) |
 | orc-recon-opus-5-low | claude-opus-5-5 | low | the same contract for a WIDE or SUBTLE question — a blast radius across areas, a defect with no obvious anchor |
 | orc-context-combiner-opus-5-high | claude-opus-5-5 | high | combine 2+ related analyses (full lane) |
-| orc-pattern-codifier-sonnet-5-high | claude-sonnet-5 | high | reconcile per-language playbook vs. project files → cached code-pattern (opt-in) |
-| orc-retro-sonnet-5-high | claude-sonnet-5 | high | mine behavior traces → calibration report (/orc-retro; read-only) |
-| orc-wiki-scanner-opus-4-8-high | claude-opus-4-8 | high | scan ONE wiki coverage area → evidence-anchored doc body + crosslink tags (/orc-wiki only; read-only against the project). The DEEP half of the tier ladder: first scan · STRUCTURAL · wide delta · a new exported symbol |
-| orc-wiki-scanner-sonnet-5-high | claude-sonnet-5 | high | the LIGHT half of the same ladder — an existing doc whose covered files moved by a small, no-new-surface delta. IDENTICAL return contract; it escalates with `needs_context` rather than under-delivering. Never used for a first scan |
+| orc-pattern-codifier-sonnet-5-high | claude-sonnet-5-5 | high | reconcile per-language playbook vs. project files → cached code-pattern (opt-in) |
+| orc-retro-sonnet-5-high | claude-sonnet-5-5 | high | mine behavior traces → calibration report (/orc-retro; read-only) |
+| orc-wiki-scanner-opus-5-low | claude-opus-5-5 | low | scan ONE wiki coverage area → evidence-anchored doc body + crosslink tags (/orc-wiki only; read-only against the project). The DEEP half of the tier ladder: first scan · STRUCTURAL · wide delta · a new exported symbol |
+| orc-wiki-scanner-sonnet-5-high | claude-sonnet-5-5 | high | the LIGHT half of the same ladder — an existing doc whose covered files moved by a small, no-new-surface delta. IDENTICAL return contract; it escalates with `needs_context` rather than under-delivering. Never used for a first scan |
 | orc-executor-opus-5-med | claude-opus-5-5 | medium | the `[90,100]` band in BOTH tables |
-| orc-executor-opus-5-low | claude-opus-5-5 | low | the default table's `[65,90)`, `opus5_only`'s `[0,90)`, and the forced mini/fast executor |
+| orc-executor-opus-5-low | claude-opus-5-5 | low | the default table's `[41,90)`, `opus5_only`'s `[0,90)`, and the forced mini/fast executor |
 | orc-advisor-opus-5-xhigh | claude-opus-5-5 | xhigh | ultra Phase U0 advisory brief + rubric + clarification questions (read-only; /orc-ultra only) |
 | orc-judge-opus-5-xhigh | claude-opus-5-5 | xhigh | ultra judgment gates — analysis / plan / implementation (read-only; /orc-ultra only) |
 | orc-learn-writer-opus-5-low | claude-opus-5-5 | low | deepen ONE feature → learning-docs/<slug>/ (/orc-learn only; git-ignored output) |
-| orc-claude-writer-opus-4-8-high | claude-opus-4-8 | high | scan repo → write/refresh the local CLAUDE.md (/orc-claude only; zero questions) |
+| orc-claude-writer-opus-5-low | claude-opus-5-5 | low | scan repo → write/refresh the local CLAUDE.md (/orc-claude only; zero questions) |
 | orc-challenge-judge-opus-5-high | claude-opus-5-5 | high | grade ONE finished artifact against a FROZEN goal + template (/orc-challenge only; read-only). It reports findings and can never declare a pass — `orc challenge record` computes that |
 | orc-challenge-advisor-opus-5-med | claude-opus-5-5 | medium | turn a FAILED verdict into a remediation strategy — root-cause groups, an order with reasons, the decisions that are not defects (/orc-challenge only; read-only, no prose, no diffs) |
 | orc-challenge-reader-opus-5-low | claude-opus-5-5 | low | the COLD READ: answer questions from ONE artifact with `Read` and nothing else (/orc-challenge only). LOW ON PURPOSE — a harder-thinking reader reasons around the gaps D4 exists to find, so a stronger configuration is a worse instrument |
@@ -81,12 +82,12 @@ these. Full mapping + precedence:
 | orc-planner-mini-opus-5-med | claude-opus-5-5 | medium | orc-planner-mini-sonnet-5-high |
 | orc-scout-opus-5-low | claude-opus-5-5 | low | orc-scout-sonnet-4-6-high |
 | orc-pattern-codifier-opus-5-med | claude-opus-5-5 | medium | orc-pattern-codifier-sonnet-5-high |
-| orc-wiki-scanner-opus-5-med | claude-opus-5-5 | medium | orc-wiki-scanner-opus-4-8-high |
-| orc-claude-writer-opus-5-med | claude-opus-5-5 | medium | orc-claude-writer-opus-4-8-high |
+| orc-wiki-scanner-opus-5-low | claude-opus-5-5 | low | orc-wiki-scanner-sonnet-5-high |
 | orc-retro-opus-5-med | claude-opus-5-5 | medium | orc-retro-sonnet-5-high |
 
-The nine roles already on `claude-opus-5-5` — analyst, planner, reviewer,
-verifier, test-author, combiner, learn-writer, advisor, judge — dispatch
+The eleven roles already on `claude-opus-5-5` — analyst, planner, reviewer,
+verifier, test-author, combiner, learn-writer, advisor, judge, CLAUDE.md
+writer, deep wiki scanner — dispatch
 unchanged under this mode. **Never forced:** `orc-trace-writer-haiku-4-5` (it
 transcribes a packet, no reasoning) and orc-diy (its table is compile-owned).
 **Not dispatched at all:** `orc-graph-noter-sonnet-4-6-med` has NO Opus 5.5
@@ -107,7 +108,7 @@ agent to spawn before EVERY dispatch, and reuses shipped agents:
 |---|---|---|
 | writes code | orc-executor-sonnet-4-6-med · orc-executor-opus-5-low | yes |
 | read-only recon | orc-recon-sonnet-4-6-med · orc-recon-opus-5-low · or `other — name a model` | yes · yes · no |
-| review | orc-reviewer-opus-5-med · or ad-hoc | yes / no |
+| review | orc-reviewer-opus-5-low · or ad-hoc | yes / no |
 
 The only dispatch it does not re-ask is build-repair rounds 1–2, which reuse the
 executor the user already chose for that entry; round 3 asks again.
@@ -140,9 +141,11 @@ The orchestrator (main session) is NOT an agent file.
 
 Model IDs use the Platform/API dateless format (confirmed at
 platform.claude.com/docs/en/about-claude/models/model-ids-and-versions):
-claude-haiku-4-5, claude-sonnet-4-6, claude-sonnet-5, claude-opus-4-7,
+claude-haiku-4-5, claude-sonnet-4-6, claude-sonnet-5-5, claude-opus-4-7,
 claude-opus-4-8 and claude-opus-5-5 (the top executor band + the core fixed
-roles).
+roles). **Sonnet 5 runs on `claude-sonnet-5-5` since v2.1.0** — the agent names
+keep `-sonnet-5-` (a point release in one family keeps the name, as Opus did in
+v1.9.2), and `claude-sonnet-5` stays a valid config value.
 
 1. **Run `/agents`** to confirm Claude Code accepts these full IDs in agent
    frontmatter — in particular `claude-haiku-4-5` and `claude-opus-5-5`. If it
@@ -157,8 +160,8 @@ roles).
 
 A subagent's model cannot exceed the MAIN session's cost tier — request pricier
 and it silently falls back to the main model. **Run your main Claude Code
-session on Opus** or every opus-* agent downgrades to Sonnet. The
-[90,100] executor band AND every core fixed role (analyst, planner, reviewer,
+session on Opus** or every opus-* agent downgrades to Sonnet. Every executor
+band from score 41 (`[41,90)` and `[90,100]`) AND every core fixed role (analyst, planner, reviewer,
 verifier, test author, combiner, learn writer, ultra advisor/judge) are pinned
 to **claude-opus-5-5** — on an Opus 4.8 session they all land on Opus 4.8. Verify by
 expanding a subagent's tool-call in the transcript to see the model it ran.

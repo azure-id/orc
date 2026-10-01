@@ -73,7 +73,7 @@ const SECTIONS = [
   },
   {
     id: "lanes",
-    title: "④ Lanes cheat-sheet (28 commands)",
+    title: "④ Lanes cheat-sheet (29 commands)",
     lines: [
       "  /orc           full orchestrated pipeline",
       "  /orc-quick     ask for almost anything — 3 steps, always asks which agent",
@@ -81,6 +81,7 @@ const SECTIONS = [
       "  /orc-grill     sharpen a vague idea by conversation (no scan, no build)",
       "  /orc-route     you have a PLAN — which lane should build it? (refuses prose)",
       "  /orc-explain   say the last ORC message again, with the background it assumed",
+      "  /orc-fix       record a fix and what it fixes, so the next review sees it",
       "  /orc-mini      lightweight single-subagent build",
       "  /orc-fast      knowledge-gated single-executor build (wiki + pattern)",
       "  /orc-ultra     max rigor: + advisor + 3 judgment gates",

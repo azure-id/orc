@@ -58,6 +58,7 @@ O: Code pattern? U: none. Findings (P0–P3 ladder, each P0–P2 anchored file:l
 
 ## Phase 7 — Summary
 O: 6 tasks/3 waves/6 spawns/1 pause/1 fresh-session resume · 1 needs_context · 1 escalation · verify fixed_then_passed · branch green. P2 fix-batch: none · Apply the 2 P3 cosmetics? U: no.
+O: review close → `orc gotcha observe` ×3 (P1 addressed · 2× P3 wontfix, each with `run`) → `FINDING-OUTCOME addressed=1 disputed=0 wontfix=2 open=0 pre=0 suppressed=0 :: functional.check:1/1,evolvability.documentation:0/2`
 
 ## Phase 8 — Ship (orc-pr, reads pr.md)
 O: Branch: feat/notifications. Commit? Push? PR? U: yes all.
@@ -66,7 +67,7 @@ O: ✓ committed → pushed → run/merchant-notifications/DRP-482-add-merchant-
    Log deleted · checkpoint + dispatch log KEPT · completion dispatch report shown → "Run /usage to see your remaining limits."
 
 ## What this exercises
-always-spawn (even cheap tasks get a subagent) · facet-scored arithmetic · 6-band ladder ·
+always-spawn (even cheap tasks get a subagent) · facet-scored arithmetic · 5-band ladder ·
 per-run folder run/merchant-notifications/ · usage reminder (no programmatic /usage) ·
 planner grounding spot-check catching a hallucinated path · executor evidence (verbatim
 build/test proof) · reviewer quote spot-check before any P0/P1 action ·

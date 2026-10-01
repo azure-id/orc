@@ -1,8 +1,8 @@
 ---
 name: orc-retro-sonnet-5-high
 description: >
-  ORC Retro miner — claude-sonnet-5, high effort. Dispatched by /orc-retro to mine the behavior traces. Read-only, report-only.
-model: claude-sonnet-5
+  ORC Retro miner — claude-sonnet-5-5, high effort. Dispatched by /orc-retro to mine the behavior traces. Read-only, report-only.
+model: claude-sonnet-5-5
 effort: high
 tools: Read, Glob, Grep, Bash
 ---

@@ -1,7 +1,7 @@
 ---
 name: orc-executor-haiku-4-5
 description: >
-  ORC executor — claude-haiku-4-5 (no effort ladder). Dispatched by the build lanes at execution for ONE task, score band lowest-complexity [0,30).
+  ORC executor — claude-haiku-4-5 (no effort ladder). Dispatched by the build lanes at execution for ONE task, score band none (opt-in only, see MODEL-MAPPING.md).
 model: claude-haiku-4-5
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---

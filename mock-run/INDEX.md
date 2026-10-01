@@ -73,6 +73,7 @@ All of it uses **easy English**, short sentences, and the same fake project.
 | [orc-aftermath](orc-aftermath.md) | `/orc-aftermath` | Did what we shipped hold up. Churn is a signal, never a verdict |
 | [orc-budget](orc-budget.md) | `/orc-budget` | What a run costs, in the unit you are billed in |
 | [orc-retro](../templates/skills/orc-retro/examples/retro-mock.md) | `/orc-retro` | Mine the behavior traces into a calibration report |
+| [orc-fix](orc-fix.md) | `/orc-fix` | Record a fix and what it fixes, so the next review sees it — and see what a review missed |
 
 ## Ship and hand over
 

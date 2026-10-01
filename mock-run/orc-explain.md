@@ -25,7 +25,7 @@ ORC has just printed a scoring block. Rina reads it and blinks.
 
 ```
 T1 3·new-surface·stateful·new-tests·fan0/3·low = 6+18+16+8+9 = 57
-   → orc-executor-sonnet-5-high (keystone)
+   → orc-executor-opus-5-low (keystone)
 ```
 
 ```
@@ -33,7 +33,7 @@ T1 3·new-surface·stateful·new-tests·fan0/3·low = 6+18+16+8+9 = 57
 ```
 
 ```
-The point: task T1 is medium-hard, so I am sending it to Sonnet 5 at high
+The point: task T1 is medium-hard, so I am sending it to Opus 5.5 at low
 effort, and it must finish before three other tasks can start.
 
 The background that line assumed
@@ -53,7 +53,7 @@ Every word in that line, in this project's terms
   fan0/3         it depends on 0 tasks; 3 tasks depend on IT. That is why I
                  called it a keystone, and why it runs alone in wave 1.
   low            the planner's own confidence that the task is uncertain
-  57             the total. The table maps [55,65) to Sonnet 5 at high effort.
+  57             the total. The table maps [41,90) to Opus 5.5 at low effort.
   band           one row of that table
   wave           a group of tasks that can run at the same time because no
                  two of them write the same file

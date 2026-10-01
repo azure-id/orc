@@ -31,10 +31,10 @@ O: GATE complexity :: complexity: mini-ok — 2 files · confident callers 1 in 
 
 ## Phase 3 — Execute (ONE subagent)
 O: graph: --for-slice card (2 files) · wiki: 1 path (pointer, body never read here)
-O: → claude-sonnet-5 / high :: DISPATCH orc-executor-sonnet-5-high :: add --json flag
+O: → claude-sonnet-5-5 / high :: DISPATCH orc-executor-sonnet-5-high :: add --json flag
    [executor edits cli/report.py + updates tests, returns actual_files + actual_model
    + evidence {`pytest tests/test_report.py`, exit 0, tail quoted} + empty unmet[]]
-O: VERIFY actual=claude-sonnet-5/high ✅ MATCH · evidence present ✓
+O: VERIFY actual=claude-sonnet-5-5/high ✅ MATCH · evidence present ✓
 
 ## Phase M — Smoke gate (build + test; blocks ship on red)
 O: GRAPH-CHANGES → tests reached 1 file (call 1)
@@ -60,5 +60,7 @@ O: Self-QA plan: test-generator/report-json-flag/TEST-PLAN.md (committed on ship
 O: Current branch: feat/report-json. Commit? Push? PR?
 U: commit
 O: knowledge: wiki 1 page offered · used tests/test_report.py note · graph used 1 target
+   (risk none → no review option, so no `orc gotcha observe` call. A risk-high run
+   that took option a records each finding with it, `run` included.)
 O: [commits] Done. Usage: dispatch log below + run /usage for your limits.
    (Switch to full flow any time — the run folder + checkpoint are shared.)

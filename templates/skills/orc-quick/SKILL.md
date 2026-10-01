@@ -223,7 +223,7 @@ with a range; never restate it as a saving.
 Append entry N to `orc-quick/<slug>/quick-context.md`
 (`references/context-doc.md`, only `## Entry shape` or `## A read-only entry`).
 Every request gets an entry — a read-only dig too, where the answer IS the
-result. Then record what it proved (`../_shared/gotchas.md` §10). A code-writing entry
+result. A code-writing entry
 ends with the card (`../_shared/phases/summary.md` §End-of-run card).
 
 ### 3.4 If the user stops while it is red
@@ -245,7 +245,7 @@ committed, and print the card's `undo` row as the undo.
    or merge — even when the user said "push". A `repro: none` entry shows the
    **not reproduced** line here.
 
-Write the results of these offers back into entry N. **Then:** another request →
+Write the results of these offers back into entry N. Then record what it proved (`../_shared/gotchas.md` §10). **Then:** another request →
 **Q1** as entry N+1, and Q0 never runs again; the user is done → emit `OUTCOME`
 + `FINISH`, send the last trace packet, and only THEN delete `log_dir/.current`.
 

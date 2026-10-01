@@ -175,7 +175,7 @@ test("`opus5_only` is NOT CONSULTED for a taken slot, and fully live for one wit
   // The one with no row falls through to the OPUS5 variant, not the shipped one.
   const free = json(run(p, ["extra", "resolve", "--slot", "wiki-scanner-light", "--json"]));
   assert.equal(free.resolved, "claude");
-  assert.equal(free.claude.agent, "orc-wiki-scanner-opus-5-med");
+  assert.equal(free.claude.agent, "orc-wiki-scanner-opus-5-low");
   assert.equal(free.claude.table, "opus5_only");
   rmrf(p.root);
 });

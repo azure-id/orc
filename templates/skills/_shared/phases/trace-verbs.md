@@ -42,7 +42,9 @@ owner is this file has its detail in "Verb detail" below.
 | `JUDGE <analysis\|plan\|implementation> <verdict> round=<n> blocking=<n> advisory=<n> downgraded=<n>` | orc → writer | ultra judgment verdict | `orc/references/ultra-mode.md` |
 | `OUTCOME task=<id> score=<n> band=<range> model=<m> retries=<n> requeues=<n> needs_context=<n> unmet=<n>` | orc → writer | task closed — links the scoring band to what it actually took | `_shared/phases/execution.md` |
 | `FINDING p0=<n> p1=<n> p2=<n> p3=<n>[ pre=<n> suppressed=<n> folded=<n>]` | reviewer→orc → writer | review outcome (P0–P3 severity ladder); the tail counts the after-filter's buckets | `_shared/phases/review.md` |
-| `FINDING-OUTCOME addressed=<n> disputed=<n> wontfix=<n> open=<n> pre=<n> suppressed=<n> :: <cat>:<addressed>/<total>,…` | orc → writer | ONE line at review close — what became of each finding; `orc gotcha quality` reads it | `_shared/phases/trace-verbs.md` |
+| `FINDING-OUTCOME addressed=<n> disputed=<n> wontfix=<n> open=<n> pre=<n> suppressed=<n> :: <cat>:<addressed>/<total>,…` | orc → writer | ONE line at review close (a clean review too) — what became of each finding; `orc gotcha quality` counts it as a review | `_shared/phases/trace-verbs.md` |
+| `REVIEW-WHICH chose=<orc\|project\|skip> name=<the review the rule names> by=<user\|ledger\|learned> :: <file:line of the rule>` | orc → writer | the answer to §0 "which review" when the project names its own review — written ALWAYS, also under habits off; the FINISH nudge reads it | `_shared/phases/trace-verbs.md` |
+| `FIX source=<sonar\|ci\|defect\|pr\|review\|other> introduced_by=<orc\|ai\|human\|unknown> by=<user\|evidence> obs=<id8>[ missed_by=<run>] :: <path:lines> <rule or finding>` | cli | one fix recorded by `orc fix record` (/orc-fix) into the HOST run's trace — the CLI writes it, never a packet | `orc-fix/SKILL.md` |
 | `VERDICT pass\|fail :: <detail>` | verifier→orc → writer | verification outcome | `_shared/phases/verify.md` |
 | `DRIFT loop=<n> :: <user description, compressed>` | orc → writer | mock-example drift-recovery loop opened (hard cap 2 loops) | `_shared/drift-recovery.md` |
 | `TDD-RED task=<id> iter=<n> :: <failing tests>` | executor→orc → writer | TDD repair-loop iteration — the plan's acceptance tests still red | `_shared/phases/trace-verbs.md` |
@@ -170,6 +172,16 @@ reaches the file through a packet — you never append lines by hand.
   the user said "not a problem here" = disputed; declined with no reason = wontfix.
   `pre` and `suppressed` copy the after-filter's buckets; they never gate. The
   `FINDING` tail `pre= suppressed= folded=` is additive (the `sections=` precedent).
+- **`REVIEW-WHICH`** (v2.1.0). ONE line, before ship, in every coding lane that
+  changed code, when the `review-policy` probe says `policy: project`
+  (the review slice, §0). It is written ALWAYS — habits off too — because it is a
+  record of what ran, not a habit. The `ASK any.review.which` line is written in
+  addition only when habits is on. A run that changed code under `policy:
+  project` with no `REVIEW-WHICH` line gets one nudge at FINISH.
+- **`FIX`** (v2.1.0). Written by `orc fix record` ITSELF into the run in flight
+  (`/orc-fix`, a rider that opens no run). A packet that carries it is refused.
+  A lane never narrates it and never repeats it; `orc stats` and `/orc-retro`
+  read it like any other line.
 - **`DRIFT`.** `PHASE mock-example`; canonical `_shared/drift-recovery.md`.
 - **`TDD-RED` / `TDD-GREEN`.** Cap `tdd_loop_max`; a paired TDD task's red proof
   also emits iter=0. `TDD-GREEN` is the non-exempt definition-of-done.
@@ -334,8 +346,10 @@ trace and never emit `SPAWN`/`RETURN`.
 
 ### Files & lifecycle
 
-- Folder: `log_dir` (default `.claude/orc/logs/`). Persistent — **never deleted**
-  (deliberate opposite of the decision log). Top level holds the run `.txt` plus
+- Folder: `log_dir` (default `.claude/orc/logs/`). Persistent (deliberate
+  opposite of the decision log): kept until you run `orc clear logs --apply`, or
+  until the automatic sweep removes it (`log_retention_auto: on`, older than
+  `log_retention_days`). Top level holds the run `.txt` plus
   its sidecars (`.pending.json`, `.jsonl`); generated reports live in
   subfolders (`retro/`).
 - One file per run: **`run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`**, append-only.

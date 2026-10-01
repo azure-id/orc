@@ -1,5 +1,5 @@
 ---
-description: Build/maintain the project knowledge base (wiki) — Opus 4.8 high, expensive, multi-session, warns before scanning
+description: Build/maintain the project knowledge base (wiki) — Opus 5.5 low, expensive, multi-session, warns before scanning
 ---
 
 Use the **orc-wiki** skill. Start at Phase 0: auto-detect whether this is a

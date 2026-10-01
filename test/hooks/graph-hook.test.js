@@ -159,7 +159,7 @@ test("graph hook — an executor finishing UPDATES the graph and traces it; a no
   fs.writeFileSync(path.join(a.root, "src", "added.js"), "export function freshName() { return 2; }\n");
 
   // A reviewer finishing is not a writer — nothing happens.
-  assert.equal(say(a.claudeDir, { hook_event_name: "SubagentStop", agent_type: "orc-reviewer-opus-5-med" }).status, 0);
+  assert.equal(say(a.claudeDir, { hook_event_name: "SubagentStop", agent_type: "orc-reviewer-opus-5-low" }).status, 0);
   assert.equal(JSON.parse(fs.readFileSync(path.join(a.claudeDir, "orc", "graph", "meta.json"), "utf8")).generation, gen0);
 
   const r = say(a.claudeDir, { hook_event_name: "SubagentStop", agent_type: "orc-executor-opus-5-med" });
@@ -358,7 +358,7 @@ test("graph hook — the counters file and the ledger agree, whatever happened",
 
 test("graph hook — a non-executor stop writes neither a counter nor a row", () => {
   const a = armed();
-  say(a.claudeDir, { hook_event_name: "SubagentStop", agent_type: "orc-reviewer-opus-5-med" });
+  say(a.claudeDir, { hook_event_name: "SubagentStop", agent_type: "orc-reviewer-opus-5-low" });
   assert.deepStrictEqual(gainRows(a.claudeDir).filter((r) => r.cmd === "hook-update"), []);
 });
 

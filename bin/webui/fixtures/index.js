@@ -30,7 +30,7 @@ const { boundary } = require("./boundary.js");
 const { usage, waitLanes, waitStatus } = require("./wait.js");
 const hookui = require("./hookui.js");
 const { handoff } = require("./handoff.js");
-const { exportState, mocks } = require("./maintenance.js");
+const { exportState, mocks, clearLogsSummary, clearLogsPreview, clearLogsPreviewEmpty } = require("./maintenance.js");
 const { chGoals, chDims, challengeRoles, challengeCouncil, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint } = require("./challenge.js");
 const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext, docRules, docRulesFrozen, docForecast, docCost } = require("./docs.js");
 const { laneList, lanePhases, laneCalls } = require("./lanes.js");
@@ -280,7 +280,7 @@ module.exports.get = function get(route, q) {
     case "/api/budget/rates":
       return budgetRates;
     case "/api/budget/actual":
-      return { ok: true, run: "store-credit", lane: "orc", trace: "run-orc-store-credit-100826-093012.txt", rows: [{ band: "[40,55)", dispatches: 3, forecast_weighted: 96000, actual_weighted: 138000, diff_pct: 44, tokens: { input: 9000, cache_write: 61000, cache_read: 121000, output: 11000 } }, { band: "[70,80)", dispatches: 1, forecast_weighted: 121000, actual_weighted: 304000, diff_pct: 151, tokens: { input: 12000, cache_write: 98000, cache_read: 240000, output: 24000 } }], actual: { tokens: { input: 21000, cache_write: 159000, cache_read: 361000, output: 35000 }, raw: 576000, weighted: 251100, usd: 7.02 }, cache_read_share: 0.71, unattributed: { blocks: 12, tokens: { input: 900, cache_write: 12000, cache_read: 24000, output: 1100 } }, joined: 17, dispatches: 19 };
+      return { ok: true, run: "store-credit", lane: "orc", trace: "run-orc-store-credit-100826-093012.txt", rows: [{ band: "[31,41)", dispatches: 3, forecast_weighted: 96000, actual_weighted: 138000, diff_pct: 44, tokens: { input: 9000, cache_write: 61000, cache_read: 121000, output: 11000 } }, { band: "[41,90)", dispatches: 1, forecast_weighted: 121000, actual_weighted: 304000, diff_pct: 151, tokens: { input: 12000, cache_write: 98000, cache_read: 240000, output: 24000 } }], actual: { tokens: { input: 21000, cache_write: 159000, cache_read: 361000, output: 35000 }, raw: 576000, weighted: 251100, usd: 7.02 }, cache_read_share: 0.71, unattributed: { blocks: 12, tokens: { input: 900, cache_write: 12000, cache_read: 24000, output: 1100 } }, joined: 17, dispatches: 19 };
     case "/api/aftermath":
       return aftermath;
     case "/api/export":
@@ -464,10 +464,37 @@ module.exports.get = function get(route, q) {
           { id: "prune", label: "Update AND delete ORC-named orphans from a pre-manifest install", command: "orc update --prune", network: false, names_files: true },
           { id: "fix", label: "Apply every fix orc doctor found (= update + prune + settings re-merge)", command: "orc doctor --fix", network: false, names_files: false },
           { id: "upgrade", label: "Fetch the LATEST package from the network, then apply it", command: "orc upgrade", network: true, names_files: false },
+          { id: "export", label: "Recompile AGENTS.md from the wiki, patterns, PACT.md and boundary cards", command: "orc export", network: false, names_files: false },
+          {
+            id: "clear-logs",
+            label: "Delete finished traces and run folders older than log_retention_days (never user data, never a waiting run)",
+            command: "orc clear logs --apply",
+            network: false,
+            names_files: true,
+            danger: true,
+            restarts_ui: false,
+            status: clearLogsSummary,
+          },
           { id: "update-global", label: "Re-copy this package's payload over the GLOBAL install in ~/.claude", command: "orc update --global", network: false, names_files: false, advanced: true },
         ],
       };
     case "/api/maintenance/preview":
+      if (q.action === "clear-logs")
+        return {
+          action: q.action,
+          label: "Preview (fixtures)",
+          command: "orc clear logs --apply",
+          network: false,
+          names_files: true,
+          advanced: false,
+          danger: true,
+          restarts_ui: false,
+          preview_command: "orc clear logs",
+          // ORC_UI_FIXTURE_CLEAR=empty shows the "nothing is old enough" state.
+          preview: process.env.ORC_UI_FIXTURE_CLEAR === "empty" ? clearLogsPreviewEmpty : clearLogsPreview,
+          waiting_runs: runs.runs.filter((r) => r.status === "waiting").map((r) => r.slug),
+          dirty_tree: false,
+        };
       return {
         action: q.action,
         label: "Preview (fixtures)",
@@ -481,7 +508,9 @@ module.exports.get = function get(route, q) {
                 ? "upgrade"
                 : q.action === "update-global"
                   ? "update --global"
-                  : "update"),
+                  : q.action === "export"
+                    ? "export"
+                    : "update"),
         network: q.action === "upgrade",
         names_files: q.action === "prune",
         advanced: q.action === "update-global",

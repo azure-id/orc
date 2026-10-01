@@ -1,8 +1,8 @@
 ---
 name: orc-analyze-mini-sonnet-5-high
 description: >
-  ORC mini System Analyst — claude-sonnet-5, high effort. Dispatched by /orc-mini and /orc-analyze-mini at analysis: single pass, no deep mode, no scouts.
-model: claude-sonnet-5
+  ORC mini System Analyst — claude-sonnet-5-5, high effort. Dispatched by /orc-mini and /orc-analyze-mini at analysis: single pass, no deep mode, no scouts.
+model: claude-sonnet-5-5
 effort: high
 tools: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch
 ---

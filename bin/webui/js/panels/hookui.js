@@ -2166,7 +2166,17 @@ function animationBlock() {
   box.append(el("div", "hk-anim-head", t("hookui.animTitle")));
   box.append(el("div", "note", cur ? t("hookui.animNowN", { n: cur }) : t("hookui.animNowOff")));
   const row = el("div", "row-actions");
-  for (const v of [null, 1, 2, 5, 10]) {
+  // v2.1.0 (DE-22) — the sub-second values are SHOWN and DISABLED, with the
+  // floor sentence: Claude Code never starts a timer below 1 s (measured).
+  for (const v of [0.2, 0.5, 0.7]) {
+    const b = el("button", "btn btn-xs btn-ghost", t("hookui.animSec", { n: v }));
+    b.type = "button";
+    b.disabled = true;
+    b.title = t("hookui.animFloor");
+    b.setAttribute("aria-disabled", "true");
+    row.append(b);
+  }
+  for (const v of [null, 1, 2, 3, 5, 10]) {
     const on = (cur || null) === v;
     const b = el("button", "btn btn-xs" + (on ? " btn-primary" : " btn-ghost"), v ? t("hookui.animSec", { n: v }) : t("hookui.animOff"));
     b.type = "button";

@@ -139,7 +139,7 @@ Code review this change?
 
 ```
 Which reviewer?
-  1. orc-reviewer-opus-5-med       knows your express@v3 pattern
+  1. orc-reviewer-opus-5-low       knows your express@v3 pattern
   2. other — name model + effort
 ```
 

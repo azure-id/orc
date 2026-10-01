@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.0.4-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.1.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v2.0.4** · diperbarui 30-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v2.1.0** · diperbarui 02-10-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -275,6 +275,7 @@ pemakaian 5 jam, pemakaian mingguan, dan beberapa hal lain.
 | **`/orc-mini`** | Satu agen Sonnet 5, satu pemeriksaan build + tes, lalu kirim. Melewati review penuh dan pengujian. Satu baris **pembacaan kompleksitas** berisi angka menawarkan lane penuh kalau perubahannya lebih luas dari satu area. Bisa pindah ke alur penuh di tengah jalan kalau diminta. | [lihat](templates/skills/orc-mini/examples/mini-run-mock.md) |
 | **`/orc-fast`** | Lane tercepat. Butuh wiki yang masih segar **dan** pola kode yang sudah tersimpan; kalau ada, ia melewati tahap analis dan perencana sepenuhnya. Kalau salah satu syarat tidak ada, ia mundur ke `/orc-mini` — obrolan tidak pernah berhenti. | [lihat](mock-run/orc-fast.md) |
 | **`/orc-quick`** | Minta apa saja: perbaikan kecil, pertanyaan, mencari bug, menaikkan versi dependensi, komentar PR. Lihat → tanya sekali → kerjakan. **Selalu bertanya agen mana yang mau dipakai**, dan tidak ada pengaturan yang bisa mengubah itu. Satu **defect direproduksi merah dulu sebelum diperbaiki**. | [lihat](mock-run/orc-quick.md) |
+| **`/orc-fix`** | Memperbaiki satu hal setelah review: isu Sonar, CI merah, atau bug yang ditemukan orang. Di dalam run yang sedang dijeda, ia hanya **mencatat** perbaikannya (satu observasi dan satu baris `FIX` di jejak run itu), jadi review yang melewatkannya ikut terhitung. Kalau tidak ada run yang terbuka, ia memperbaiki seperti `/orc-quick` dan bertanya agen mana yang dipakai. | [lihat](mock-run/orc-fix.md) |
 | **`/orc-diy`** | Lane racikan Anda sendiri, disusun di terminal dengan `orc diy` lalu dikompilasi. Kalau belum disetel atau sudah basi, ia menolak jalan dan menawarkan `/orc` biasa. | [lihat](mock-run/orc-diy.md) |
 
 ### Memikirkan apa yang mau dibuat
@@ -665,9 +666,19 @@ dipublikasikan mengubahnya jadi angka. Risiko yang dikutip memaksa nilai minimal
 model terkunci** — jadi apa yang benar-benar berjalan bisa diperiksa, bukan
 sekadar diminta lewat kalimat.
 
+Tabel bawaan (sejak v2.1.0):
+
+| Nilai | Agen | Model · effort |
+|---|---|---|
+| `[0,21)` | `orc-executor-sonnet-5-low` | Sonnet 5 · low |
+| `[21,31)` | `orc-executor-sonnet-5-med` | Sonnet 5 · medium |
+| `[31,41)` | `orc-executor-sonnet-5-high` | Sonnet 5 · high |
+| `[41,90)` | `orc-executor-opus-5-low` | Opus 5.5 · low |
+| `[90,100]` | `orc-executor-opus-5-med` | Opus 5.5 · medium |
+
 > **Aturan yang paling sering membuat orang bingung:** model sebuah subagen tidak
-> akan pernah lebih tinggi daripada model sesi utama Anda. Jalankan sesi Anda di
-> Opus 5.
+> akan pernah lebih tinggi daripada model sesi utama Anda. Setiap pita mulai nilai
+> 41 butuh sesi utama Opus 5.5.
 
 **Penjelasan lengkap — pita nilainya, `opus5_only`, dan penjaga tingkat yang
 dipasang `orc init`: [guides/model-selection.md](guides/model-selection.md).**
@@ -699,13 +710,13 @@ yang sama.
 
 ```
 templates/
-├── skills/       31 folder skill, 38 berkas SKILL.md (satu lane boleh membawa
+├── skills/       34 folder skill, 41 berkas SKILL.md (satu lane boleh membawa
 │                 sub-skill) — lane di atas, plus yang tidak punya perintah
 │                 sendiri: context-combiner, orc-advisor, orc-judge,
 │                 orc-analyze-mini, dan _shared/ (kesepakatan lintas lane)
-├── commands/     29 perintah garis miring
+├── commands/     33 perintah garis miring
 ├── hooks/        penjaga effort (PreToolUse) · peringatan statusline · catatan jejak
-└── agents/       48 subagen dengan model terkunci + MODEL-MAPPING.md
+└── agents/       50 subagen dengan model terkunci + MODEL-MAPPING.md
 bin/cli.js        pemasang, penyunting pengaturan, penyusun alur, pembaca status
                   pekerjaan, dan separuh pasti dari setiap lane. Setiap pembacaan
                   bisa menjawab --json
@@ -786,36 +797,41 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v2.0.4 - desain status line sampai sel terakhir _(30-09-2026)_
+### v2.1.0 - review terhitung, tabel nilai naik, dan log lama bisa dihapus _(02-10-2026)_
 
-**`orc ui` ▸ CLI Hook Interface sekarang bisa mengubah hampir semua yang bisa
-ditampilkan satu sel terminal.** Setiap item juga ada sebagai flag `orc statusline set`:
+- **Tabel nilai baru dengan lima pita.** Nilai 0–40 ke Sonnet 5 (low, medium,
+  high). Nilai 41–89 ke Opus 5.5 low, dan 90–100 ke Opus 5.5 medium. Haiku tidak
+  lagi ada di tabel. **Setiap pita mulai nilai 41 butuh sesi utama Opus 5.5.**
+- **Sonnet 5 berjalan di `claude-sonnet-5-5`.** Tabel harga kembali benar.
+- **Reviewer sekarang `orc-reviewer-opus-5-low`.** Di eval langsung, effort low
+  menemukan setiap cacat yang sengaja ditanam dan masih ada di diff.
+- **Pemindai wiki dan penulis CLAUDE.md memakai Opus 5.5 low** (dulu Opus 4.8).
+- **Review quality tidak lagi menulis "0 so far" setelah review sungguhan.** Ia
+  menghitung review dari jejak. Review yang bersih juga dihitung.
+- **Aturan review milik proyek Anda.** Kalau CLAUDE.md atau AGENTS.md meminta
+  review lain (misalnya `/code-review`), lane bertanya "review ORC, review itu,
+  atau lewati". `orc review policy` menunjukkan apa yang ORC temukan.
+- **Lane baru `/orc-fix`.** Ia mencatat perbaikan setelah review (Sonar, CI merah,
+  bug) dan siapa yang memasukkan bug itu. Kartu reviewer menampilkannya, dan panel
+  menampilkan "Fixes after review".
+- **`orc clear logs`** menampilkan jejak dan folder run yang lama. `--apply`
+  menghapusnya. Tidak ada yang dihapus otomatis kecuali Anda menyetel
+  `log_retention_auto: on`.
+- **Timer status line:** 1, 2, 3, 5 atau 10 detik. Di bawah 1 detik ditolak, karena
+  Claude Code tidak mendukungnya.
+- **Perbaikan tab Behaviour:** dengan `habits: off` Anda tetap melihat Review quality
+  dan Gotchas, `/orc-fast` mencatat jawaban Anda, dan log jawaban menampilkan
+  pertanyaannya.
 
-- **Kata-kata di sekitar bentuk apa pun.** Nama di depan, di belakang, di atas atau di
-  bawah bar. Teks sebelum dan sesudahnya (`[██░░]`). Angka di samping bar.
-- **Caption** di baris atas atau bawah sebuah bagian, dengan **teks kecil** (ꜱᴍᴀʟʟ
-  ᴄᴀᴘꜱ, ˢᵘᵖᵉʳ, subscript) jika Anda mau.
-- **Bar dengan warna dan karakter Anda sendiri.** Warna isi dan warna kosong, warna
-  gradien sendiri (dicampur dalam true colour), karakter isi dan kosong sendiri.
-- **Lebih banyak pada setiap bagian:** kurung, padding, latar, warna hex apa pun, lebih
-  dari satu ketebalan, warna dan glyph per state, perataan baris dan warna pemisah.
-- **Enam bagian yang dulu tidak menggambar apa pun sekarang bekerja** (`text`,
-  `divider`, `spacer`, `icon-static`, `fill`, `config`).
-- **Hewan animasi** (kucing piksel, kucing yang mengejar tikus, pac-man, ikan, burung,
-  anjing) dan **cuaca** (suhu, ikon langit, deskripsi). `orc statusline refresh 1`
-  membuatnya bergerak sekali per detik.
-- **Panel menampilkan perubahan yang belum disimpan secara langsung**, dan pratinjau
-  bergerak.
-- **Perbaikan:** teks di atas atau di bawah sebuah bagian sekarang tampil di atas
-  bagian itu (Claude Code menghapus spasi di awal baris), spark menampilkan
-  riwayatnya, nilai yang tidak diketahui tampil `—` dan bukan bar kosong,
-  mengosongkan field bekerja (dulu HTTP 400), dan karakter kontrol di label ditolak.
-
-**Yang harus Anda lakukan:** `orc update`.
+**Yang harus Anda lakukan:** `orc update`. Kalau Anda punya alur `orc diy` yang
+sudah dikompilasi, jalankan `orc diy compile`. Kalau ada skrip yang menyebut
+`orc-reviewer-opus-5-med`, ganti menjadi `orc-reviewer-opus-5-low`. Biayanya
+berubah: baca CHANGELOG.
 
 <details>
-<summary><strong>Rilis sebelumnya</strong> — 126 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Rilis sebelumnya</strong> — 127 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.0.4** — design the status line to the last cell · _2026-09-30_
 - **v2.0.3** — the status line you designed is the status line you see · _2026-09-30_
 - **v2.0.2** — the lanes record what you answered, and the reviewer always gets the card · _2026-09-28_
 - **v2.0.1** — the trace keeps the gate name, and the lanes find the habits rule · _2026-09-27_

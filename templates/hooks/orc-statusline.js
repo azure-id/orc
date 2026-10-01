@@ -401,6 +401,23 @@ const SCAN = {
   trace_age_min: null, trace_state: null, last_agent: null, retries: null,
 };
 
+// v2.1.0 (DE-23) — is a `statusLine.refreshInterval` set? The local file wins
+// over the project file, as in Claude Code. One small read per run, fail-silent.
+function refreshIntervalSet(projectDir) {
+  const fs = require("fs");
+  const path = require("path");
+  for (const f of ["settings.local.json", "settings.json"]) {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(projectDir, ".claude", f), "utf8"));
+      if (j && j.statusLine && Object.prototype.hasOwnProperty.call(j.statusLine, "refreshInterval")) {
+        const n = Number(j.statusLine.refreshInterval);
+        return Number.isFinite(n) && n >= 1;
+      }
+    } catch (_) {}
+  }
+  return false;
+}
+
 function ledger(projectDir, sid) {
   if (LED) return LED;
   const fs = require("fs");
@@ -572,16 +589,27 @@ process.stdin.on("end", () => {
           ? { used_percentage: o.used_percentage, resets_at: o.resets_at == null ? null : o.resets_at }
           : null;
       fs.mkdirSync(orcDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(orcDir, "usage.json"),
-        JSON.stringify({
-          five_hour: win(rl0 && rl0.five_hour),
-          seven_day: win(rl0 && rl0.seven_day),
-          context_used_percentage:
-            cw0 && typeof cw0.used_percentage === "number" ? cw0.used_percentage : null,
-          written_at: Date.now(),
-        }) + "\n"
-      );
+      // v2.1.0 (DE-24) — rewrite ONLY when the numbers change. With a refresh
+      // timer every tick re-ran this, and a fresh `written_at` on old numbers
+      // made them look new to `orc usage check`. `written_at` is now the time
+      // the reading last MOVED.
+      const usageFile = path.join(orcDir, "usage.json");
+      const reading = {
+        five_hour: win(rl0 && rl0.five_hour),
+        seven_day: win(rl0 && rl0.seven_day),
+        context_used_percentage:
+          cw0 && typeof cw0.used_percentage === "number" ? cw0.used_percentage : null,
+      };
+      let prev = null;
+      try {
+        prev = JSON.parse(fs.readFileSync(usageFile, "utf8"));
+      } catch (_) {}
+      const same =
+        prev &&
+        prev.written_at &&
+        JSON.stringify([prev.five_hour, prev.seven_day, prev.context_used_percentage]) ===
+          JSON.stringify([reading.five_hour, reading.seven_day, reading.context_used_percentage]);
+      if (!same) fs.writeFileSync(usageFile, JSON.stringify(Object.assign(reading, { written_at: Date.now() })) + "\n");
       // -- Session consumption (v1.2.0) -------------------------------------
       // `usage.json` is a SNAPSHOT of the window. It cannot answer "how much
       // has THIS session eaten", which is the question a user actually asks
@@ -1085,6 +1113,18 @@ process.stdin.on("end", () => {
     line2 = "";
   }
 
+  // v2.1.0 (DE-23) — when a refresh timer is set, a motion part advances ONE
+  // step per run (the frame after the last frame shown), not the frame for this
+  // millisecond: at 2-10 s the wall clock skipped most frames. No timer → the
+  // wall-clock rule stays, so `step` is null.
+  let step = null;
+  try {
+    if (LED && refreshIntervalSet((d.workspace && d.workspace.project_dir) || d.cwd || process.cwd())) {
+      LED.frame = (Number(LED.frame) || 0) + 1;
+      step = LED.frame;
+    }
+  } catch (_) {}
+
   // ONE write, after every block that touches the ledger has had its say. It is
   // last on purpose: a render that throws half way through still prints, and a
   // ledger that could not be written never takes the status line down with it.
@@ -1102,6 +1142,7 @@ process.stdin.on("end", () => {
     scan: SCAN,
     derived: { verdict, reasons, version: ver },
     now: Date.now(),
+    step,
   });
   if (composed != null) {
     process.stdout.write(composed);
@@ -1217,6 +1258,7 @@ function custom(d, ctx) {
       scan: ctx.scan,
       derived: ctx.derived,
       now: ctx.now,
+      step: ctx.step,
       cols: Number(process.env.COLUMNS) || Number(d.columns) || 0,
       env: process.env,
     });

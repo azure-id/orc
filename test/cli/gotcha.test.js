@@ -420,6 +420,75 @@ test("observe: `sig` is normalized — secrets, identifiers, numbers, code and n
   assert.strictEqual(G.deriveScope(["a/x.ts", "b/y.js"]).scope, null, "a whole-repo glob is refused");
 });
 
+// v2.1.0 W3 — the "0 so far" defect. A review is also read from the traces: a
+// FINDING-OUTCOME line (a clean review too, DE-11) or a hook RETURN of the
+// reviewer (a bootstrap trace when the user spawned it directly).
+function traceDay(agoDays) {
+  const d = new Date(Date.now() - agoDays * DAY);
+  return String(d.getUTCDate()).padStart(2, "0") + String(d.getUTCMonth() + 1).padStart(2, "0") + String(d.getUTCFullYear()).slice(2);
+}
+function writeTrace(root, name, lines) {
+  const dir = path.join(root, ".claude", "orc", "logs");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, name), lines.join("\n") + "\n");
+}
+
+test("quality counts a review from the traces: a clean FINDING-OUTCOME, and a bare reviewer RETURN", () => {
+  const root = project();
+  try {
+    const day = traceDay(1);
+    writeTrace(root, `run-orc-clean-review-${day}-101010.txt`, [
+      `[${day} 10:10:10.000] orc      PHASE review start`,
+      `[${day} 10:20:00.000] orc      FINDING-OUTCOME addressed=0 disputed=0 wontfix=0 open=0 pre=0 suppressed=0 :: clean`,
+    ]);
+    let Q = j(run(["gotcha", "quality", "--json", "--dir", root]));
+    assert.strictEqual(Q.reviews, 1, "a clean review is a review");
+    assert.strictEqual(Q.reviews_traced, 1);
+    assert.strictEqual(Q.reviews_observed, 0);
+    assert.strictEqual(Q.findings, 0, "and it adds to nothing else");
+    assert.strictEqual(Q.floor_line, "5 reviews needed — 1 so far.");
+
+    writeTrace(root, `run-quick-direct-${day}-111111.txt`, [
+      `[${day} 11:11:11.000] hook     SPAWN orc-reviewer-opus-5-low :: review the diff`,
+      `[${day} 11:15:00.000] hook     RETURN orc-reviewer-opus-5-low :: review the diff dur=3m49s`,
+    ]);
+    // A trace with neither line is not a review.
+    writeTrace(root, `run-orc-no-review-${day}-121212.txt`, [`[${day} 12:12:12.000] orc      PHASE execution start`]);
+    Q = j(run(["gotcha", "quality", "--json", "--dir", root]));
+    assert.strictEqual(Q.reviews, 2, "the bootstrap SPAWN/RETURN pair counts; a trace with no review does not");
+
+    // An observation for the SAME run is one review, not two (set union by run).
+    const r = observe(root, { source: "review", ref: `run-orc-clean-review-${day}-101010 · F1`, sig: "a finding", category: "functional.check", severity: "P2", outcome: "addressed", author: "orc" });
+    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+    assert.strictEqual(j(r).observation.run, `run-orc-clean-review-${day}-101010`, "a ref that starts with the run id fills run");
+    Q = j(run(["gotcha", "quality", "--json", "--dir", root]));
+    assert.deepStrictEqual([Q.reviews, Q.reviews_traced, Q.reviews_observed], [2, 2, 1]);
+
+    // v2.1.0 W4 — a review the PROJECT asked for is counted on its own line.
+    const ext = observe(root, { source: "review", ref: "run-orc-ext-011026-131313 · F1", sig: "an external finding", outcome: "addressed", author: "orc", reviewer: "/code-review" });
+    assert.strictEqual(ext.status, 0, ext.stdout + ext.stderr);
+    assert.strictEqual(j(ext).observation.reviewer, "/code-review", "the optional field survives normalize");
+    Q = j(run(["gotcha", "quality", "--json", "--dir", root]));
+    assert.strictEqual(Q.reviews, 2, "the headline counts ORC reviews only");
+    assert.deepStrictEqual(Q.by_reviewer, { orc: 2, "/code-review": 1 });
+    assert.strictEqual(Q.project_reviews, 1);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("observe refuses author orc without run, by name", () => {
+  const root = project();
+  try {
+    const r = observe(root, { source: "review", ref: "PR 9 · thread 1", sig: "a finding", outcome: "addressed", author: "orc" });
+    assert.strictEqual(r.status, 2);
+    assert.strictEqual(j(r).field, "run");
+    assert.strictEqual(observe(root, { source: "review", ref: "PR 9 · thread 2", sig: "a finding", outcome: "addressed", author: "human" }).status, 0, "a human finding needs no run");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("quality + why + export --review-md: the reads answer one object", () => {
   const root = project();
   try {
@@ -432,7 +501,7 @@ test("quality + why + export --review-md: the reads answer one object", () => {
     const q = run(["gotcha", "quality", "--json", "--dir", root]);
     assert.strictEqual(q.status, 0);
     const Q = j(q);
-    assert.deepStrictEqual(Object.keys(Q), ["ok", "window_days", "reviews", "floor", "below_floor", "findings", "categories", "gotchas", "p3_per_review", "trend", "target", "bands", "series", "floor_line"]);
+    assert.deepStrictEqual(Object.keys(Q), ["ok", "window_days", "reviews", "reviews_traced", "reviews_observed", "by_reviewer", "project_reviews", "fixes", "misses", "floor", "below_floor", "findings", "categories", "gotchas", "p3_per_review", "trend", "target", "bands", "series", "floor_line"]);
     assert.strictEqual(Q.categories[0].category, "test");
     assert.strictEqual(Q.categories[0].noisy, true, "15 findings at 33 % acceptance");
     assert.strictEqual(Q.p3_per_review, 3);

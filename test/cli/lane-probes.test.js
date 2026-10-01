@@ -28,15 +28,16 @@ const STANDALONE = {
   "graph-status": ["graph", "status", "--if-enabled", "--brief"],
   "rules-slice": (lane) => ["rules", "slice", "--lane", lane],
   "extra-slot": ["extra", "resolve", "--slot", "quick-executor"],
+  "review-policy": ["review", "policy"],
 };
 // Fields the probe DERIVES from the answer rather than copies.
 const DERIVED = { "pattern-status": ["langs"], "graph-status": ["heal_needed"] };
 // The probe set each lane is REQUIRED to carry (W0's measured preflight calls).
 const EXPECT = {
-  orc: ["wiki-status", "pattern-status", "gotcha-status", "pact-status", "boundary-status", "aftermath-status", "graph-status", "rules-slice"],
-  "orc-mini": ["wiki-status", "pattern-status", "gotcha-status", "graph-status", "rules-slice"],
-  "orc-fast": ["wiki-status", "pattern-status", "gotcha-status", "graph-status", "rules-slice"],
-  "orc-quick": ["wiki-status", "pattern-status", "graph-status", "rules-slice", "extra-slot"],
+  orc: ["wiki-status", "pattern-status", "gotcha-status", "pact-status", "boundary-status", "aftermath-status", "graph-status", "rules-slice", "review-policy"],
+  "orc-mini": ["wiki-status", "pattern-status", "gotcha-status", "graph-status", "rules-slice", "review-policy"],
+  "orc-fast": ["wiki-status", "pattern-status", "gotcha-status", "graph-status", "rules-slice", "review-policy"],
+  "orc-quick": ["wiki-status", "pattern-status", "graph-status", "rules-slice", "extra-slot", "review-policy"],
 };
 
 function project() {
