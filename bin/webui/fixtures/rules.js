@@ -884,6 +884,11 @@ module.exports.rules = {
       "writing",
       "delivery"
     ],
+    "orc-fix": [
+      "writing",
+      "code",
+      "delivery"
+    ],
     "context-combiner": [
       "writing",
       "delivery"

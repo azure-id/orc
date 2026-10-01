@@ -241,8 +241,8 @@ report. This is the cheapest high-value fix available in the repo right now.
     "orc-fast": { "graded": 1, "held": 1, "churn": 0, "reverted": 0 }
   },
   "by_band": {
-    "[55,65)": { "shipped": 6, "churned": 2 },
-    "[70,80)": { "shipped": 3, "churned": 1 }
+    "[31,41)": { "shipped": 6, "churned": 2 },
+    "[41,90)": { "shipped": 3, "churned": 1 }
   },
   "standing_findings": [
     { "id": "PACT-006", "days_uncheckable": 47, "corroborated_by": ["orc-boundary", "orc-budget"] }
@@ -351,12 +351,12 @@ here, the last attempt did not stick".
 
   Now:     retro also sees how the RESULT held up.
 
-  Band [55,65)  sonnet-5-high
+  Band [31,41)  sonnet-5-high
     process : 0 downgrades, 1.2 avg repair rounds — looks healthy
     outcome : 2 of 6 shipped tasks churned within 10 days
     reading : the band finishes cleanly but the work does not stick.
               This is a scoring problem, not a model problem.
-              Recommend: raise the [55,65) upper edge, or add a facet
+              Recommend: raise the [31,41) upper edge, or add a facet
               for cross-folder work.
 ```
 

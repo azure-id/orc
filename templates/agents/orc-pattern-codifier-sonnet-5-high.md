@@ -1,8 +1,8 @@
 ---
 name: orc-pattern-codifier-sonnet-5-high
 description: >
-  ORC Pattern Codifier — claude-sonnet-5, high effort. Dispatched by orc-pattern (lazy /orc miss, eager orc-wiki, or manual /orc-pattern) for ONE language.
-model: claude-sonnet-5
+  ORC Pattern Codifier — claude-sonnet-5-5, high effort. Dispatched by orc-pattern (lazy /orc miss, eager orc-wiki, or manual /orc-pattern) for ONE language.
+model: claude-sonnet-5-5
 effort: high
 tools: Read, Glob, Grep, Bash
 ---

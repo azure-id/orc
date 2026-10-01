@@ -26,32 +26,30 @@ the `announce[]` boundary and the CLI-absent floor:
 ## Score → model table (executor agent dispatched by name)
 
 The orchestrator scores each task 0–100, then maps to a model via this SINGLE
-canonical 6-band table, and dispatches the matching **executor agent**.
+canonical 5-band table, and dispatches the matching **executor agent**.
 `rubric_bands` sets scoring granularity only — it never selects a table.
 
 | Score | Model | Effort | Executor agent |
 |-------|-------|--------|----------------|
-| [0,30)   | claude-haiku-4-5  | —      | orc-executor-haiku-4-5 |
-| [30,40)  | claude-sonnet-4-6 | medium | orc-executor-sonnet-4-6-med |
-| [40,55)  | claude-sonnet-4-6 | high   | orc-executor-sonnet-4-6-high |
-| [55,65)  | claude-sonnet-5   | high   | orc-executor-sonnet-5-high |
-| [65,90)  | claude-opus-5-5     | low    | orc-executor-opus-5-low |
-| [90,100] | claude-opus-5-5     | medium | orc-executor-opus-5-med |
+| [0,21)   | claude-sonnet-5-5 | low    | orc-executor-sonnet-5-low |
+| [21,31)  | claude-sonnet-5-5 | medium | orc-executor-sonnet-5-med |
+| [31,41)  | claude-sonnet-5-5 | high   | orc-executor-sonnet-5-high |
+| [41,90)  | claude-opus-5-5   | low    | orc-executor-opus-5-low |
+| [90,100] | claude-opus-5-5   | medium | orc-executor-opus-5-med |
 
-(Haiku has no effort ladder — that agent carries no `effort:` field.) The risk
-floor (≥70) lands `orc-executor-opus-5-low` at minimum in THIS table. Above ~65
-the useful dial stopped being the model GENERATION and became the EFFORT, which
-is why the old four Opus rows are two. **Every band from 65 needs an Opus 5.5 MAIN
-session** or it silently falls back to the session model (the tier-honesty rule
-reports the downgrade) — two bands where it used to be one, and that is the cost
-of this table.
+The risk floor (≥70) lands `orc-executor-opus-5-low` at minimum in THIS table.
+Above ~65 the useful dial stopped being the model GENERATION and became the
+EFFORT, which is why the old four Opus rows are two. **Every band from score 41
+needs an Opus 5.5 MAIN session** or it silently falls back to the session model
+(the tier-honesty rule reports the downgrade) — that is the cost of this table.
 
-**Four executors are named by NO band** — `orc-executor-opus-4-7-med`,
-`orc-executor-opus-4-7-high`, `orc-executor-opus-4-8-high` and
-`orc-executor-opus-5-high`. They still ship, reachable through
-`rubric_bands_override`, `orc diy`'s `fixed_executor` and `extra_fallback_agent`.
-Not deleted, because this is a TABLE change and not a model change — and an
-agent's model change is always a rename.
+**Seven executors are named by NO band** — `orc-executor-haiku-4-5`,
+`orc-executor-sonnet-4-6-med`, `orc-executor-sonnet-4-6-high`,
+`orc-executor-opus-4-7-med`, `orc-executor-opus-4-7-high`,
+`orc-executor-opus-4-8-high` and `orc-executor-opus-5-high`. They still ship,
+reachable through `rubric_bands_override`, `orc diy`'s `fixed_executor` and
+`extra_fallback_agent`. Not deleted, because this is a TABLE change and not a
+model change — and an agent's model change is always a rename.
 
 ### The Opus-5-only ladder (`opus5_only`, default **false**)
 
@@ -64,10 +62,10 @@ One model, EFFORT as the cost dial. Off by default; nothing changes until set.
 
 Two bands, sharing the 90 edge with the default table's top two rows. That
 symmetry is the point: once the default table's high end is already Opus 5.5 with
-effort as the dial, this mode differs from it only BELOW 65, so a third band
+effort as the dial, this mode differs from it only BELOW 41, so a third band
 would be a distinction the default table stopped making.
 
-**Tier cost:** today TWO bands in six need an Opus 5.5 main session; with this on,
+**Tier cost:** today two bands in five, from score 41, need an Opus 5.5 main session; with this on,
 EVERY dispatch does, so a lower session downgrades every task (warn-only — a
 hook can gate effort, never model). **Scope:** it is NOT executor-only — it also
 forces every fixed role below, across every lane. orc-diy's table
@@ -84,7 +82,7 @@ un-shown number.
 |------|-------|
 | System Analyst | orc-system-analyst-opus-5-high |
 | Requirement Planner | orc-planner-opus-5-med |
-| Reviewer | orc-reviewer-opus-5-med |
+| Reviewer | orc-reviewer-opus-5-low |
 | Verifier | orc-verifier-opus-5-med |
 | Mini analyst | orc-analyze-mini-sonnet-5-high |
 | Mini planner | orc-planner-mini-sonnet-5-high |
@@ -95,7 +93,7 @@ un-shown number.
 
 Under `opus5_only`, every role above that is not already `claude-opus-5-5`
 dispatches its Opus 5.5 variant instead — plus the roles owned by other lanes
-(scout, wiki scanner, CLAUDE.md writer, retro miner, fast executor).
+(scout, wiki scanner, retro miner, fast executor).
 
 ## Where each subsystem's rule is written down
 
@@ -120,7 +118,7 @@ value participates in, and each has exactly one canonical copy.
 | Foreign dispatch | `extra_enabled` and the `extra_*` block; every armed run prints its `extra:` line at Phase 1 | `../_shared/extra-dispatch.md` |
 | Stacked PRs | the `stacked_pr*` keys gate the Phase 8 stack (full `/orc` + `/orc-ultra` only) | `../orc-pr-setup/SKILL.md` |
 | Retro | `retro_repo` is where `/orc-retro` files its report; it hard-gates on a delivery channel and does not run at all without one | `../orc-retro/SKILL.md` |
-| Paths | `log_dir` (traces, NEVER auto-deleted), `run_dir` (`.claude/orc/run` — outside the installer's blast radius), and the analyst/planner/report dirs | `../_shared/config-precedence.md` |
+| Paths | `log_dir` (traces — kept until you run `orc clear logs --apply`, or until the automatic sweep removes them: `log_retention_auto: on`, older than `log_retention_days`), `run_dir` (`.claude/orc/run` — outside the installer's blast radius), and the analyst/planner/report dirs | `../_shared/config-precedence.md` |
 | Ultra | **no config key at all** — `/orc-ultra` forces its overrides RUN-SCOPED and never writes them to `orc.config.yaml` | `references/ultra-mode.md` |
 
 **TDD — Lane policy (fixed, not configurable).** Full orc + ultra always on ·

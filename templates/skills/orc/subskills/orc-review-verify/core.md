@@ -2,7 +2,7 @@
 
 The INPUT SLICE the orchestrator builds for ONE review, verify or security
 dispatch. The procedure and the return contract live in ONE place, the agent
-file: `phase=review` and `phase=security` → `.claude/agents/orc-reviewer-opus-5-med.md`;
+file: `phase=review` and `phase=security` → `.claude/agents/orc-reviewer-opus-5-low.md`;
 `phase=verify` → `.claude/agents/orc-verifier-opus-5-med.md`. The caller owns
 the auto-fix-once loop and the `tdd_loop_max` repair loop, and validates the
 return against `../../../_shared/return-validation.md`.

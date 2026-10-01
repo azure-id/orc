@@ -10,7 +10,7 @@ Emit `PHASE review start`. **Build the slice from `../review-slice.md`** — its
 §1 free check FIRST, then its §2 fields (with the graph on, `graph_changes` keeps
 its rows: no `--brief` here). Superpowers path: its review skill incl. tests
 (Sonnet 4.6 medium), then `../review-slice.md` §3 on its findings — no second
-dispatch. OpenSpec/self path: review worker (Opus 5.5 medium). Pass the resolved
+dispatch. OpenSpec/self path: review worker (Opus 5.5 low). Pass the resolved
 `code_pattern` + its invariants + gate lines for the re-check
 (pattern-gate.md); no resolved pattern → FIRST ask for one (paste/md/none) (H `orc.phase-5.pattern-missing`).
 FE tasks in run → pass `fe_rules[]` from `../../orc-pattern/references/` fe-a11y
@@ -41,7 +41,7 @@ skipped by flow config") — never imply the work was reviewed.
 <!-- diy:when review=on -->
 Dispatch the reviewer exactly as the full lane does — follow the review half
 of `.claude/skills/orc/subskills/orc-review-verify/SKILL.md` (reviewer agent
-`orc-reviewer-opus-5-med`; findings ride the severity ladder from the
+`orc-reviewer-opus-5-low`; findings ride the severity ladder from the
 locked rules, blocking and advisory findings both surfaced). Build its slice
 from `.claude/skills/_shared/review-slice.md` (§1 free check, §3 after-filter).
 <!-- /diy:when -->

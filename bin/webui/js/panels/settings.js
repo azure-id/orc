@@ -102,6 +102,13 @@ function settingsToolbar(d, tiers) {
       apply();
     }
   });
+  // `#/settings?key=<key>` (v2.1.0 W7 — the Maintenance row links its day
+  // value here) opens the panel filtered to that one key.
+  const want = (/[?&]key=([a-z0-9_]+)/.exec(location.hash) || [])[1];
+  if (want) {
+    input.value = want;
+    setTimeout(apply, 0);
+  }
   return bar;
 }
 

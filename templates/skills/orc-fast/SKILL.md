@@ -38,6 +38,11 @@ without the manifest (`../_shared/lane-contract.md` §Phases).
 
 Emit a `GATE` trace line per check.
 
+**0. Config, FIRST.** `orc lane config orc-fast --json`: obey `effective`, print
+`announce[]` VERBATIM, honour `stops[]`; never merge `.claude/orc.config.yaml`
+(`../_shared/config-precedence.md`). **`habits{}` in it → print `habits.line`,
+read `../_shared/habits.md` NOW.**
+
 **a. Wiki gate.** Decide existence with `orc wiki status` — the deterministic
 probe in `../_shared/detecting-artifacts.md`, never an ad-hoc `find` (`.claude`
 is hidden). `none` = gate FAILED → fallback; else read the tier from
@@ -76,9 +81,8 @@ then one `orc graph notes pending` batch — the next run starts from this cache
 
 **d. Extra — a PROBE, not a gate (P0).** Run `orc extra resolve --slot fast-executor --json` (0 = extra, 1 = Claude) — **a gate that is never probed is a gate that is always off**, and without this step the lane silently runs on Claude however `extra_enabled` and `orc extra role` were set. `extra` → print the `extra:` line HERE and carry the answer into F2; `claude` → print nothing, never fall back, never stop.
 
-The SHAPE of these steps — the order, and the four rules that make it worth
-having — is `../_shared/phases/preflight.md` (`core`). The probes
-themselves are this lane's own and stay here.
+Their shape and four rules: `../_shared/phases/preflight.md` (`core`). The
+probes are this lane's own.
 
 ## Phase F1 — Fit gate + micro-intake (one pass, ONE user round-trip)
 
@@ -182,9 +186,7 @@ in the SAME step. A phase that ends with `zero new trace lines is a protocol vio
 
 - **Calls:** `orc lane calls orc-fast --json` names every call and its exit codes.
   **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
-- **Config:** `orc lane config orc-fast --json`. Obey `effective`, print every line
-  in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
-  Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
+- **Config:** F0 step 0.
 - **Rules:** `orc rules slice --lane orc-fast --json` is the ONLY assembler
   (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
 

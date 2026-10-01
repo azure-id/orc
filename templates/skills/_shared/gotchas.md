@@ -185,7 +185,19 @@ cited one), then ONE trace line:
 `FINDING-OUTCOME addressed=<n> disputed=<n> wontfix=<n> open=<n> pre=<n> suppressed=<n> :: <cat>:<addressed>/<total>,…`.
 Where: `/orc` and `/orc-ultra` at Phase 7 (`phases/summary.md`), `/orc-mini`
 after the risk option's review, `/orc-quick` after the review offer. A review
-with zero findings records nothing and is a HEALTHY answer.
+with zero findings records no observation and is a HEALTHY answer: its
+`FINDING-OUTCOME` line (or the hook `RETURN orc-reviewer-*` line) already counts
+it as a review in `orc gotcha quality` (v2.1.0). An `author: orc` observation
+without `run` is refused (exit 2) — a `ref` that starts with the run id fills it.
+
+**The reviewed ranges (v2.1.0, DE-13).** In the same step, store what the review
+READ: `orc gotcha observe -` with
+`{"kind": "review-scope", "run": "<trace name>", "commit": "<HEAD>", "files": {"<path>": [[start, end], …]}}`
+— the slice's `diff_ranges`, a clean review too. The CLI keeps the last 500
+reviews in `.claude/orc/review-scope.jsonl` (user data, never pruned by age) and
+counts what it drops. A later `orc fix record` on lines inside a stored range
+of an EARLIER run is a computed `miss`: the fix is promoted at 1 case and goes
+first in the next card.
 
 ### Per-lane mechanics (the spines keep the trigger; this is the detail)
 
@@ -205,16 +217,24 @@ file is never a reason to fall back, and gotchas here are purely additive: probe
 inject the scope-matching entries into the F2 slice, and stop there. It never
 writes one, because one executor plus one repair round is too little signal to
 attribute a cause — and a lane with no analyst writing repair memory is how that
-memory fills with guesses.
+memory fills with guesses. **A review is different (v2.1.0):** when `/orc-fast` runs
+a review (the F4 offer, or the user asks for one), it records that review's outcomes
+as "Review close" says — an observation is REVIEW LEARNING, not a repair-memory
+entry, and every lane that ran a review records it.
 
 **`/orc-quick` — reads and records, since 2.0.0 (a deliberate reversal).**
-Record at step 3.3, after entry N is appended, and only for a request with
-programmatic proof: a defect entry with `REPRO red` then `REPRO green`
+Record after the step 3.5 offers (v2.1.0 — it was 3.3, before the review offer
+existed to record), and only for a request with programmatic proof: a defect entry with `REPRO red` then `REPRO green`
 (`source: defect`, `reproduced: true`) · a PR thread the request took and fixed
 (`source: pr`) · a Sonar or SARIF item fixed (`source: sonar` / `sarif`) · a CI
-failure fixed (`source: ci`) · a review-offer P0/P1 fixed (`source: review`,
-`addressed`) · a review finding the user called "not a problem here"
-(`source: review`, `disputed`). A plain fix with none of these records nothing.
+failure fixed (`source: ci`) · every finding of a review offer, ONE observation per finding
+with its outcome, as "Review close" says (`source: review`; "not a problem here"
+= `disputed`). A plain fix with none of these records nothing.
+A FIX of a named finding (a Sonar issue, a failed check, a defect ORC or an AI
+tool caused) goes through `orc fix record -` (`via: "orc-quick"`, v2.1.0): the
+author is the finder, never `orc`; a Sonar issue key gives the importer's own id,
+so a later gotcha sync completes the same row; and the CLI computes `miss`
+from `review-scope.jsonl`.
 Why the reversal: quick is where most of the fixes happen, so a memory that
 skips it never learns; a PR thread is a human's judgement and a red → green
 repro is proof, so the v1 "too little signal" objection does not apply; and the

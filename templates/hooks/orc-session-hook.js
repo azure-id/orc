@@ -113,10 +113,45 @@ function narrationGuard(data) {
   } catch (_) {
     return false;
   }
-  const lines = text.split(/\r?\n/).filter((l) => /^\[/.test(l));
+  const all = text.split(/\r?\n/).filter((l) => l.trim());
+  const lines = all.filter((l) => /^\[/.test(l));
   if (!lines.some((l) => /\]\s+hook\s+SPAWN /.test(l))) return false; // nothing was dispatched yet
-  if (lines.some((l) => !/\]\s+hook\s+/.test(l))) return false; // a packet already landed
   const statePath = path.join(CLAUDE_DIR, "orc", "narration-guard.json");
+  // v2.1.0 (E21 D7) — narration written BY HAND. A live /orc-quick appended its
+  // lines itself (no `.mmm` stamp, or no stamp at all), so `orc trace write` never
+  // saw them: no grammar check, and none of the FINISH reminders (observe, which
+  // review, config, phases) ran — the lane then claimed the findings were
+  // "logged". The CLI writes every line to the .txt AND its .jsonl twin, so more
+  // narration lines than jsonl rows, or a line without the CLI's stamp, is proof.
+  const narr = all.filter((l) => !/^\[[^\]]*\]\s+hook\s+/.test(l));
+  if (narr.length) {
+    let rows = 0;
+    try {
+      rows = fs.readFileSync(path.join(dir, best.f + ".jsonl"), "utf8").split(/\r?\n/).filter((l) => l.trim()).length;
+    } catch (_) {}
+    // NOT the `.mmm` stamp: `orc trace write` also accepts HH:MM:SS (a live run
+    // proved it, and an early guard blocked a correct run on it).
+    const hand = narr.some((l) => !/^\[\d{6} \d{2}:\d{2}:\d{2}(?:\.\d{1,3})?\] /.test(l)) || narr.length > rows;
+    if (!hand) return reviewGuard(best, text, statePath); // a CLI packet already landed
+    try {
+      const st = JSON.parse(fs.readFileSync(statePath, "utf8"));
+      if (st.run === best.f && st.kind === "hand") return false;
+    } catch (_) {}
+    try {
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, JSON.stringify({ run: best.f, kind: "hand", at: Date.now() }) + "\n");
+    } catch (_) {}
+    process.stdout.write(
+      JSON.stringify({
+        decision: "block",
+        reason:
+          `ORC: the trace ${best.f} has lines written by hand — \`orc trace write\` never saw them, so no check and no FINISH reminder ran. ` +
+          `Never append to a trace yourself. Send the FINISH packet now through \`orc trace write --packet -\` (\`run: ${best.f.replace(/\.txt$/, "")}\` if .current is gone) ` +
+          `and do what its reply says (for a review: one \`orc gotcha observe\` per finding), then finish.`,
+      })
+    );
+    return true;
+  }
   try {
     if (JSON.parse(fs.readFileSync(statePath, "utf8")).run === best.f) return false;
   } catch (_) {}
@@ -136,8 +171,48 @@ function narrationGuard(data) {
   return true;
 }
 
+// v2.1.0 (E21 D8) — a FINISHED run that reviewed and recorded nothing. A live
+// /orc ignored the FINISH observe reminder after a review with findings; Review
+// Quality then counts the review but learns no acceptance from it. ONCE per run,
+// in the main session: the trace has a reviewer RETURN and a FINISH line, the
+// review was not clean, and no observation names this run → block one stop.
+function reviewGuard(best, text, statePath) {
+  if (!/\]\s+hook\s+RETURN\s+orc-reviewer-/.test(text) || !/\]\s+\S+\s+FINISH\b/.test(text)) return false;
+  const fo = /FINDING-OUTCOME addressed=(\d+) disputed=(\d+) wontfix=(\d+) open=(\d+)/.exec(text);
+  const f = /\]\s+\S+\s+FINDING p0=(\d+) p1=(\d+) p2=(\d+) p3=(\d+)/.exec(text);
+  if ((fo && fo.slice(1, 5).every((n) => n === "0")) || (!fo && f && f.slice(1, 5).every((n) => n === "0"))) return false; // clean
+  const run = best.f.replace(/\.txt$/, "");
+  try {
+    for (const line of fs.readFileSync(path.join(CLAUDE_DIR, "orc", "observations.jsonl"), "utf8").split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const o = JSON.parse(line);
+        if (o && o.author === "orc" && o.run === run) return false;
+      } catch (_) {}
+    }
+  } catch (_) {}
+  try {
+    const st = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    if (st.run === best.f && st.kind === "review") return false;
+  } catch (_) {}
+  try {
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, JSON.stringify({ run: best.f, kind: "review", at: Date.now() }) + "\n");
+  } catch (_) {}
+  process.stdout.write(
+    JSON.stringify({
+      decision: "block",
+      reason:
+        `ORC: the run ${run} ran a review with findings and recorded no outcome. Pipe ONE object per finding to \`orc gotcha observe - --json\` ` +
+        `(source review · author orc · run ${run} · ref "${run} · F<n>" · outcome addressed|disputed|wontfix|open · category · rule or sig), ` +
+        `and write the FINDING-OUTCOME line if it is missing (\`orc trace write --packet -\`, run: ${run}). Then finish.`,
+    })
+  );
+  return true;
+}
+
 // ── The review card at SubagentStart (v2.0.2, eval D13) ─────────────────────
-// A live /orc-quick review dispatched `orc-reviewer-opus-5-med` with NO gotcha
+// A live /orc-quick review dispatched `orc-reviewer-opus-5-low` with NO gotcha
 // card in its prompt in 5 of 5 runs, although review learning is always on. The
 // card is a CLI answer, so the hook hands it over itself: for a reviewer,
 // verifier or judge, the files git sees as changed → `orc gotcha card` → one

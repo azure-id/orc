@@ -16,7 +16,7 @@ existing docs' rows, opens only the {N} anchored files, no repo scan, no doc
 changes. Proceed?" (Prereq: `wiki/` has docs.)
 
 **Steps:** collect boundary points from the docs' `Contracts & shapes` rows
-(read DOCS, not source) → dispatch Opus 4.8 high over the anchored files ONLY
+(read DOCS, not source) → dispatch Opus 5.5 low over the anchored files ONLY
 (tag bodies per schemas/crosslink-tag.md; unanchorable row = SKIPPED + reported)
 → write `wiki/crosslink/<kind>/<slug>.md` → resolve the consume half when
 `.claude/orc-crosslink.config.yaml` exists → `orc wiki sync` → crosslink
@@ -26,6 +26,7 @@ coverage/`pages` — coverage is a scan question; the boundary is not.
 **Zero-tag outcome is always explicit + reasoned, never a bare finish:** rows
 too thin/absent to tag → SAY so + recommend an incremental refresh of just those
 areas (an honest cost, not "never a refresh"); pure consumer (inbound-only, no
-API of its own) → valid no-op but NAME the inbound-only edges (references/crosslink.md).
+API of its own) → valid no-op but NAME the inbound-only edges (references/crosslink.md).
+
 
 <!-- /orc:layer -->

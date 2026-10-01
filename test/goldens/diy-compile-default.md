@@ -150,11 +150,10 @@ substitute a preset from `config.md`:
 
 | Score | Executor agent |
 |-------|----------------|
-| [0,30) | orc-executor-haiku-4-5 |
-| [30,40) | orc-executor-sonnet-4-6-med |
-| [40,55) | orc-executor-sonnet-4-6-high |
-| [55,65) | orc-executor-sonnet-5-high |
-| [65,90) | orc-executor-opus-5-low |
+| [0,21) | orc-executor-sonnet-5-low |
+| [21,31) | orc-executor-sonnet-5-med |
+| [31,41) | orc-executor-sonnet-5-high |
+| [41,90) | orc-executor-opus-5-low |
 | [90,100] | orc-executor-opus-5-med |
 
 ## Phase: Extra — may an executor run OFF Claude?
@@ -218,7 +217,7 @@ contract: `.claude/skills/_shared/gotchas.md`.
 
 Dispatch the reviewer exactly as the full lane does — follow the review half
 of `.claude/skills/orc/subskills/orc-review-verify/SKILL.md` (reviewer agent
-`orc-reviewer-opus-5-med`; findings ride the severity ladder from the
+`orc-reviewer-opus-5-low`; findings ride the severity ladder from the
 locked rules, blocking and advisory findings both surfaced). Build its slice
 from `.claude/skills/_shared/review-slice.md` (§1 free check, §3 after-filter).
 With the code graph on, the reviewer also gets the callers from

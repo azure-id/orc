@@ -74,14 +74,14 @@ compiled flow's last phase. `/orc-wait` makes no proposal.
   question; its `announce[]` line names the habit and its undo. A habit
   toward `no` is a pre-mark only, never applied. A learned
   `review_before_push: on` → the end-of-run batch ALWAYS carries option *a*
-  (dispatch `orc-reviewer-opus-5-med` on the diff), marked `→ usual`, even with
+  (dispatch `orc-reviewer-opus-5-low` on the diff), marked `→ usual`, even with
   no `risk: high` row. Record `any.ship.review-before-push` whenever option *a*
   is offered: `chose=review` when the user takes it, else `push`.
 - **`/orc-fast`.** `fast.f0.stale-wiki`: a habit NEVER suggests `continue`
   (a stale wiki is a risk the user takes each time). The CLI never proposes
   it (`never_option`); a suggestion row that names it anyway is ignored. Show
   a `refresh` or `mini` suggestion only, and never apply one. A learned `review_before_push: on` → F4
-  offers a dispatch of `orc-reviewer-opus-5-med` on the diff FIRST (P0/P1 block
+  offers a dispatch of `orc-reviewer-opus-5-low` on the diff FIRST (P0/P1 block
   the commit), marked `→ usual`; the reviewer is not in the fast pipeline, so
   it runs only on that yes. Record `any.ship.review-before-push` whenever it is
   offered.

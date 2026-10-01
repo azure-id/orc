@@ -201,26 +201,26 @@ test("the Opus-5-only ladder is 2 contiguous bands covering 0..100 with no gap o
     assert.strictEqual(resolve(score), want, `score ${score}`);
 });
 
-test("the default table is 6 bands, and shares its top edge with the preset", () => {
+test("the default table is 5 bands, and shares its top edge with the preset", () => {
   const cfg = read("skills/orc/config.md");
   const rows = bandTable(cfg, "## Score → model table");
-  assert.strictEqual(rows.length, 6, "six default bands since v1.0.0 W4");
-  assert.strictEqual(rows[0].agent, "orc-executor-haiku-4-5");
-  assert.strictEqual(rows[5].agent, "orc-executor-opus-5-med");
-  assert.ok(rows[5].closed, "top band closed at 100");
+  assert.strictEqual(rows.length, 5, "five default bands since v2.1.0");
+  assert.strictEqual(rows[0].agent, "orc-executor-sonnet-5-low");
+  assert.strictEqual(rows[4].agent, "orc-executor-opus-5-med");
+  assert.ok(rows[4].closed, "top band closed at 100");
   for (let i = 1; i < rows.length; i++)
     assert.strictEqual(rows[i].lo, rows[i - 1].hi, `band ${i} starts where band ${i - 1} ends`);
 
-  // The two tables agree above 65, which is the whole reason the preset is two
+  // The two tables agree from 41 (v2.1.0; it was 65), which is the whole reason the preset is two
   // bands and not three: once the default's high end is already Opus 5.5 with
   // effort as the dial, a third band here would be a distinction the default
   // table stopped making.
   const preset = bandTable(cfg, "### The Opus-5-only ladder");
-  assert.strictEqual(rows[4].lo, 65);
-  assert.strictEqual(rows[4].hi, 90);
-  assert.strictEqual(rows[4].agent, preset[0].agent);
-  assert.strictEqual(rows[5].lo, preset[1].lo);
-  assert.strictEqual(rows[5].agent, preset[1].agent);
+  assert.strictEqual(rows[3].lo, 41);
+  assert.strictEqual(rows[3].hi, 90);
+  assert.strictEqual(rows[3].agent, preset[0].agent);
+  assert.strictEqual(rows[4].lo, preset[1].lo);
+  assert.strictEqual(rows[4].agent, preset[1].agent);
 });
 
 test("table resolution states its precedence, and the pinned interactions", () => {
@@ -308,7 +308,7 @@ test("the CLI role table and the shared contract agree on every forced agent", (
   const block = cli.match(/const OPUS5_ONLY_ROLES = \[([\s\S]*?)\n\];/);
   assert.ok(block, "OPUS5_ONLY_ROLES is parseable");
   const rows = [...block[1].matchAll(/\["([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\]/g)];
-  assert.strictEqual(rows.length, 9, "nine fixed roles are forced");
+  assert.strictEqual(rows.length, 8, "eight fixed roles are forced (v2.1.0: the CLAUDE.md writer is already Opus 5.5)");
   const shared = read("skills/_shared/opus5-only.md");
   for (const [role, def, forced] of rows) {
     assert.ok(shared.includes(def), `${role}: default ${def} is in the contract`);
@@ -371,7 +371,10 @@ test("every model-twin family renders to the files on disk, in any worktree", ()
   const build = require(path.join(__dirname, "..", "bin", "build-agents.js"));
   assert.ok(build.TWINS.length >= 8, "the eight twin families are generated");
   for (const fam of build.TWINS) {
-    assert.ok(fam.variants.length >= 2, `${fam.family} has a twin`);
+    // v2.1.0 (DE-1): the CLAUDE.md writer and the deep wiki scanner default to
+    // Opus 5.5 low, so their opus5_only twin was deleted - a family of ONE.
+    const single = ["claude-writer", "wiki-scanner"].includes(fam.family);
+    assert.ok(fam.variants.length >= (single ? 1 : 2), `${fam.family} has ${single ? "its variant" : "a twin"}`);
     const src = build.lf(fs.readFileSync(path.join(__dirname, "..", "agents-src", "twins", fam.family + ".template.md"), "utf8"));
     for (const v of fam.variants) {
       const disk = fs.readFileSync(path.join(__dirname, "..", "templates", "agents", v.name + ".md"), "utf8");
@@ -1050,7 +1053,7 @@ test("the lean lanes keep every trigger phrase a user types", () => {
 // v2.0.0 T2 — the trimmed coding lanes keep every phrase a user types.
 const CODING_SKILLS = [
   "orc", "orc-fast", "orc-verify", "orc-test", "orc-pr-setup", "orc-pr-driver", "orc-analyze",
-  "orc-analyze-mini", "orc-poly", "orc-route", "orc-wait", "orc-diy", "orc-pattern",
+  "orc-analyze-mini", "orc-poly", "orc-route", "orc-wait", "orc-diy", "orc-pattern", "orc-fix",
 ];
 const INTERNAL_SKILLS = ["context-combiner", "orc-advisor", "orc-judge"];
 const CODING_TRIGGERS = {
@@ -1067,8 +1070,22 @@ const CODING_TRIGGERS = {
   "orc-wait": ["/orc-wait", "/orc-wait 30", "/orc-wait 2h hard", "wait for my quota to reset", "pause this until the window resets", "/orc-wait block <reason>"],
   "orc-diy": ["/orc-diy", "run my custom orc flow", "/orc-diy compile"],
   "orc-pattern": ["/orc-pattern", "learn my code pattern", "codify conventions"],
+  "orc-fix": ["/orc-fix", "this fixes Sonar typescript:S3776", "ORC caused this defect", "this bug came from AI-generated code", "record this fix"],
   "context-combiner": ["pass to context-combiner"],
 };
+
+// v2.1.0 W6 — /orc-fix is a rider: it never begins between a dispatch and its
+// return (the CLI half refuses too — test/cli/fix.test.js), never writes the run
+// pointer, and with a run open it records only (DE-12 c).
+test("orc-fix: the rider rules sit in its spine", () => {
+  const s = fs.readFileSync(path.join(T, "skills", "orc-fix", "SKILL.md"), "utf8");
+  assert.match(s, /never begins between a dispatch and its validated return/);
+  assert.match(s, /never writes `\.current`/);
+  assert.match(s, /With a run open, it never writes code/);
+  assert.match(s, /\| 1 \| a dispatch is in flight \|/);
+  assert.match(s, /\(H `fix\.f1\.class`\)/);
+  assert.ok(Buffer.byteLength(s.replace(/\r\n/g, "\n")) <= 6144, "the /orc-fix spine stays at or under 6 KB");
+});
 test("the trimmed coding lanes keep every trigger phrase a user types", () => {
   for (const [lane, phrases] of Object.entries(CODING_TRIGGERS)) {
     const desc = foldedDescription(lane);
@@ -1292,7 +1309,7 @@ test("W5 gate: the review slice field set is identical in every pointer file", (
   for (const must of [
     "skills/_shared/review-slice.md",
     "skills/orc/subskills/orc-review-verify/core.md",
-    "agents/orc-reviewer-opus-5-med.md",
+    "agents/orc-reviewer-opus-5-low.md",
   ])
     assert.ok(carriers.includes(must), must + " no longer carries the slice field set");
   // Every review surface points at the one file (reachability).

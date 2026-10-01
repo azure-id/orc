@@ -148,8 +148,8 @@ Lanes          runs        Agents                          dispatches
   orc            12          orc-executor-sonnet-4-6-med       41
   quick          31          orc-executor-sonnet-5-high        22
   mini            9          orc-planner-opus-5-med            21
-  wiki            3          orc-reviewer-opus-5-med           12
-  fast            2          orc-wiki-scanner-opus-4-8-high     9
+  wiki            3          orc-reviewer-opus-5-low           12
+  fast            2          orc-wiki-scanner-opus-5-low     9
 
 Downgrades caught: 2   (a subagent answered on a lower model than its name)
 Counted from trace filenames. No model ran to produce this.

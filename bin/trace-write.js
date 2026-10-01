@@ -343,6 +343,43 @@ function shapeEvent(e, word, d) {
   return { verb, tail: tail || undefined, alias };
 }
 
+// v2.1.0 — the review-close line has ONE grammar, and `orc gotcha quality`
+// now reads it. A per-finding line (`FINDING-OUTCOME F1 :: sev=P3
+// outcome=deferred`) or an outcome outside the closed set is refused BY NAME,
+// so a lane can never write a line the reader silently skips.
+const FINDING_OUTCOMES = ["addressed", "disputed", "wontfix", "open", "pre", "suppressed"];
+const FINDING_HEAD = /^FINDING-OUTCOME addressed=\d+ disputed=\d+ wontfix=\d+ open=\d+ pre=\d+ suppressed=\d+$/;
+const FINDING_TAIL = /^(?:clean|[a-z][a-z.-]*:\d+\/\d+(?:\s*,\s*[a-z][a-z.-]*:\d+\/\d+)*)$/;
+const FINDING_COUNT_HEAD = /^FINDING p0=\d+ p1=\d+ p2=\d+ p3=\d+(?: pre=\d+)?(?: suppressed=\d+)?(?: folded=\d+)?$/;
+const REVIEW_WHICH_HEAD = /^REVIEW-WHICH chose=(orc|project|skip) name=(\S+) by=(user|ledger|learned)$/;
+function reviewWhichError(verb, tail) {
+  const m = REVIEW_WHICH_HEAD.exec(verb);
+  if (!m)
+    return 'REVIEW-WHICH: the head must be "REVIEW-WHICH chose=<orc|project|skip> name=<the review the rule names> by=<user|ledger|learned>"';
+  if (m[2] === "none") return "REVIEW-WHICH: name= is the review the project rule names (e.g. /code-review), never none";
+  if (!tail || !/^\S+:\d+$/.test(tail)) return 'REVIEW-WHICH: the tail is the rule\'s "<file>:<line>" from `orc review policy` (e.g. "CLAUDE.md:42")';
+  return null;
+}
+function findingOutcomeError(verb, tail) {
+  const all = `${verb} ${tail || ""}`;
+  const unknown = [...all.matchAll(/\boutcome=([a-z_-]+)/g)].map((m) => m[1]).filter((o) => !FINDING_OUTCOMES.includes(o));
+  if (unknown.length)
+    return `FINDING-OUTCOME: unknown outcome "${unknown[0]}" — the closed set is ${FINDING_OUTCOMES.slice(0, 4).join(" · ")}; write ONE line for the whole review, not one per finding`;
+  if (!FINDING_HEAD.test(verb))
+    return 'FINDING-OUTCOME: the head must be exactly "FINDING-OUTCOME addressed=<n> disputed=<n> wontfix=<n> open=<n> pre=<n> suppressed=<n>" — ONE line per review, never one per finding';
+  if (tail && !FINDING_TAIL.test(tail))
+    return 'FINDING-OUTCOME: the tail must be "<category>:<addressed>/<total>,…" or "clean"';
+  // v2.1.0 (E21 D5) — a live /orc run wrote `logic:0/4,test-teardown:0/1`. The
+  // categories are the review return's CLOSED set (the observations use it).
+  if (tail && tail !== "clean") {
+    let cats = [];
+    try { cats = require("./gotcha.js").CATEGORIES || []; } catch (_) {}
+    const bad = cats.length ? tail.split(",").map((x) => x.trim().split(":")[0]).filter((c) => c !== "uncategorized" && !cats.includes(c)) : [];
+    if (bad.length) return `FINDING-OUTCOME: unknown category "${bad[0]}" — use the review return's own: ${cats.join(" · ")} (or uncategorized); a review with no finding is the tail "clean"`;
+  }
+  return null;
+}
+
 // → { phase, run_meta, events: [{ts, actor, verb, tail, extra}], note } or throws.
 function validatePacket(pk, traceVerbs) {
   if (!pk || typeof pk !== "object" || Array.isArray(pk)) throw new PacketError("the packet is not a map");
@@ -360,12 +397,26 @@ function validatePacket(pk, traceVerbs) {
     const d = Object.prototype.hasOwnProperty.call(traceVerbs, word) ? traceVerbs[word] : null;
     if (!d) return errs.push(`${at}: unknown verb ${word} — not in the CLOSED set (trace-verbs.md)`);
     if (d.emitter === "hook") return errs.push(`${at}: ${word} is written by the hook, never by a packet`);
+    // v2.1.0 W6 — `FIX` is written by `orc fix record` itself.
+    if (d.emitter === "cli") return errs.push(`${at}: ${word} is written by the CLI (\`orc fix record\`), never by a packet`);
     const ts = e.ts == null ? "" : String(e.ts).trim();
     if (!TS_RE.test(ts)) errs.push(`${at} (${word}): ts "${ts}" is not DDMMYY HH:MM:SS.mmm — the event's REAL time, never "now"`);
     const actor = e.actor == null || e.actor === "" ? "orc" : String(e.actor).trim();
     if (/\s/.test(actor)) errs.push(`${at} (${word}): actor "${actor}" has a space`);
     const shaped = shapeEvent(e, word, d);
     if (shaped.error) return errs.push(`${at}: ${shaped.error}`);
+    if (word === "FINDING-OUTCOME") {
+      const bad = findingOutcomeError(shaped.verb, shaped.tail);
+      if (bad) return errs.push(`${at}: ${bad}`);
+    }
+    // v2.1.0 (E21 D2, D3) — a live run wrote `FINDING 9 findings — P0×2 …` and
+    // `REVIEW-WHICH chose=orc name=none … :: CLAUDE.md:Review policy`.
+    if (word === "FINDING" && !FINDING_COUNT_HEAD.test(shaped.verb))
+      return errs.push(`${at}: FINDING: the head must be "FINDING p0=<n> p1=<n> p2=<n> p3=<n>" (optionally " pre=<n> suppressed=<n> folded=<n>") — counts only, the detail goes in the tail`);
+    if (word === "REVIEW-WHICH") {
+      const bad = reviewWhichError(shaped.verb, shaped.tail);
+      if (bad) return errs.push(`${at}: ${bad}`);
+    }
     const extra = {};
     for (const [k, v] of Object.entries(e)) {
       if (CORE_FIELDS.includes(k) || k === "phase" || k === shaped.alias || v === undefined) continue;
@@ -516,7 +567,7 @@ function writePacket(claudeDir, logDir, v, block) {
 
 const USAGE = "usage: orc trace write --packet -|<file> [--json]   (reads one phase packet; writes the .txt + .jsonl pair)";
 
-// deps: { flag, positionals, emitJson, wantsJson, resolveClaudeDir, resolveLogDir, TRACE_VERBS }
+// deps: { flag, positionals, emitJson, wantsJson, resolveClaudeDir, resolveLogDir, TRACE_VERBS, readOverride, reviewPolicyCompute, logSweep }
 // The habits capture check (eval E2, 27-09-2026): a live lane read habits.md at
 // preflight and then wrote no ASK at the question it asked minutes later. So at the
 // FINISH packet, with `habits` on and ZERO `ASK` lines in the run, the CLI names
@@ -543,6 +594,118 @@ function askNudge(deps, claudeDir, v, r) {
   return {
     qids,
     line: `habits: ${mode} — ${done.size ? `this run recorded ASK for ${[...done].join(", ")} only` : "this run wrote NO ASK line"}. If you asked the user any question below, write ONE more packet now (with \`run: ${path.basename(r.trace_path)}\` — it works even after .current is removed): one ASK event per question you asked the user that is marked (H <qid>) — ${lane}: ${qids.map((q) => { const o = Object.keys(H.ASK_POINTS[q].options || {}); return o.length ? `${q} (${o.join("|")})` : `${q} (the agent names you offered)`; }).join(", ")}. Use THESE option ids exactly. verb "ASK <qid>", tail "offered=<o1|o2|…> rec=<o|none> chose=<o|other> by=<user|ledger|learned|config|default>". A question you did not ask this run → no event.`,
+  };
+}
+
+// v2.1.0 (E21 D6) — the phase-skip nudge. A live /orc run built the plan inline
+// and skipped review AND verify "as a proportionality call" until the user asked.
+// /orc ALWAYS reviews and verifies (`orc/SKILL.md`, the phase manifest). At FINISH,
+// an /orc or /orc-ultra trace with an executor SPAWN and no reviewer or no verifier
+// SPAWN gets ONE line naming what is missing. Never a block: the exit stays 0.
+function phaseNudge(v, r, claudeDir) {
+  if (!v.events.some((e) => e.verb.split(/\s+/)[0] === "FINISH")) return null;
+  const tok = (/(?:^|\/)run-([a-z0-9]+)-/.exec(r.trace_path) || [])[1];
+  if (tok !== "orc" && tok !== "ultra") return null;
+  let txt = "";
+  try { txt = fs.readFileSync(path.join(path.dirname(claudeDir), r.trace_path), "utf8"); } catch (_) { return null; }
+  if (!/\]\s+hook\s+SPAWN\s+orc-executor-/.test(txt)) return null;
+  const missing = [];
+  if (!/\]\s+hook\s+SPAWN\s+orc-reviewer-/.test(txt)) missing.push("review (Phase 5, orc-reviewer-opus-5-low)");
+  if (!/\]\s+hook\s+SPAWN\s+orc-verifier-/.test(txt)) missing.push("verify (Phase 6, orc-verifier-opus-5-med)");
+  if (!missing.length) return null;
+  return {
+    missing,
+    line: `phases: this /orc run changed code and has no ${missing.join(" and no ")}. /orc always runs both — they are not optional for a small change. Run them now, before the summary; a run that should skip them belongs in /orc-mini or /orc-fast.`,
+  };
+}
+
+// v2.1.0 — the observe nudge (the askNudge model). At the FINISH packet, a run
+// whose trace has a reviewer RETURN, whose review was NOT clean, and that has no
+// `author: orc` observation with `run=<this trace>` gets ONE line naming
+// `orc gotcha observe`. Review Quality counts the review from the trace either
+// way; this is the acceptance half. It never blocks: the exit stays 0.
+function observeNudge(claudeDir, v, r) {
+  if (!v.events.some((e) => e.verb.split(/\s+/)[0] === "FINISH")) return null;
+  const file = path.join(path.dirname(claudeDir), r.trace_path);
+  let txt = "";
+  try { txt = fs.readFileSync(file, "utf8"); } catch (_) { return null; }
+  if (!/\]\s+hook\s+RETURN\s+orc-reviewer-/.test(txt)) return null;
+  const fo = /FINDING-OUTCOME addressed=(\d+) disputed=(\d+) wontfix=(\d+) open=(\d+)/.exec(txt);
+  if (fo && fo.slice(1, 5).every((n) => n === "0")) return null; // a clean review records nothing
+  const run = path.basename(r.trace_path).replace(/\.txt$/, "");
+  let obs = "";
+  try { obs = fs.readFileSync(path.join(claudeDir, "orc", "observations.jsonl"), "utf8"); } catch (_) {}
+  for (const line of obs.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const o = JSON.parse(line);
+      if (o && o.author === "orc" && o.run === run) return null;
+    } catch (_) {}
+  }
+  return {
+    run,
+    line: `review: this run has a reviewer RETURN and no recorded finding outcome. Pipe ONE object per finding to \`orc gotcha observe - --json\` (source review · author orc · run ${run} · ref "${run} · F<n>" · outcome addressed|disputed|wontfix|open · rule or sig), then write the FINDING-OUTCOME line if it is missing. A clean review needs neither. Every lane that ran a review records this, /orc-fast too: an observation is review learning, not a repair-memory entry.`,
+  };
+}
+
+// v2.1.0 — the which-review nudge. At FINISH: the project names its own review
+// (`orc review policy`, re-run here — the files are small), the run changed code
+// (a hook SPAWN of an executor, or a quick code entry), and the trace has no
+// REVIEW-WHICH line → ONE line. Never a block: the exit stays 0.
+function reviewWhichNudge(deps, claudeDir, v, r) {
+  if (typeof deps.reviewPolicyCompute !== "function") return null;
+  if (!v.events.some((e) => e.verb.split(/\s+/)[0] === "FINISH")) return null;
+  const file = path.join(path.dirname(claudeDir), r.trace_path);
+  let txt = "";
+  try { txt = fs.readFileSync(file, "utf8"); } catch (_) { return null; }
+  if (/\]\s+\S+\s+REVIEW-WHICH\b/.test(txt)) return null;
+  const changed = /\]\s+hook\s+SPAWN\s+orc-executor-/.test(txt) || /\]\s+\S+\s+GRAPH-UPDATE\b/.test(txt);
+  if (!changed) return null;
+  let p;
+  try { p = deps.reviewPolicyCompute(claudeDir); } catch (_) { return null; }
+  if (!p || p.policy !== "project" || !p.found.length) return null;
+  const f = p.found[0];
+  return {
+    rule: `${f.file}:${f.line}`,
+    name: f.names[0],
+    line: `review: ${f.file}:${f.line} names ${f.names[0]} and this run changed code with no REVIEW-WHICH line. Before ship, ask "which review" (_shared/review-slice.md §0), then write ONE packet: verb "REVIEW-WHICH chose=<orc|project|skip> name=<name|none> by=user", tail "${f.file}:${f.line}".`,
+  };
+}
+
+// v2.1.0 (A7) — "Questions saved" read 0 for ever: a lane that SKIPPED a
+// question because a config value answered it wrote no `by=config` line. At
+// FINISH, with habits on, each of this lane's points whose config key is SET in
+// the override (and not `ask`) and that has no ASK line in the run is named once.
+// It never blocks; habits off → nothing (zero bytes).
+function configNudge(deps, claudeDir, v, r) {
+  if (!deps.readOverride || !v.events.some((e) => e.verb.split(/\s+/)[0] === "FINISH")) return null;
+  let H;
+  try { H = require("./habit.js"); } catch (_) { return null; }
+  let map = {};
+  try { map = deps.readOverride(claudeDir).map || {}; } catch (_) { return null; }
+  let mode = "off";
+  try { mode = H.habitsMode(map); } catch (_) {}
+  if (mode === "off") return null;
+  const file = path.join(path.dirname(claudeDir), r.trace_path);
+  let txt = "";
+  try { txt = fs.readFileSync(file, "utf8"); } catch (_) { return null; }
+  const tok = (/(?:^|\/)run-([a-z0-9]+)-/.exec(r.trace_path) || [])[1];
+  if (!tok) return null;
+  const lane = tok === "orc" || tok === "ultra" ? "orc" : `orc-${tok}`;
+  const done = new Set();
+  for (const m of txt.matchAll(/\] \S+\s+ASK (\S+) ::/g)) done.add(m[1]);
+  const points = [];
+  for (const [qid, pt] of Object.entries(H.ASK_POINTS)) {
+    if (!pt.key || !(pt.lanes || []).includes(lane) || done.has(qid)) continue;
+    const val = map[pt.key];
+    if (val === undefined || val === null || String(val) === "ask") continue;
+    const opt = Object.entries(pt.values || {}).find(([, x]) => String(x) === String(val));
+    points.push({ qid, key: pt.key, value: String(val), option: opt ? opt[0] : null });
+  }
+  if (!points.length) return null;
+  return {
+    points,
+    line: `habits: ${mode} — your config answered ${points.map((p) => `${p.qid} (${p.key}: ${p.value})`).join(", ")} and this run has no ASK line for it. If the run reached that question, write ONE packet (with \`run: ${path.basename(r.trace_path)}\`): one ASK event each, tail "offered=<the options> rec=<o> chose=<the option your config picked> by=config". Not reached this run → no event.`,
   };
 }
 
@@ -596,7 +759,10 @@ function traceCmd(deps) {
     let last = -1;
     lines.forEach((l, i) => { if (new RegExp(`\\]\\s+\\S+\\s+ASK ${qid.replace(/\./g, "\\.")} ::`).test(l)) last = i; });
     if (last < 0) return false;
-    return !lines.slice(last + 1).some((l) => /\]\s+hook\s+SPAWN orc-executor-/.test(l));
+    // v2.1.0 (A6): a NEW entry starts at an executor OR a recon SPAWN, or an extra
+    // dispatch line. A reviewer SPAWN is part of the same entry (its commit offer
+    // after the review is a follow-up), so it is not a boundary.
+    return !lines.slice(last + 1).some((l) => /\]\s+hook\s+SPAWN orc-(?:executor|recon)-/.test(l) || /\]\s+\S+\s+EXTRA\s/.test(l));
   };
   if (H) {
     const seen = new Set();
@@ -616,13 +782,36 @@ function traceCmd(deps) {
         askRejected.push({ qid: p.qid, error: `unknown question id — use one of: ${ids.join(", ")}`, options: "see the id list" });
         return false;
       }
-      if (p && p.ok !== false) { seen.add(p.qid); return true; }
+      if (p && p.ok !== false) {
+        seen.add(p.qid);
+        // v2.1.0 (A1): an agent gate is STORED with the canonical agent names.
+        const pt = H.ASK_POINTS[p.qid];
+        if (pt && pt.open === "agent") {
+          const ctx = Object.entries(p.ctx || {}).map(([k, x]) => `${k}=${x}`).join(",");
+          e.tail = `offered=${p.offered.join("|")} rec=${p.rec} chose=${p.chose} by=${p.by}` + (p.pre ? ` pre=${p.pre}` : "") + (ctx ? ` ctx=${ctx}` : "");
+        }
+        return true;
+      }
       const qid = e.verb.split(/\s+/)[1] || "";
       const pt = H.ASK_POINTS[qid];
       const o = pt ? Object.keys(pt.options || {}) : [];
       askRejected.push({ qid, error: (p && p.error) || "not an ASK line", options: o.length ? o.join("|") : "the agent names you offered (plain ids, no spaces)" });
       return false;
     });
+  }
+  // v2.1.0 (E21 D3/D4) — §0 "which review" exists only when the PROJECT names its
+  // own review. Live runs wrote REVIEW-WHICH and ASK any.review.which with no rule
+  // at all, so both are handed back by name when `orc review policy` says orc.
+  const isWhich = (e) => /^REVIEW-WHICH\b/.test(e.verb) || /^ASK any\.review\.which\b/.test(e.verb);
+  if (typeof deps.reviewPolicyCompute === "function" && v.events.some(isWhich)) {
+    let pol = null;
+    try { pol = deps.reviewPolicyCompute(deps.resolveClaudeDir()); } catch (_) {}
+    if (pol && pol.policy !== "project")
+      v.events = v.events.filter((e) => {
+        if (!isWhich(e)) return true;
+        askRejected.push({ qid: /^ASK/.test(e.verb) ? "any.review.which" : "REVIEW-WHICH", error: "no project review rule (`orc review policy` says orc) — the which-review question is not asked, so record nothing for it", options: "none" });
+        return false;
+      });
   }
   if (askRejected.length && !v.events.length && !v.note) {
     const line = `ASK rejected — nothing written. Resend each as verb "ASK <qid>", tail "offered=<a|b> rec=<o> chose=<o> by=user" with these ids: ${askRejected.map((a) => `${a.qid} (${a.options}) — ${a.error}`).join("; ")}`;
@@ -639,14 +828,37 @@ function traceCmd(deps) {
     return fail(3, "trace-state", `${e.message} — nothing written`);
   }
   const nudge = askNudge(deps, claudeDir, v, r);
+  const obsNudge = observeNudge(claudeDir, v, r);
+  const whichNudge = reviewWhichNudge(deps, claudeDir, v, r);
+  const cfgNudge = configNudge(deps, claudeDir, v, r);
+  const phNudge = phaseNudge(v, r, claudeDir);
+  // v2.1.0 W7 (DE-20 a) — the opt-in log sweep, AFTER the FINISH packet is on
+  // disk. `log_retention_auto: off` → one config lookup, no scan. It never
+  // blocks and never changes the exit code (sweep() swallows every error).
+  let sweep = null;
+  if (typeof deps.logSweep === "function" && v.events.some((e) => e.verb.split(/\s+/)[0] === "FINISH")) {
+    try { sweep = deps.logSweep(claudeDir); } catch (_) { sweep = null; }
+  }
   // The messages go FIRST: a lane often pipes the answer through `head`.
   const rejLine = askRejected.length
     ? `ASK rejected (the other events were written) — resend each as verb "ASK <qid>", tail "offered=<a|b> rec=<o> chose=<o> by=user" with these ids: ${askRejected.map((a) => `${a.qid} (${a.options}) — ${a.error}`).join("; ")}`
     : null;
-  const head = Object.assign(rejLine ? { ask_rejected_line: rejLine } : {}, nudge ? { ask_missing_line: nudge.line } : {});
-  if (json) return deps.emitJson(Object.assign(head, { ok: true }, r, rejLine ? { ask_rejected: askRejected } : {}, nudge ? { ask_missing: nudge } : {}), 0);
+  const head = Object.assign(
+    rejLine ? { ask_rejected_line: rejLine } : {},
+    nudge ? { ask_missing_line: nudge.line } : {},
+    obsNudge ? { observe_missing_line: obsNudge.line } : {},
+    whichNudge ? { review_which_missing_line: whichNudge.line } : {},
+    cfgNudge ? { config_missing_line: cfgNudge.line } : {},
+    phNudge ? { phases_missing_line: phNudge.line } : {}
+  );
+  if (json) return deps.emitJson(Object.assign(head, { ok: true }, r, rejLine ? { ask_rejected: askRejected } : {}, nudge ? { ask_missing: nudge } : {}, obsNudge ? { observe_missing: obsNudge } : {}, whichNudge ? { review_which_missing: whichNudge } : {}, cfgNudge ? { config_missing: cfgNudge } : {}, phNudge ? { phases_missing: phNudge } : {}, sweep ? { log_sweep: sweep } : {}), 0);
   if (rejLine) console.log(rejLine);
   if (nudge) console.log(nudge.line);
+  if (obsNudge) console.log(obsNudge.line);
+  if (whichNudge) console.log(whichNudge.line);
+  if (cfgNudge) console.log(cfgNudge.line);
+  if (phNudge) console.log(phNudge.line);
+  if (sweep) console.log(sweep.line);
   console.log(
     `trace write: +${r.lines_written} lines, +${r.jsonl_written} jsonl → ${r.trace_path}` +
       (r.renamed ? " (renamed the bootstrap file)" : "") +

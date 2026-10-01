@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — shells node bin/cli.js (cli, freshInstall); does not bind a port
 // v2.0.4 — the status-line design expansion, panel side: the POST guard lets a
 // clear through, the set and line routes forward the new flags, the staged
 // preview runs in a temp copy and never touches the project, and the editor

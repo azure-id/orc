@@ -1,8 +1,8 @@
 ---
 name: orc-wiki-scanner-sonnet-5-high
 description: >
-  ORC Wiki Scanner — claude-sonnet-5, high effort. Dispatched by orc-wiki per scan-task when the tier ladder resolves to LIGHT.
-model: claude-sonnet-5
+  ORC Wiki Scanner — claude-sonnet-5-5, high effort. Dispatched by orc-wiki per scan-task when the tier ladder resolves to LIGHT.
+model: claude-sonnet-5-5
 effort: high
 tools: Read, Glob, Grep, Bash
 ---

@@ -93,7 +93,7 @@ Docs-only → gate N/A, say so. `orc run inflight` FIRST — exit 2 REFUSES, bec
 (`return-validation.md` §0). **A `risk: high` row adds ONE option,
 never a phase** (H `mini.phase-m.risk-high`): an exported symbol with fan-in 3+ that no test reaches adds one
 option to the EXISTING end-of-run batch (mock example · test authoring · ship)
-— *a. dispatch `orc-reviewer-opus-5-med` with `../_shared/review-slice.md`* (H `any.ship.review-before-push`) *(P0/P1 block the commit
+— *a. dispatch `orc-reviewer-opus-5-low` with `../_shared/review-slice.md`* (H `any.ship.review-before-push`) *(P0/P1 block the commit
 offer once) · b. write a test in Phase T · c. ship anyway*. No new user turn;
 mini still skips full review.
 
@@ -154,9 +154,9 @@ Models pinned in `.claude/agents/`; look one up here, never reconstruct a name (
 
 | Role | Agent (dispatch this) | Model / effort | When `opus5_only` |
 |------|-----------------------|----------------|-------------------|
-| mini analysis (docs only) | `orc-analyze-mini-sonnet-5-high` | claude-sonnet-5 / high | `orc-analyze-mini-opus-5-med` |
-| mini planning | `orc-planner-mini-sonnet-5-high` | claude-sonnet-5 / high | `orc-planner-mini-opus-5-med` |
-| mini execution | `orc-executor-sonnet-5-high` | claude-sonnet-5 / high | `orc-executor-opus-5-low` |
+| mini analysis (docs only) | `orc-analyze-mini-sonnet-5-high` | claude-sonnet-5-5 / high | `orc-analyze-mini-opus-5-med` |
+| mini planning | `orc-planner-mini-sonnet-5-high` | claude-sonnet-5-5 / high | `orc-planner-mini-opus-5-med` |
+| mini execution | `orc-executor-sonnet-5-high` | claude-sonnet-5-5 / high | `orc-executor-opus-5-low` |
 | test authoring (opt-in) | `orc-test-author-opus-5-med` | claude-opus-5-5 / medium | unchanged |
 
 ## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)

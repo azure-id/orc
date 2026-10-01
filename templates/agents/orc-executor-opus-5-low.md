@@ -1,7 +1,7 @@
 ---
 name: orc-executor-opus-5-low
 description: >
-  ORC executor — claude-opus-5-5, low effort. Dispatched by the build lanes at execution for ONE task, score band upper-complexity [65,90).
+  ORC executor — claude-opus-5-5, low effort. Dispatched by the build lanes at execution for ONE task, score band upper-complexity [41,90).
 model: claude-opus-5-5
 effort: low
 tools: Read, Write, Edit, Bash, Glob, Grep

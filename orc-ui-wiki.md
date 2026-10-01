@@ -13,6 +13,7 @@ updated: 21-09-2026 (v1.9.0 — the lean lanes widened, and the panel needed no 
 updated: 27-09-2026 (v2.0.0 W7 — the Behaviour panel: habits, rhythm, gotchas, review quality, answer log)
 updated: 30-09-2026 (v2.0.3 — the hook board: the real hook state, clears, stop-on-refusal, saved chip samples, the banner race)
 updated: 30-09-2026 (v2.0.4 — the hook board: every design field in the editor, line options, the staged live preview, the "" guard)
+updated: 02-10-2026 (v2.1.0 — Behaviour: traced review counts, project reviews, fixes after review, habits-off tabs, answer titles · Maintenance: Clear old logs · Settings: the deep link + three keys · Hook board: the 1 s floor)
 -->
 
 > **LOCAL ONLY. Never `git add` this file.** It joins the untracked `*-plan.md`
@@ -255,13 +256,13 @@ you ran them. Both read the same traces. The spec is `v2-notes/07-behaviour-pane
 | part | reads | what it draws |
 |---|---|---|
 | head | `modes`, `mode` | the **learning switch** (`Off · Observe · Propose`) — a WRITE through the one confirmation, `orc config set habits <mode>` — and the window switch (`30d · 90d · all`, a READ) |
-| off card | the exit-3 object | with `habits: off` ONE card replaces the tabs: what each mode does, that off costs zero tokens, `kept` answers, and the `on` commands. **Never fake data** |
+| off card | the exit-3 object | with `habits: off` ONE card replaces the habit tabs: what each mode does, that off costs zero tokens, `kept` answers, and the `on` commands. **Never fake data**. v2.1.0 (A13): the **Review quality** and **Gotchas** tabs stay under the off card (`BH_TABS_OFF`; `bhTabs` takes an optional tab list), because review learning is always on |
 | hero | `portrait[]`, `tiles{}` | 3–5 CLI sentences (`k` + `line`), four tiles that count up and REST on the CLI's value; the orbit turns once |
 | Habits | `rows[]`, `next_run[]`, `state_words`, `classes`, `habit log --states` | the next-run strip, a legend, one card per habit in the CLI's order (ring = `share`, bar = `options[]`, `streak` in SHAPES ● ○ ◐, `rule`, `context`, `effect`), the buttons `commands{}` allows, the History fold |
 | Rhythm | `rhythm{heat,lanes,qpr,how,by}` | the 7 × 24 heat map, the lane mix, questions per run, how each answer was given |
 | Gotchas | `gotcha list` `panel{}`, `gotcha card` | the source bar, the status chips, the sync state, one row per entry, and **what the reviewer will see** — the exact card, re-read on input (300 ms) |
-| Review quality | `gotcha quality`, `list --candidates` | acceptance per kind against `target`, coloured by the CLI's `bands{}`; the acceptance and P3 lines; proposed suppressions with Accept. Below the floor every chart KEEPS its slot and shows `floor_line` |
-| Answer log | `habit log` | the last 40 ASK events with their `by=` chip |
+| Review quality | `gotcha quality`, `list --candidates` | acceptance per kind against `target`, coloured by the CLI's `bands{}`; the acceptance and P3 lines; proposed suppressions with Accept. Below the floor every chart KEEPS its slot and shows `floor_line`. v2.1.0: a "Fixes after review" block (`orc fix record`) — the count, one bar per cause (Sonar · ORC defect · AI-code bug · other; width = the CLI's `fixes.causes[].share`) and the misses list (`misses.list`, each with `missed_by`). A fix is never counted as a review. v2.1.0 (W3): the review count comes from the TRACES too — `reviews` is the union by run of `reviews_traced` (a trace with `FINDING-OUTCOME` or a `hook RETURN orc-reviewer-*` line; a clean review counts) and `reviews_observed`; the panel prints the CLI's `floor_line` and computes nothing. v2.1.0 (W4): one line "Project reviews: N" (`behaviour.q.projectReviews`) from `project_reviews`; the headline counts ORC reviews only (`by_reviewer`) |
+| Answer log | `habit log`, `/api/habits/points` | the last 40 ASK events with their `by=` chip. v2.1.0 (A12): each row shows the question TITLE from `/api/habits/points` (fetched once); the point id is the hover hint |
 
 **The rail dot** — `counts.proposed > 0` puts one dot on the rail link that pulses
 three times and stops (`behaviourRailDot()` from `boot()`). It is the ONLY place
@@ -637,6 +638,42 @@ user's own recovery (`orc ui --stop`, `orc ui`) minted a NEW token for a server
 that was already the new build, which is why nothing about it looked like a
 token bug. Two halves of one mechanism, each individually correct.
 
+### Maintenance: Clear old logs (v2.1.0 W7)
+
+The row `clear-logs` runs `orc clear logs --apply`. The preview is
+`orc clear logs --json` (print mode, nothing is deleted). The panel sends only
+the action id, so the age comes from config: `log_retention_days` (30 · 60 · 90 ·
+120 · 240 · 360, default 90). `restarts_ui: false`, `names_files: true`, the
+apply button is `btn-danger`.
+
+| part | reads | rule |
+|---|---|---|
+| the row line | `status` = `orc clear logs --summary --json` (no scan) | "Older than **N days** (Settings ▸ log retention). Last automatic sweep: date, files." The day value links to `#/settings?key=log_retention_days`, which opens Settings filtered to that key |
+| the preview | `delete[]` · `keep[]` · `totals` · `notes[]` · `default_dir` | a table of every file in every unit (a trace set is up to four files, a run folder names its git ref), the kept list with each reason in a closed `<details>`, the CLI's own note lines (a moved cutoff, the old default folder) shown as written |
+| the waiting-runs box | `waiting_runs` | the same tick box as every other action; its text says a waiting run is never deleted |
+
+The panel computes no number: totals, dates and reasons are the CLI's. The two
+keys appear in Settings as enum buttons with no new panel code.
+`--fixtures` carries one of every state: a trace set, a leftover, a closed run
+with its ref, a done run with no ref, every keep reason, a moved cutoff and the
+old default folder. `ORC_UI_FIXTURE_CLEAR=empty` gives the nothing-to-delete
+preview.
+
+### Settings: the deep link and the v2.1.0 keys
+
+- **`#/settings?key=<name>`** opens Settings filtered to that one key
+  (`settings.js`). The Maintenance row uses it for `log_retention_days`.
+- **Three new keys, zero panel code** (§7): `log_retention_days` (30 · 60 · 90 ·
+  120 · 240 · 360, default 90), `log_retention_auto` (off · on, default off) and
+  `statusline_refresh` (off · 1 · 2 · 3 · 5 · 10). All three are enum buttons
+  from `config list --json`.
+- **`statusline_refresh` is WRITE-THROUGH.** The CLI stores it in
+  `settings.json` (`statusLine.refreshInterval`), never in `orc.config.yaml`,
+  and `config list` reads it from there. The panel sends the same
+  `/api/config/set` as for every key. It must not cache the value.
+- The score-table label says **"5-band"** (en + id `settings.json`); the
+  `opus5_only` text says 2 bands.
+
 ### 4b. Lanes, the rank ladder, and the demotion row (v1.0.0 W16)
 
 Three additions, one rule between them: **every one renders something the CLI
@@ -886,6 +923,19 @@ template; that is what put a 250px ellipse on `.ex-tool`.
 - **THE ANIMATION TIMER IS A SETTINGS WRITE, NOT A STAGED OP.** `animationBlock`
   posts `/api/statusline/refresh` (`statusline refresh <s|off>`) straight away and
   reloads; it says what the timer costs, and warns when a moving part has none.
+
+### 4b.5 v2.1.0 — the timer has a floor of 1 second
+
+- **0.2 · 0.5 · 0.7 ARE DISABLED, NOT REMOVED.** Claude Code gives no timer
+  below 1 s (measured: 0.25 s gives no redraw). The buttons keep their slot,
+  are `disabled`, and carry the `hookui.animFloor` tooltip (en + id). The
+  enabled values are Off · 1 · 2 · **3** (new) · 5 · 10.
+- The CLI refuses `0 < n < 1` with exit 2 and the floor text; `--json` is
+  `{ok:false, reason:"below-floor", floor_s:1, nearest:1}`. The panel shows the
+  CLI's answer and keeps no second rule.
+- `orc statusline refresh`, `orc config set statusline_refresh` and the panel
+  route all go through ONE core (`slRefreshApply`).
+- Tests: `test/statusline-refresh.test.js` (the panel buttons + i18n case).
 
 ### Test (v1.5.0) — the panel for the lane that runs the test
 

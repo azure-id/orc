@@ -707,9 +707,12 @@ function trafficCells(idx, n, g) {
 // advances while the session is active and FREEZES when it is idle, which is
 // true and is the point. ORC_STATUSLINE_MOTION=0 REMOVES it — a frozen frame of
 // a cycling animation is a bug that looks like a hang.
-function motifFrame(set, now, ms, motion) {
+// v2.1.0 (DE-23): with a refresh timer the hook passes `step` (one per run), and
+// the frame is "the one after the last one shown" — never skipped, never repeated.
+function motifFrame(set, now, ms, motion, step) {
   if (!set || !set.length) return "";
   if (!motion) return set[0];
+  if (Number.isInteger(step)) return set[step % set.length];
   return set[Math.floor(now / (ms || 200)) % set.length];
 }
 
@@ -777,6 +780,8 @@ function render(prog, ctx) {
     scan: ctx.scan || {},
     derived: ctx.derived || { verdict: null, reasons: [], version: null },
     now: ctx.now || Date.now(),
+    // v2.1.0 (DE-23): one step per run when a refresh timer is set; else null.
+    step: Number.isInteger(ctx.step) ? ctx.step : null,
   };
   const hasRun = !!(rctx.scan.phase || rctx.scan.spawns);
 
@@ -1120,7 +1125,7 @@ function renderMotif(op, prog, c, o) {
   const set = (m.motifs && (m.motifs[String(kind)] || m.motifs.generic)) || null;
   if (!set) return "";
   const frames = o.ascii ? set.a : set.u;
-  return motifFrame(frames, c.now, set.ms, o.motion);
+  return motifFrame(frames, c.now, set.ms, o.motion, c.step);
 }
 
 function renderSeries(op, prog, c, o) {
@@ -1174,7 +1179,7 @@ function renderSprite(op, c, o) {
   const w = Math.max(1, op.w || 16);
   const set = o.ascii && Array.isArray(op.a) && op.a.length ? op.a : op.f || [];
   if (!set.length) return " ".repeat(w);
-  const tick = o.motion ? Math.floor(c.now / (op.ms > 0 ? op.ms : 1000)) : 0;
+  const tick = !o.motion ? 0 : Number.isInteger(c.step) ? c.step : Math.floor(c.now / (op.ms > 0 ? op.ms : 1000));
   const frame = [...String(set[tick % set.length])];
   const fw = frame.length;
   let x = 0;

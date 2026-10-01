@@ -108,7 +108,7 @@ clamp 0..100 → the RESOLVED table (below).
 
 **Which table (highest wins):** `opus5_only: true` (the 2-band Opus-5-only
 preset: `[0,90)` low · `[90,100]` medium) → `rubric_bands_override`
-(hand-written rows) → the default 6-band table. All three are in `config.md`.
+(hand-written rows) → the default 5-band table. All three are in `config.md`.
 The formula, the facets and the risk floor are IDENTICAL in every case — only
 the score→agent mapping changes. Three consequences worth stating so nobody
 re-derives them per run:
@@ -123,14 +123,14 @@ re-derives them per run:
 Show the user the full table (task, the facet vector, the arithmetic
 `B+N+L+T+fan+U = raw`, any risk floor, final, override+reason if any, dispatched
 model) BEFORE dispatching — an un-shown number is not a scored number. **Head it
-with the RESOLVED table's name** (`6-band default` / `Opus-5-only ladder
+with the RESOLVED table's name** (`5-band default` / `Opus-5-only ladder
 (opus5_only)` / `custom (rubric_bands_override)`): the same logic
 applies to the mapping as to the number.
 
 **Extra (v0.50.0, `extra_enabled`) adds a `via` column and can make the head a
 PAIR.** An Extra route row is an OVERLAY that outranks the tables above **only
 for the scores it covers**, so a run can genuinely be running two tables at once
-and the head names both (`6-band default + extra rows [0,30) [30,70)`). The
+and the head names both (`5-band default + extra rows [0,30) [30,70)`). The
 column reads `claude` or `extra:<profile> (<engine>)` and comes from
 `orc extra resolve --json` — the formula, the facets and the risk floor are
 untouched, and **the score is computed before the routing, never after it**. Two
@@ -170,14 +170,14 @@ the band is what matters. Compare a new task to these facet-by-facet.
 
 | Task | breadth·novelty·logic·test · fan_in/out · unc | Arithmetic | Band |
 |---|---|---|---|
-| Rename a config key across 4 files + its test | 5·mechanical·none·update-existing · 0/0 · low | 10+0+0+4 = **14** | haiku [0,30) |
-| New CRUD endpoint following a sibling route | 3·imitate·branching·new-tests · 1/0 · low | 6+8+8+8+5 = **35** | sonnet-4-6-med [30,40) |
-| Bug fix across 2 files with a repro test | 3·imitate·branching·new-tests · 0/0 · medium | 6+8+8+8+6 = **36** | sonnet-4-6-med [30,40) |
-| Isolated component from the design system | 3·new-surface·branching·new-tests · 0/0 · low | 6+18+8+8 = **40** | sonnet-4-6-high [40,55) |
-| Notification model + enum other tasks consume | 3·new-surface·stateful·new-tests · 0/3 · low | 6+18+16+8+9 = **57** | sonnet-5-high [55,65) |
-| Service-layer refactor behind a stable interface | 5·imitate·stateful·update-existing · 0/3 · medium | 10+8+16+4+9+6 = **53** | sonnet-4-6-high [40,55) |
-| Add role check to payment-refund endpoint | 3·imitate·branching·new-tests · 0/0 · low · **risk=[auth,money]** | 30 raw → **floor 70** | opus-5-low [65,90) |
-| Migrate orders table to split-name + backfill | 6·new-surface·stateful·new-tests · 1/3 · high · **risk=[migration,data-integrity]** | 15+18+16+8+5+9+12 = 83 (floor 70) → **83** | opus-5-low [65,90) |
+| Rename a config key across 4 files + its test | 5·mechanical·none·update-existing · 0/0 · low | 10+0+0+4 = **14** | sonnet-5-low [0,21) |
+| New CRUD endpoint following a sibling route | 3·imitate·branching·new-tests · 1/0 · low | 6+8+8+8+5 = **35** | sonnet-5-high [31,41) |
+| Bug fix across 2 files with a repro test | 3·imitate·branching·new-tests · 0/0 · medium | 6+8+8+8+6 = **36** | sonnet-5-high [31,41) |
+| Isolated component from the design system | 3·new-surface·branching·new-tests · 0/0 · low | 6+18+8+8 = **40** | sonnet-5-high [31,41) |
+| Notification model + enum other tasks consume | 3·new-surface·stateful·new-tests · 0/3 · low | 6+18+16+8+9 = **57** | opus-5-low [41,90) |
+| Service-layer refactor behind a stable interface | 5·imitate·stateful·update-existing · 0/3 · medium | 10+8+16+4+9+6 = **53** | opus-5-low [41,90) |
+| Add role check to payment-refund endpoint | 3·imitate·branching·new-tests · 0/0 · low · **risk=[auth,money]** | 30 raw → **floor 70** | opus-5-low [41,90) |
+| Migrate orders table to split-name + backfill | 6·new-surface·stateful·new-tests · 1/3 · high · **risk=[migration,data-integrity]** | 15+18+16+8+5+9+12 = 83 (floor 70) → **83** | opus-5-low [41,90) |
 
 Two disciplines the vectors encode: (1) a small diff is NOT a low score when a
 cited `risk` facet forces the floor (the refund row — 30 raw, floored to 70); (2)
@@ -188,15 +188,15 @@ applies it silently.
 ## Model ladder → the single score→model table
 
 The score→model mapping is NOT hardcoded here — it lives in `config.md` as ONE
-canonical 6-band table (there is no longer a narrow/wide preset). Read config at
+canonical 5-band table (there is no longer a narrow/wide preset). Read config at
 run start and map each task's final score through that table (or
 `rubric_bands_override`). The orchestrator dispatches the executor agent BY NAME;
 it does not request a raw model. `rubric_bands` sets only how many bands the
 rubric REPORTS (score granularity), never which table is used.
 
-The 6 bands (see config.md for the exact edges): `haiku-4-5` [0,30) ·
-`sonnet-4-6-med` [30,40) · `sonnet-4-6-high` [40,55) · `sonnet-5-high` [55,65) ·
-`opus-5-low` [65,90) · `opus-5-med` [90,100]. Effort tiers rank
+The 5 bands (see config.md for the exact edges): `sonnet-5-low` [0,21) ·
+`sonnet-5-med` [21,31) · `sonnet-5-high` [31,41) · `opus-5-low` [41,90) ·
+`opus-5-med` [90,100]. Effort tiers rank
 `low < medium < high < xhigh < max`.
 
 ## Fixed model assignments (not scored)
@@ -204,14 +204,14 @@ The 6 bands (see config.md for the exact edges): `haiku-4-5` [0,30) ·
 - **Orchestrator (you):** Opus 4.8 high — or Opus 5.5 / Fable 5 at medium+, the
   two models that clear the guard from medium up. Never downgrade yourself.
 - **Review** — Superpowers path: Sonnet 4.6, medium. OpenSpec/self path:
-  Opus 5.5, medium (`orc-reviewer-opus-5-med`).
+  Opus 5.5, low (`orc-reviewer-opus-5-low`; medium until v2.1.0).
 - **Verify:** Opus 5.5, medium (`orc-verifier-opus-5-med`).
 - **Analyst:** Opus 5.5, high. **Planner:** Opus 5.5, medium. **Test author:**
   Opus 5.5, medium. **Combiner:** Opus 5.5, high. **Ultra advisor/judge:** Opus 5.5,
   xhigh — every core fixed role is pinned to Opus 5.5 as of v0.34.0.
 - **Merge-conflict resolver:** Opus 4.8, medium.
 
-Note: every band in the table above is a real dispatch target (haiku through
+Note: every band in the table above is a real dispatch target (sonnet-5 through
 opus-5). If a model tier is unavailable in the environment, fall back UP to the
 next capable tier (never silently substitute a different family/effort).
 

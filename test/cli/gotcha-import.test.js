@@ -362,7 +362,7 @@ test("sync: the state file survives update, --prune and doctor --fix, and is nev
 test("payload: every review step reaches `orc gotcha sync` before the card; quick's gh-mode uses `orc pr threads`, `orc ci failed` and the Sonar import", () => {
   const T = (p) => fs.readFileSync(path.join(REPO, "templates", p), "utf8");
   const slice = T("skills/_shared/review-slice.md");
-  assert.ok(slice.indexOf("orc gotcha sync --json") !== -1 && slice.indexOf("orc gotcha sync --json") < slice.indexOf("§3"), "sync sits in §2, before the card");
+  assert.ok(slice.indexOf("orc gotcha sync --json") !== -1 && slice.indexOf("orc gotcha sync --json") < slice.indexOf("## §3"),"sync sits in §2, before the card");
   assert.match(T("skills/orc-pr-driver/references/green-gate.md"), /orc gotcha sync --json/);
   for (const f of ["skills/_shared/phases/review.md", "skills/orc-mini/SKILL.md", "skills/orc-quick/references/dispatch-gate.md", "skills/orc-pr-driver/references/green-gate.md"])
     assert.match(T(f), /review-slice\.md/, `${f} points at the slice`);

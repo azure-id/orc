@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.0.4-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.1.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v2.0.4** · updated 30-09-2026 · [full changelog](CHANGELOG.md)
+**Latest: v2.1.0** · updated 02-10-2026 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -255,6 +255,7 @@ ORC have terminal hook to see: Context Window %, 5 Hour usage %, Weekly usage % 
 | **`/orc-fast`** | The fastest lane. Needs a fresh wiki **and** a cached code pattern; then it skips the analyst and planner entirely. A missing prerequisite falls back to `/orc-mini` — the chat never stops. | [see it](mock-run/orc-fast.md) |
 | **`/orc-quick`** | Ask for anything: a fix, a question, a defect hunt, a dependency bump, PR comments. Look → ask once → do. **It always asks which agent to dispatch**, and no setting can change that. A defect is **reproduced red before it is fixed**. | [see it](mock-run/orc-quick.md) |
 | **`/orc-wait`** | Wall-clock pause without losing the run. You see the window is nearly full, type `/orc-wait 30`, and ORC hands the run back to disk, waits in detached hops that **cost zero tokens**, and picks up where it stopped. Three modes decide how much finishes first: `safe` · `soft` (forces the checkpoint) · `hard` (fastest, can lose an in-flight return). `/orc-wait block <reason>` tells it not to stop you at all. | — |
+| **`/orc-fix`** | Fix one thing after a review: a Sonar issue, a red CI, a bug someone found. Inside a paused run it only **records** the fix (one observation and one `FIX` line in that run's trace), so the review that missed it is counted. With no run open, it fixes like `/orc-quick` and asks which agent to use. | [see it](mock-run/orc-fix.md) |
 | **`/orc-diy`** | Your own lane, composed in the terminal with `orc diy` and compiled. Unconfigured or stale → it refuses and offers plain `/orc`. | [see it](mock-run/orc-diy.md) |
 
 ### Work out what to build
@@ -617,8 +618,18 @@ fixed published formula turns them into a number. A cited risk forces a floor of
 70. The score maps through a published table to a **named, model-pinned agent**,
 so what ran is inspectable rather than requested in prose.
 
+The default table (since v2.1.0):
+
+| Score | Agent | Model · effort |
+|---|---|---|
+| `[0,21)` | `orc-executor-sonnet-5-low` | Sonnet 5 · low |
+| `[21,31)` | `orc-executor-sonnet-5-med` | Sonnet 5 · medium |
+| `[31,41)` | `orc-executor-sonnet-5-high` | Sonnet 5 · high |
+| `[41,90)` | `orc-executor-opus-5-low` | Opus 5.5 · low |
+| `[90,100]` | `orc-executor-opus-5-med` | Opus 5.5 · medium |
+
 > **The rule that catches everyone:** a subagent's model can never be higher than
-> your main session's. Run your session on Opus 5.
+> your main session's. Every band from score 41 needs an Opus 5.5 main session.
 
 **Full detail — the bands, `opus5_only`, and the tier guard `orc init` installs:
 [guides/model-selection.md](guides/model-selection.md).**
@@ -649,13 +660,13 @@ clobbers. `orc ui` ▸ Settings edits the same keys through the same validators.
 
 ```
 templates/
-├── skills/       31 skill folders, 38 SKILL.md files (a lane may ship subskills) —
+├── skills/       34 skill folders, 41 SKILL.md files (a lane may ship subskills) —
 │                 the lanes above, plus the ones with no command of their own:
 │                 context-combiner, orc-advisor, orc-judge, orc-analyze-mini,
 │                 and _shared/ (cross-lane contract prose)
-├── commands/     29 slash commands
+├── commands/     33 slash commands
 ├── hooks/        effort guard (PreToolUse) · statusline warning · behavior trace
-└── agents/       48 model-pinned subagents + MODEL-MAPPING.md
+└── agents/       50 model-pinned subagents + MODEL-MAPPING.md
 bin/cli.js        installer, config editor, flow composer, run-state reader, and
                   the deterministic half of every lane. Every read speaks --json
 bin/graph*.js     the code graph: store, extraction, resolution + its cache and
@@ -730,35 +741,40 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v2.0.4 — design the status line to the last cell _(2026-09-30)_
+### v2.1.0 — the review counts, the score table moves up, and old logs can go _(2026-10-02)_
 
-**`orc ui` ▸ CLI Hook Interface can now change almost everything a terminal cell can
-show.** Every item is also an `orc statusline set` flag:
+- **A new score table with five bands.** Scores 0–40 go to Sonnet 5 (low,
+  medium, high). Scores 41–89 go to Opus 5.5 low, and 90–100 to Opus 5.5 medium.
+  Haiku is no longer in the table. **Every band from 41 needs an Opus 5.5 main
+  session.**
+- **Sonnet 5 runs on `claude-sonnet-5-5`.** The price table is correct again.
+- **The reviewer is `orc-reviewer-opus-5-low`.** In the live eval, low effort
+  found every seeded defect that was still in the diff.
+- **The wiki scanner and the CLAUDE.md writer use Opus 5.5 low** (they used Opus
+  4.8).
+- **Review quality no longer says "0 so far" after real reviews.** It counts
+  reviews from the traces. A clean review counts too.
+- **Your project's own review rule.** When CLAUDE.md or AGENTS.md asks for a
+  different review (for example `/code-review`), the lanes ask "ORC review, that
+  review, or skip". `orc review policy` shows what ORC found.
+- **New lane `/orc-fix`.** It records a fix after a review (Sonar, a red CI, a
+  bug) and who added the bug. The reviewer card shows it, and the panel shows
+  "Fixes after review".
+- **`orc clear logs`** shows old traces and run folders. `--apply` deletes them.
+  Nothing is deleted automatically unless you set `log_retention_auto: on`.
+- **The status line timer:** 1, 2, 3, 5 or 10 seconds. Below 1 second is refused,
+  because Claude Code does not support it.
+- **Behaviour tab fixes:** with `habits: off` you still see Review quality and
+  Gotchas, `/orc-fast` records your answers, and the answer log shows the question.
 
-- **Words around any shape.** A name before, after, above or below a bar. Text
-  before and after it (`[██░░]`). The number next to the bar.
-- **Captions** on a row above or below a part, in **small text** (ꜱᴍᴀʟʟ ᴄᴀᴘꜱ,
-  ˢᵘᵖᵉʳ, subscript) if you want.
-- **Bars in your own colours and characters.** Fill and empty colours, your own
-  gradient colours (blended in true colour), your own fill and empty characters.
-- **More on every part:** brackets, padding, background, any hex colour, more than
-  one weight, per-state colours and glyphs, line alignment and separator colour.
-- **Six parts that drew nothing now work** (`text`, `divider`, `spacer`,
-  `icon-static`, `fill`, `config`).
-- **Animated pets** (a pixel cat, a cat that chases a mouse, pac-man, a fish, a bird,
-  a dog) and **weather** (temperature, sky icon, description). `orc statusline
-  refresh 1` makes them move once per second.
-- **The panel shows your unsaved changes live**, and the preview moves.
-- **Fixes:** text above or below a part now shows over that part (Claude Code
-  removed the leading spaces), spark shows its history, an unknown value is `—` and
-  not an empty bar, clearing a field works (it returned HTTP 400), and a control
-  character in a label is refused.
-
-**What you have to do:** `orc update`.
+**What you have to do:** `orc update`. If you compiled an `orc diy` flow, run
+`orc diy compile`. If a script names `orc-reviewer-opus-5-med`, change it to
+`orc-reviewer-opus-5-low`. The cost changes: read the CHANGELOG.
 
 <details>
-<summary><strong>Earlier releases</strong> — 126 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 127 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.0.4** — design the status line to the last cell · _2026-09-30_
 - **v2.0.3** — the status line you designed is the status line you see · _2026-09-30_
 - **v2.0.2** — the lanes record what you answered, and the reviewer always gets the card · _2026-09-28_
 - **v2.0.1** — the trace keeps the gate name, and the lanes find the habits rule · _2026-09-27_

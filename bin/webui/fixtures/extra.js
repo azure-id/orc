@@ -780,7 +780,7 @@ const extraRoute = {
       profile: "glm", model: "glm-4.6", small_model: null, max_turns: null,
       engine: "claude-shim", provider: "zai", verify_state: "STALE", model_known: true,
     },
-    { from: 55, to: 65, band: "[55,65)", range: "scores 55 to 64", meaning: "several files, or a new surface, or logic that carries state", via: "claude", agent: "orc-executor-sonnet-5-high" },
+    { from: 55, to: 65, band: "[55,65)", range: "scores 55 to 64", meaning: "several files, or a new surface, or logic that carries state", via: "claude", agent: "orc-executor-opus-5-low" },
     {
       // A routed model the last ping did not list — the state that becomes a
       // 404 in the middle of a wave if nothing shows it first.
@@ -788,9 +788,9 @@ const extraRoute = {
       profile: "cheap", model: "deepseek-coder", small_model: null, max_turns: null,
       engine: "api", provider: "deepseek", verify_state: "VERIFIED", model_known: false,
     },
-    // v1.0.0 W4 — the route row above splits the default table's [65,90) band,
-    // so the Claude remainder is [70,90) and it resolves to the SAME agent the
-    // routed part displaced. That is the honest picture of an overlay: a row
+    // v1.0.0 W4 — the route rows above split the default table's [41,90) band
+    // (v2.1.0: it was [65,90)), so the Claude remainders are [55,65) and [70,90).
+    // Both resolve to the SAME agent the routed parts displaced. That is the honest picture of an overlay: a row
     // takes a slice of a band, and what it did not take falls through.
     { from: 70, to: 90, band: "[70,90)", range: "scores 70 to 89", meaning: "wide reach or genuinely new work (a cited risk floors a task to 70, so it lands here or above)", via: "claude", agent: "orc-executor-opus-5-low" },
     { from: 90, to: 100, band: "[90,100]", range: "scores 90 to 100", meaning: "the hardest work: a novel algorithm, or wide reach with deep logic", via: "claude", agent: "orc-executor-opus-5-med" },
@@ -890,9 +890,9 @@ const extraRole = {
       provider: null, engine: null, verify_state: null, verify_age_days: null, model_known: null,
       meaning: "a scanner returns an evidence-anchored doc body the orchestrator writes; every claim in it is anchored to a file you can open.",
       asks: false, announce_point: "per scan-batch, beside the resolved tier",
-      claude: { via: "claude", agent: "orc-wiki-scanner-opus-4-8-high", agents: ["orc-wiki-scanner-opus-4-8-high"], table: "shipped" },
+      claude: { via: "claude", agent: "orc-wiki-scanner-opus-5-low", agents: ["orc-wiki-scanner-opus-5-low"], table: "shipped" },
       resolved: "claude", held_back: null,
-      why: "no slot row holds wiki-scanner-deep — Extra is an OVERLAY, so an unrouted position falls straight through to orc-wiki-scanner-opus-4-8-high.",
+      why: "no slot row holds wiki-scanner-deep — Extra is an OVERLAY, so an unrouted position falls straight through to orc-wiki-scanner-opus-5-low.",
       announce: null,
       next: "orc extra role set wiki-scanner-deep <profile>/<model>",
     },
@@ -956,8 +956,8 @@ const extraLanes = {
     },
     {
       lane: "/orc-mini", shape: "fixed-executor", agent: "orc-executor-sonnet-5-high",
-      band: "[55,65)", edges: [55, 64], agree: false, routes: "claude", resolved: null,
-      detail: "one edge routes foreign and the other does not, so the lane stays on Claude. Row [30,55) covers only part of this band.",
+      band: "[31,41)", edges: [31, 40], agree: true, routes: "claude", resolved: null,
+      detail: "both edges resolve to Claude: row [30,55) covers this band, but its profile is STALE, so it does not route.",
     },
     {
       lane: "/orc-fast", shape: "slot", agent: null, routes: "roles",
@@ -999,7 +999,7 @@ const extraLanes = {
       // answering honestly instead of blaming a role name nobody could set.
       lane: "/orc-wiki", shape: "slot", agent: null, routes: "claude",
       slots: [
-        { slot: "wiki-scanner-deep", routes: false, profile: null, model: null, claude: "orc-wiki-scanner-opus-4-8-high", held_back: null, why: "no slot row holds wiki-scanner-deep — Extra is an OVERLAY, so an unrouted position falls straight through to orc-wiki-scanner-opus-4-8-high." },
+        { slot: "wiki-scanner-deep", routes: false, profile: null, model: null, claude: "orc-wiki-scanner-opus-5-low", held_back: null, why: "no slot row holds wiki-scanner-deep — Extra is an OVERLAY, so an unrouted position falls straight through to orc-wiki-scanner-opus-5-low." },
         { slot: "wiki-scanner-light", routes: false, profile: null, model: null, claude: "orc-wiki-scanner-sonnet-5-high", held_back: null, why: "no slot row holds wiki-scanner-light — Extra is an OVERLAY, so an unrouted position falls straight through to orc-wiki-scanner-sonnet-5-high." },
       ],
       detail: "no position in this lane is held, so every one of them stays on its pinned Claude agent.",

@@ -1,12 +1,12 @@
 # Example — Annotated Wiki Build (dry run)
 
-W: = wiki builder (Opus 4.8 high) · U: = user. Nothing real. EXPENSIVE and often
+W: = wiki builder (Opus 5.5 low) · U: = user. Nothing real. EXPENSIVE and often
 multi-session — always warns and gets explicit consent BEFORE scanning.
 
 U: /orc-wiki
 
 ## Consent gate (always — before any scan)
-W: Building the knowledge base scans the whole codebase with Opus 4.8 high. That's
+W: Building the knowledge base scans the whole codebase with Opus 5.5 low. That's
    token-heavy and may span multiple sessions (I pause periodically and checkpoint).
    Auto-branch: no wiki/ found → this is a FRESH build. Proceed?
 U: yes

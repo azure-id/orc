@@ -110,6 +110,7 @@ the other fails the suite.
 | `/orc-pattern` | none | single dispatch |
 | `/orc-claude` | none | single dispatch |
 | `/orc-explain` | none | read-only, seconds long |
+| `/orc-fix` | none | after the record is written |
 | `/orc-route` | none | read-only, seconds long |
 | `/orc-boundary` | none | read-only, seconds long |
 | `/orc-budget` | none | read-only, seconds long |

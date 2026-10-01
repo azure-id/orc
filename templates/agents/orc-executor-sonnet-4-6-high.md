@@ -1,7 +1,7 @@
 ---
 name: orc-executor-sonnet-4-6-high
 description: >
-  ORC executor — claude-sonnet-4-6, high effort. Dispatched by the build lanes at execution for ONE task, score band low-mid-complexity [40,55).
+  ORC executor — claude-sonnet-4-6, high effort. Dispatched by the build lanes at execution for ONE task, score band none (opt-in only, see MODEL-MAPPING.md).
 model: claude-sonnet-4-6
 effort: high
 tools: Read, Write, Edit, Bash, Glob, Grep

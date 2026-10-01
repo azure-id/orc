@@ -37,7 +37,7 @@ Then detect state and branch:
   boundary guard fired and already names the real fix. Auto-detect OFFERS it in
   one line with a small cost note; never start unasked.
 - **Empty/absent `wiki/` AND no wiki checkpoint** → FRESH. Show the generic
-  cost warning ("scans your code with Opus 4.8 high — expensive, likely
+  cost warning ("scans your code with Opus 5.5 low — expensive, likely
   multi-session, fixed pause every 5 areas; nothing scanned until you
   confirm") and wait for explicit consent. Only THEN Phase 1.
 - **Wiki checkpoint exists (mid-scan)** → RESUME. Re-anchor from

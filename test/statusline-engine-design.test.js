@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool pure  — renders cells in-process; no child process, no clock
 // v2.0.4 engine additions: cell width, styled text, case, val param, bar
 // fs/es and gc, flex, line align, captions — and old programs unchanged.
 const test = require("node:test");

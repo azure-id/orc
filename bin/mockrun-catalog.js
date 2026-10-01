@@ -121,6 +121,9 @@ const GROUP_OF = {
   "orc-aftermath": "check",
   "orc-budget": "check",
   "orc-retro": "check",
+  // v2.1.0. It sits with the CHECKING lanes: a fix record says what an earlier
+  // review missed, and Review Quality shows it beside the reviews.
+  "orc-fix": "check",
 
   "orc-pr-setup": "ship",
   "orc-pr-driver": "ship",

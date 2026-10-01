@@ -131,9 +131,9 @@ tasks and then pins one executor over them, so both edges of that agent's band i
 a question about numbers the run actually produced. `/orc-fast` produces none.
 Mini is the LAST caller of the both-edges rule, and that rule keeps its reason.
 **Resolve BOTH EDGES of the pinned agent's band and require them to agree** —
-`[55,65)` is `orc extra resolve 55` and `orc extra resolve 64`, same profile and
+`[31,41)` is `orc extra resolve 31` and `orc extra resolve 40`, same profile and
 model on both or the lane stays on Claude. The alternative was a midpoint, and a
-row covering `[55,58)` would then capture an entire mini run on the strength of
+row covering `[31,34)` would then capture an entire mini run on the strength of
 three scores out of ten. **A number ORC invented to satisfy an
 interface is not a routing decision the user made.**
 
@@ -153,7 +153,7 @@ too.
 | `doc-writer` | `/orc-doc` | `orc-doc-writer-opus-5-med` | announced, before the wave, naming the sections | a writer owns ONE part file and invents no fact; its output is read by a checker and by you before it ships |
 | `doc-checker` | `/orc-doc` | `orc-doc-checker-opus-5-low` | announced, before the wave | the checker reads one bounded part and reports; it rewrites nothing |
 | `test-designer` | `/orc-test` | `orc-test-designer-opus-5-high` | announced, the T1 `extra:` line, before any case runs | the designer writes a FILE the CLI reads back through a validating command, and a row that fails validation is refused BY NAME — so its output is checked before anything is sent |
-| `wiki-scanner-deep` | `/orc-wiki` | `orc-wiki-scanner-opus-4-8-high` | announced, per scan-batch, beside the resolved tier | a scanner returns an evidence-anchored doc body; every claim in it is anchored to a file you can open |
+| `wiki-scanner-deep` | `/orc-wiki` | `orc-wiki-scanner-opus-5-low` | announced, per scan-batch, beside the resolved tier | a scanner returns an evidence-anchored doc body; every claim in it is anchored to a file you can open |
 | `wiki-scanner-light` | `/orc-wiki` | `orc-wiki-scanner-sonnet-5-high` | announced, per scan-batch, beside the resolved tier | the LIGHT tier is already a small no-new-surface delta on an existing doc |
 
 **`/orc-test`'s INTERPRETER deliberately has NO SLOT, and that refusal is the
@@ -163,7 +163,7 @@ fence fences FILES, not a request body. There is no version of that route this
 repo could describe honestly, so there is none. It is the `/orc-challenge never`
 shape, for a stronger reason than cost.
 
-Both wiki slots collapse onto `orc-wiki-scanner-opus-5-med` while `opus5_only` is
+Both wiki slots collapse onto `orc-wiki-scanner-opus-5-low` while `opus5_only` is
 on, which is why this release **adds no agent and no pair**. Two slots and one
 Opus 5.5 agent is not a contradiction: **a slot names the POSITION, not the model.**
 
@@ -235,7 +235,7 @@ One sentence, and it is the same sentence for both shapes:
 an extra route row covering this score      (only for the scores it covers)
   > opus5_only
   > rubric_bands_override
-  > the default 6-band table
+  > the default 5-band table
 ```
 
 **A slot**, highest wins:

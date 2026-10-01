@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — runs the installed status-line hook (runHook)
 // v2.0.4 round B: the trimmed-row fix (D1), unknown bars (D2), the one-cell
 // minimum (D3), the live spark (D4), the one free column (D5), sprites,
 // weather — engine, hook series and the fetcher's pure half. No network.

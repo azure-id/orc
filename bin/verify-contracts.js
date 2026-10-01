@@ -38,8 +38,7 @@ const CONTRACTS = [
       "agents/orc-challenge-outsider-opus-5-low.md",
       "agents/orc-challenge-principles-opus-5-high.md",
       "agents/orc-challenge-reader-opus-5-low.md",
-      "agents/orc-claude-writer-opus-4-8-high.md",
-      "agents/orc-claude-writer-opus-5-med.md",
+      "agents/orc-claude-writer-opus-5-low.md",
       "agents/orc-context-combiner-opus-5-high.md",
       "agents/orc-doc-checker-opus-5-low.md",
       "agents/orc-doc-writer-opus-5-med.md",
@@ -53,6 +52,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "agents/orc-judge-opus-5-xhigh.md",
       "agents/orc-learn-writer-opus-5-low.md",
       "agents/orc-pattern-codifier-opus-5-med.md",
@@ -64,15 +65,14 @@ const CONTRACTS = [
       "agents/orc-recon-sonnet-4-6-med.md",
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-retro-sonnet-5-high.md",
-      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-reviewer-opus-5-low.md",
       "agents/orc-scout-opus-5-low.md",
       "agents/orc-scout-sonnet-4-6-high.md",
       "agents/orc-system-analyst-opus-5-high.md",
       "agents/orc-test-author-opus-5-med.md",
       "agents/orc-trace-writer-haiku-4-5.md",
       "agents/orc-verifier-opus-5-med.md",
-      "agents/orc-wiki-scanner-opus-4-8-high.md",
-      "agents/orc-wiki-scanner-opus-5-med.md",
+      "agents/orc-wiki-scanner-opus-5-low.md",
       "agents/orc-wiki-scanner-sonnet-5-high.md",
       "hooks/orc-trace.js",
       "skills/_shared/extra-dispatch.md",
@@ -127,6 +127,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "skills/_shared/return-validation.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-quick/SKILL.md",
@@ -150,6 +152,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "skills/_shared/extra-dispatch.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
@@ -166,7 +170,7 @@ const CONTRACTS = [
       // v2.0.0 W5a — the ONE review slice (`_shared/review-slice.md`).
       "skills/_shared/review-slice.md",
       "skills/orc/subskills/orc-review-verify/core.md",
-      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-reviewer-opus-5-low.md",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
@@ -177,6 +181,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "skills/_shared/extra-dispatch.md",
       "skills/_shared/phases/execution.md",
       "skills/_shared/phases/rules.md",
@@ -204,9 +210,11 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "agents/orc-pattern-codifier-opus-5-med.md",
       "agents/orc-pattern-codifier-sonnet-5-high.md",
-      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-reviewer-opus-5-low.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/orc-pattern/SKILL.md",
       "skills/orc-pattern/schemas/pattern-doc.md",
@@ -231,6 +239,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "skills/_shared/return-validation.md",
       "skills/_shared/phases/execution.md",
     ],
@@ -252,6 +262,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "skills/_shared/return-validation.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
@@ -293,7 +305,7 @@ const CONTRACTS = [
     name: "findings evidence-or-advisory rule (v0.7.0 — unanchored => AUTO-P3)",
     token: "AUTO-P3",
     files: [
-      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-reviewer-opus-5-low.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/orc/subskills/orc-review-verify/core.md",
       "skills/orc-verify/SKILL.md",
@@ -303,7 +315,7 @@ const CONTRACTS = [
     name: "P0-P3 severity enum (findings shape)",
     token: "P0|P1|P2|P3",
     files: [
-      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-reviewer-opus-5-low.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/orc-quick/SKILL.md",
     ],
@@ -536,6 +548,8 @@ const CONTRACTS = [
       "skills/orc-explain/SKILL.md",
       "skills/orc-export/SKILL.md",
       "skills/orc-fast/SKILL.md",
+      // v2.1.0 W6 — the rider lane joins the table.
+      "skills/orc-fix/SKILL.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-mini/SKILL.md",
@@ -897,6 +911,9 @@ const CONTRACTS = [
     token: ".current",
     files: [
       "skills/orc-test/SKILL.md",
+      // v2.1.0 W6: /orc-fix states that it never WRITES the pointer — `orc fix
+      // record` only reads it to find the host run.
+      "skills/orc-fix/SKILL.md",
       "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
       // v1.6.0: the read gate READS the pointer to decide whether an ORC run
@@ -1064,8 +1081,7 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "hooks/README.md",
-      "agents/orc-wiki-scanner-opus-4-8-high.md",
-      "agents/orc-wiki-scanner-opus-5-med.md",
+      "agents/orc-wiki-scanner-opus-5-low.md",
       "agents/orc-wiki-scanner-sonnet-5-high.md",
       "commands/orc-export.md",
       "commands/orc-wiki.md",
@@ -1688,8 +1704,7 @@ const CONTRACTS = [
     name: "wiki pointer-block marker (owned by orc-wiki; orc-claude byte-preserves it)",
     token: "ORC-WIKI:START",
     files: [
-      "agents/orc-claude-writer-opus-4-8-high.md",
-      "agents/orc-claude-writer-opus-5-med.md",
+      "agents/orc-claude-writer-opus-5-low.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-claude/references/refresh.md",
       "skills/orc-wiki/references/claude-md-injection.md",
@@ -1737,8 +1752,7 @@ const CONTRACTS = [
     token: "covered_files",
     files: [
       "agents/orc-learn-writer-opus-5-low.md",
-      "agents/orc-wiki-scanner-opus-4-8-high.md",
-      "agents/orc-wiki-scanner-opus-5-med.md",
+      "agents/orc-wiki-scanner-opus-5-low.md",
       "agents/orc-wiki-scanner-sonnet-5-high.md",
       "skills/orc-learn/references/refresh.md",
       "skills/orc-learn/references/template-knowledge.md",
@@ -1843,12 +1857,10 @@ const CONTRACTS = [
       "agents/orc-graph-noter-sonnet-4-6-med.md",
       "skills/_shared/code-graph.md",
       "agents/orc-analyze-mini-opus-5-med.md",
-      "agents/orc-claude-writer-opus-5-med.md",
       "agents/orc-pattern-codifier-opus-5-med.md",
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-scout-opus-5-low.md",
-      "agents/orc-wiki-scanner-opus-5-med.md",
       "commands/orc-pattern.md",
       "skills/_shared/drift-recovery.md",
       "skills/_shared/extra-dispatch.md",
@@ -2154,8 +2166,7 @@ const CONTRACTS = [
     token: "crosslink_provided",
     binFiles: ["bin/cli.js"],
     files: [
-      "agents/orc-wiki-scanner-opus-4-8-high.md",
-      "agents/orc-wiki-scanner-opus-5-med.md",
+      "agents/orc-wiki-scanner-opus-5-low.md",
       "agents/orc-wiki-scanner-sonnet-5-high.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
@@ -2172,8 +2183,7 @@ const CONTRACTS = [
     name: "crosslink per-scan-task emission (v0.24.0 — always-on; scan agent returns crosslink_tags | none)",
     token: "crosslink_tags",
     files: [
-      "agents/orc-wiki-scanner-opus-4-8-high.md",
-      "agents/orc-wiki-scanner-opus-5-med.md",
+      "agents/orc-wiki-scanner-opus-5-low.md",
       "agents/orc-wiki-scanner-sonnet-5-high.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/phases/phase-2.md",
@@ -2417,6 +2427,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
@@ -2451,6 +2463,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/_shared/return-validation.md",
       "skills/_shared/phases/execution.md",
@@ -2477,6 +2491,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "skills/_shared/return-validation.md",
       "skills/_shared/phases/execution.md",
     ],
@@ -2748,6 +2764,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "agents/orc-recon-opus-5-low.md",
       "agents/orc-recon-sonnet-4-6-med.md",
       "skills/_shared/code-graph.md",
@@ -2782,6 +2800,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "agents/orc-recon-opus-5-low.md",
       "agents/orc-recon-sonnet-4-6-med.md",
       "skills/_shared/code-graph.md",
@@ -2895,6 +2915,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "agents/orc-recon-opus-5-low.md",
       "agents/orc-recon-sonnet-4-6-med.md",
       "skills/_shared/code-graph.md",
@@ -2922,6 +2944,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "skills/_shared/return-validation.md",
     ],
   },
@@ -3099,6 +3123,8 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
       "agents/orc-recon-opus-5-low.md",
       "agents/orc-recon-sonnet-4-6-med.md",
       "skills/_shared/README.md",
@@ -3182,7 +3208,9 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
-      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-executor-sonnet-5-low.md",
+      "agents/orc-executor-sonnet-5-med.md",
+      "agents/orc-reviewer-opus-5-low.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/_shared/gotchas.md",
       "skills/_shared/return-validation.md",
@@ -3768,7 +3796,7 @@ const CONTRACTS = [
     token: "gotcha_card",
     files: [
       "agents/orc-judge-opus-5-xhigh.md",
-      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-reviewer-opus-5-low.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/_shared/README.md",
       "skills/_shared/gotchas.md",
@@ -3783,7 +3811,7 @@ const CONTRACTS = [
     token: "tool_findings",
     files: [
       "agents/orc-judge-opus-5-xhigh.md",
-      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-reviewer-opus-5-low.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/_shared/README.md",
       "skills/_shared/review-slice.md",
@@ -3795,7 +3823,7 @@ const CONTRACTS = [
     name: "pre_existing — a finding outside diff_ranges never gates (v2.0.0 W5a)",
     token: "pre_existing",
     files: [
-      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-reviewer-opus-5-low.md",
       "skills/_shared/phases/summary.md",
       "skills/_shared/review-slice.md",
     ],
@@ -3810,6 +3838,9 @@ const CONTRACTS = [
       "skills/_shared/phases/trace-verbs.md",
       "skills/_shared/review-slice.md",
       "skills/orc-quick/references/dispatch-gate.md",
+      "skills/orc/examples/full-run-mock.md",
+      // v2.1.0 (E21 D8) — the review guard reads it (a clean review is quiet).
+      "hooks/orc-session-hook.js",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -3829,14 +3860,24 @@ const CONTRACTS = [
   {
     name: "orc gotcha filter — the after-filter call, never removes a P0/P1 (v2.0.0 W5a)",
     token: "orc gotcha filter",
-    files: ["agents/orc-reviewer-opus-5-med.md", "skills/_shared/review-slice.md"],
+    files: ["agents/orc-reviewer-opus-5-low.md", "skills/_shared/review-slice.md"],
     binFiles: ["bin/gotcha.js"],
   },
   {
     // The one recording call (`_shared/gotchas.md` §10) and the file only the CLI writes.
     name: "orc gotcha observe — the one recording call (v2.0.0 W5a)",
     token: "orc gotcha observe",
-    files: ["skills/_shared/gotchas.md"],
+    files: [
+      "skills/_shared/gotchas.md",
+      // v2.1.0 W6 (DE-13) — §3 step 6 stores the reviewed ranges.
+      "skills/_shared/review-slice.md",
+      "skills/orc-mini/examples/mini-run-mock.md",
+      "skills/orc-quick/references/dispatch-gate.md",
+      "skills/orc/examples/full-run-mock.md",
+      // v2.1.0 (E21 D7) — the narration guard names it when a lane wrote its
+      // trace lines by hand and the observe reminder never ran.
+      "hooks/orc-session-hook.js",
+    ],
     binFiles: ["bin/gotcha.js"],
   },
   // v2.0.0 W6a — the importers, the review-step sync (DE-29) and the two
@@ -3893,6 +3934,27 @@ const CONTRACTS = [
     token: "`--apply` runs",
     files: ["skills/_shared/phases/summary.md", "skills/orc-quick/README.md"],
     binFiles: ["bin/run-undo.js"],
+  },
+  // v2.1.0 W7 — the "never auto-deleted" promise is GONE. Every copy names the
+  // command and the opt-in sweep, so a copy that still promises the opposite
+  // fails here (06-clear-logs-spec §7).
+  {
+    name: "orc clear logs --apply — traces are kept until the command or the opt-in sweep (v2.1.0 W7)",
+    token: "orc clear logs --apply",
+    files: ["skills/_shared/phases/trace.md", "skills/_shared/phases/trace-verbs.md", "skills/orc/config.md"],
+    binFiles: ["bin/cli.js", "bin/clear-logs.js"],
+  },
+  {
+    name: "log_retention_auto — the FINISH sweep switch, named beside the command (v2.1.0 W7)",
+    token: "log_retention_auto",
+    files: ["skills/_shared/phases/trace.md", "skills/_shared/phases/trace-verbs.md", "skills/orc/config.md"],
+    binFiles: ["bin/cli.js", "bin/clear-logs.js", "bin/trace-write.js"],
+  },
+  {
+    name: "logs-rollup.json — the pruned runs `orc stats` still counts (v2.1.0 W7, DE-19 a)",
+    token: "logs-rollup.json",
+    files: [],
+    binFiles: ["bin/cli.js", "bin/clear-logs.js"],
   },
   {
     name: "orc ci flaky — the ONE flaky classifier, before any repair round (v2.0.0 W6b, Q5)",
@@ -3956,6 +4018,11 @@ const CONTRACTS = [
       "skills/orc-wait/SKILL.md",
       "skills/orc-analyze/SKILL.md",
       "skills/_shared/phases/ship.md",
+      // v2.1.0 W6 — /orc-fix marks `fix.f1.class` (class never).
+      "skills/orc-fix/SKILL.md",
+      // v2.1.0 (A4) — /orc-fast wrote no ASK: the pointer now lives in its F0
+      // config step, the step that reads `habits{}`.
+      "skills/orc-fast/SKILL.md",
       // eval E2 (27-09-2026): the pointer moved to the step that reads the answer.
       "skills/_shared/phases/preflight.md",
     ],
@@ -3990,6 +4057,8 @@ const CONTRACTS = [
       "skills/_shared/extra-dispatch.md",
       "skills/context-combiner/SKILL.md",
       "skills/orc-aftermath/SKILL.md",
+      // v2.1.0 W6 — reads `log_dir` (the host trace), so the short pointer.
+      "skills/orc-fix/SKILL.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
       "skills/orc-boundary/SKILL.md",
@@ -4377,6 +4446,9 @@ const BUDGETS = [
   { file: "skills/orc-pr-driver/SKILL.md", maxLines: 188, maxBytes: CODING_SPINE_BYTES },
   { file: "skills/orc-route/SKILL.md", maxLines: 183, maxBytes: CODING_SPINE_BYTES },
   { file: "skills/orc-wait/SKILL.md", maxLines: 169 },
+  // v2.1.0 W6 — a rider, but it writes code in the no-run case (DE-12 c), so
+  // the coding cap applies. Target ≤ 6 KB.
+  { file: "skills/orc-fix/SKILL.md", maxLines: 130, maxBytes: CODING_SPINE_BYTES },
   { file: "skills/orc-pattern/SKILL.md", maxLines: 142, maxBytes: CODING_SPINE_BYTES },
   { file: "skills/orc-diy/SKILL.md", maxLines: 101, maxBytes: CODING_SPINE_BYTES },
   { file: "skills/orc-analyze-mini/SKILL.md", maxLines: 114, maxBytes: CODING_SPINE_BYTES },
@@ -4638,6 +4710,15 @@ for (const b of BUDGETS) {
     // never by a spine (a lane never picks its own card). Both are ANSWERS.
     "notify",
     "rules_card_compact",
+    // v2.1.0 W7 — operating keys of `orc clear logs` and of the FINISH sweep
+    // inside `orc trace write`. The CLI reads both; no spine ever reads the
+    // retention age or the sweep switch, exactly as no spine reads
+    // `extra_timeout_s`. An empty lanes[] here is an ANSWER.
+    "log_retention_days",
+    "log_retention_auto",
+    // v2.1.0 W8 — a WRITE-THROUGH key: its value lives in settings.json
+    // (statusLine.refreshInterval) and Claude Code reads it, never a lane.
+    "statusline_refresh",
   ]);
   for (const e of metaEntries) {
     if (!e.lanes) {

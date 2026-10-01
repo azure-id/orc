@@ -339,6 +339,139 @@ test("trace write: a FINISH with habits on and no ASK line asks for the missing 
   } finally { rmrf(c.root); }
 });
 
+// v2.1.0 W3 — FINDING-OUTCOME has ONE grammar (orc gotcha quality reads it).
+test("trace write: a per-finding FINDING-OUTCOME and an unknown outcome are refused by name; the real line passes", () => {
+  const Q = "run-orc-review-close-011026-101010.txt";
+  const p = project();
+  try {
+    fs.writeFileSync(path.join(p.logs, ".current"), Q + "\n");
+    fs.writeFileSync(path.join(p.logs, Q), "");
+    const pk = (verb, tail) => `phase: summary\nevents:\n  - {ts: "011026 10:20:00.000", verb: "${verb}", tail: "${tail}"}\n`;
+    const bad = write(p.root, pk("FINDING-OUTCOME F1", "sev=P3 outcome=deferred"), ["--json"]);
+    assert.strictEqual(bad.status, 2, bad.stdout + bad.stderr);
+    assert.match(bad.stdout + bad.stderr, /unknown outcome \\?"deferred/);
+    const head = write(p.root, pk("FINDING-OUTCOME F1", "functional.check:1/1"), ["--json"]);
+    assert.strictEqual(head.status, 2);
+    assert.match(head.stdout + head.stderr, /ONE line per review/);
+    const ok = write(p.root, pk("FINDING-OUTCOME addressed=0 disputed=0 wontfix=0 open=0 pre=0 suppressed=0", "clean"), ["--json"]);
+    assert.strictEqual(ok.status, 0, ok.stdout + ok.stderr);
+    assert.strictEqual(lines(path.join(p.logs, Q)).length, 1, "only the valid line reached the trace");
+  } finally { rmrf(p.root); }
+});
+
+// E21 round 3 (02-10-2026) — D5: a live /orc wrote `logic:0/4,test-teardown:0/1`;
+// D6: a live /orc skipped review and verify until the user asked.
+test("trace write: FINDING-OUTCOME categories are the closed set; an /orc FINISH with no review or verify names them", () => {
+  const p = project();
+  try {
+    const Q = "run-orc-users-count-021026-003734.txt";
+    fs.writeFileSync(path.join(p.logs, ".current"), Q + "\n");
+    fs.writeFileSync(path.join(p.logs, Q), "[021026 00:38:00.000] hook     SPAWN orc-executor-sonnet-5-med :: T1\n");
+    const fo = (tail) => `phase: summary\nevents:\n  - {ts: "021026 00:50:00.000", verb: "FINDING-OUTCOME addressed=0 disputed=0 wontfix=1 open=6 pre=6 suppressed=0", tail: "${tail}"}\n`;
+    const bad = write(p.root, fo("logic:0/4,test-teardown:0/1"), ["--json"]);
+    assert.strictEqual(bad.status, 2);
+    assert.match(bad.stdout + bad.stderr, /unknown category/);
+    assert.strictEqual(write(p.root, fo("functional.logic:0/4,test:0/1,uncategorized:0/2"), ["--json"]).status, 0);
+    const fin = 'phase: FINISH\nevents:\n  - {ts: "021026 00:55:00.000", verb: "FINISH", tail: "done"}\n';
+    const j = JSON.parse(write(p.root, fin, ["--json"]).stdout);
+    assert.deepStrictEqual(j.phases_missing.missing.length, 2, "no review and no verify");
+    assert.match(j.phases_missing_line, /always runs both/);
+  } finally { rmrf(p.root); }
+  const q = project();
+  try {
+    const Q = "run-orc-users-count-021026-013734.txt";
+    fs.writeFileSync(path.join(q.logs, ".current"), Q + "\n");
+    fs.writeFileSync(path.join(q.logs, Q), ["SPAWN orc-executor-sonnet-5-med :: T1", "SPAWN orc-reviewer-opus-5-low :: review", "SPAWN orc-verifier-opus-5-med :: verify"].map((l, i) => `[021026 01:4${i}:00.000] hook     ${l}`).join("\n") + "\n");
+    const fin = 'phase: FINISH\nevents:\n  - {ts: "021026 01:55:00.000", verb: "FINISH", tail: "done"}\n';
+    assert.strictEqual(JSON.parse(write(q.root, fin, ["--json"]).stdout).phases_missing, undefined, "both ran → no nudge");
+  } finally { rmrf(q.root); }
+});
+
+test("trace write: a FINISH after a reviewer RETURN with no recorded outcome names orc gotcha observe; none when recorded or clean", () => {
+  const Q = "run-orc-reviewed-011026-111111.txt";
+  const run = Q.replace(/\.txt$/, "");
+  const fin = 'phase: FINISH\nevents:\n  - {ts: "011026 11:30:00.000", verb: "FINISH", tail: "done"}\n';
+  const setup = (body) => {
+    const p = project();
+    fs.writeFileSync(path.join(p.logs, ".current"), Q + "\n");
+    fs.writeFileSync(path.join(p.logs, Q), body);
+    return p;
+  };
+  const RET = "[011026 11:15:00.000] hook     RETURN orc-reviewer-opus-5-low :: review dur=3m02s\n";
+  const a = setup(RET);
+  try {
+    const r = write(a.root, fin, ["--json"]);
+    assert.strictEqual(r.status, 0, "it never blocks");
+    const j = JSON.parse(r.stdout);
+    assert.ok(j.observe_missing, "the nudge is in the --json answer");
+    assert.match(j.observe_missing_line, /orc gotcha observe/);
+    assert.strictEqual(j.observe_missing.run, run);
+  } finally { rmrf(a.root); }
+  const b = setup(RET);
+  try {
+    fs.writeFileSync(path.join(b.root, ".claude", "orc", "observations.jsonl"), JSON.stringify({ obs: "x", source: "review", author: "orc", run, outcome: "addressed" }) + "\n");
+    assert.strictEqual(JSON.parse(write(b.root, fin, ["--json"]).stdout).observe_missing, undefined, "an outcome is recorded");
+  } finally { rmrf(b.root); }
+  const c = setup(RET + "[011026 11:20:00.000] orc      FINDING-OUTCOME addressed=0 disputed=0 wontfix=0 open=0 pre=0 suppressed=0 :: clean\n");
+  try {
+    assert.strictEqual(JSON.parse(write(c.root, fin, ["--json"]).stdout).observe_missing, undefined, "a clean review records nothing");
+  } finally { rmrf(c.root); }
+  const d = setup("[011026 11:15:00.000] hook     RETURN orc-executor-opus-5-low :: T1 dur=3m02s\n");
+  try {
+    assert.strictEqual(JSON.parse(write(d.root, fin, ["--json"]).stdout).observe_missing, undefined, "no reviewer, no nudge");
+  } finally { rmrf(d.root); }
+});
+
+// v2.1.0 W5 (A6) — ANY ORC dispatch ends a decision, not only an executor SPAWN.
+test("trace write: a second recon gate after a recon SPAWN is a new answer, not a follow-up", () => {
+  const Q = "run-quick-dig-011026-090000.txt";
+  const p = project();
+  try {
+    fs.writeFileSync(path.join(p.root, ".claude", "orc.config.yaml"), "habits: observe\n");
+    fs.writeFileSync(path.join(p.logs, ".current"), Q + "\n");
+    fs.writeFileSync(
+      path.join(p.logs, Q),
+      "[011026 09:01:00.000] quick    ASK quick.q2.gate.recon :: offered=orc-recon-sonnet-4-6-med|orc-recon-opus-5-low rec=orc-recon-sonnet-4-6-med chose=orc-recon-sonnet-4-6-med by=user\n" +
+        "[011026 09:02:00.000] hook     SPAWN orc-recon-sonnet-4-6-med :: dig\n"
+    );
+    const pk = 'phase: q2\nevents:\n  - {ts: "011026 09:10:00.000", verb: "ASK quick.q2.gate.recon", tail: "offered=sonnet-4-6-med|opus-5-low rec=sonnet-4-6-med chose=sonnet-4-6-med by=user"}\n';
+    const r = write(p.root, pk, ["--json"]);
+    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+    assert.strictEqual(JSON.parse(r.stdout).ask_rejected, undefined, "not refused as a follow-up");
+    const last = lines(path.join(p.logs, Q)).pop();
+    assert.match(last, /chose=orc-recon-sonnet-4-6-med by=user/, "and stored with the canonical name (A1)");
+  } finally { rmrf(p.root); }
+});
+
+// v2.1.0 W5 (A7) — a question the config answered is recorded `by=config`, or nudged.
+test("trace write: a FINISH names a config-answered question that has no by=config line; none with the line or habits off", () => {
+  const Q = "run-mini-flag-011026-093000.txt";
+  const fin = 'phase: FINISH\nevents:\n  - {ts: "011026 09:40:00.000", verb: "FINISH", tail: "done"}\n';
+  const setup = (cfg, body) => {
+    const p = project();
+    fs.writeFileSync(path.join(p.root, ".claude", "orc.config.yaml"), cfg);
+    fs.writeFileSync(path.join(p.logs, ".current"), Q + "\n");
+    fs.writeFileSync(path.join(p.logs, Q), body || "");
+    return p;
+  };
+  const a = setup("habits: propose\nmini_tdd: on\n");
+  try {
+    const j = JSON.parse(write(a.root, fin, ["--json"]).stdout);
+    assert.ok(j.config_missing, "the nudge is in the --json answer");
+    assert.ok(j.config_missing.points.some((x) => x.qid === "mini.intake.tdd" && x.option === "yes"));
+    assert.match(j.config_missing_line, /by=config/);
+  } finally { rmrf(a.root); }
+  const b = setup("habits: propose\nmini_tdd: on\n", "[011026 09:31:00.000] mini     ASK mini.intake.tdd :: offered=yes|no rec=yes chose=yes by=config\n");
+  try {
+    const j = JSON.parse(write(b.root, fin, ["--json"]).stdout);
+    assert.ok(!j.config_missing || !j.config_missing.points.some((x) => x.qid === "mini.intake.tdd"), "recorded");
+  } finally { rmrf(b.root); }
+  const c = setup("mini_tdd: on\n");
+  try {
+    assert.strictEqual(JSON.parse(write(c.root, fin, ["--json"]).stdout).config_missing, undefined, "habits off → zero bytes");
+  } finally { rmrf(c.root); }
+});
+
 // eval E2: a live lane wrote `chose=orc-reviewer-opus-5-med` for quick.q3.offer.review.
 // An invalid ASK stays OUT of the trace and comes back with the option ids; the
 // packet's other events are still written.
@@ -351,7 +484,7 @@ test("trace write: an ASK with the wrong option ids is rejected with the right o
       "phase: q3",
       "events:",
       '  - {ts: "270926 17:27:00.000", verb: "GATE review pass", tail: "offer shown"}',
-      '  - {ts: "270926 17:27:01.000", verb: "ASK quick.q3.offer.review", tail: "offered=orc-reviewer-opus-5-med|adhoc rec=orc-reviewer-opus-5-med chose=orc-reviewer-opus-5-med by=user"}',
+      '  - {ts: "270926 17:27:01.000", verb: "ASK quick.q3.offer.review", tail: "offered=orc-reviewer-opus-5-low|adhoc rec=orc-reviewer-opus-5-low chose=orc-reviewer-opus-5-low by=user"}',
       "",
     ].join("\n");
     const r = write(root, pk, ["--json"]);
@@ -380,7 +513,7 @@ test("trace write: a repeat ASK in the same entry is a follow-up and is kept out
     fs.writeFileSync(path.join(logs, RICH),
       "[270926 17:40:00.000] hook     SPAWN orc-executor-sonnet-4-6-med :: entry 1\n" +
       "[270926 17:45:00.000] orc      ASK quick.q3.offer.review :: offered=review-first|commit-direct|stop rec=none chose=review-first by=user\n" +
-      "[270926 17:46:00.000] hook     SPAWN orc-reviewer-opus-5-med :: review entry 1\n");
+      "[270926 17:46:00.000] hook     SPAWN orc-reviewer-opus-5-low :: review entry 1\n");
     const ask = (ts, chose) => `phase: q3\nevents:\n  - {ts: "${ts}", verb: "ASK quick.q3.offer.review", tail: "offered=review-first|commit-direct|stop rec=none chose=${chose} by=user"}\n`;
     const r = JSON.parse(write(root, ask("270926 17:48:00.000", "stop"), ["--json"]).stdout);
     assert.match(r.ask_rejected[0].error, /follow-up/);

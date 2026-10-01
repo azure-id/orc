@@ -51,7 +51,7 @@ the offers you already get:
 ```
 Entry 7 written to orc-quick/cart-rounding/quick-context.md
 
-  1  review first     dispatch orc-reviewer-opus-5-med on the diff
+  1  review first     dispatch orc-reviewer-opus-5-low on the diff
   2  commit directly
   3  stop
 

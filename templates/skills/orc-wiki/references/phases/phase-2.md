@@ -11,12 +11,12 @@ Write checkpoint + state-of-play into the run subfolder BEFORE dispatching.
 `wiki_tier_deep_files`, default 3 — full ladder in references/partial-refresh.md):
 first scan · STRUCTURAL · wide delta · a new exported symbol → **deep**; otherwise
 **light** (`orc-wiki-scanner-sonnet-5-high`). `always_deep` restores the old
-behaviour, `opus5_only` collapses BOTH tiers onto `orc-wiki-scanner-opus-5-med`
+behaviour, `opus5_only` collapses BOTH tiers onto `orc-wiki-scanner-opus-5-low`
 (no new pair). **PRINT the resolved tier** — a cheaper model is never a quiet
 substitution. **Extra (`extra_enabled`) reaches the SCANNER ONLY, and it is a POSITION per tier** — `wiki-scanner-deep` / `wiki-scanner-light`, held by `orc extra role` and resolved for the tier JUST PICKED. The resolved tier already prints; PRINT ITS TARGET with it. Load `../extra.md` at the scan phase when the gate is on; `orc wiki sync` never routes foreign (registration is CLI-derived — there is no model in it to replace). A wiki doc is evidence-anchored and cheap to re-scan, which is what makes the scanner the one role here worth handing over; `orc wiki sync` never routes foreign (registration is CLI-derived — there is no model in it to replace). `wiki_refresh_budget` (0 = no cap) caps scan-tasks per run as a
 PLANNED stop, and `wiki_retire_after_runs` (0 = never) offers — never performs —
 retirement of a doc no run has sliced.
-Per scan-task: spawn `orc-wiki-scanner-opus-4-8-high` BY NAME (`orc-wiki-scanner-opus-5-med` under `opus5_only`, `orc-wiki-scanner-sonnet-5-high` at the light tier) with the area's file list + the
+Per scan-task: spawn `orc-wiki-scanner-opus-5-low` BY NAME (`orc-wiki-scanner-sonnet-5-high` at the light tier; under `opus5_only` BOTH tiers use `orc-wiki-scanner-opus-5-low`) with the area's file list + the
 doc-writing contract (schemas/wiki-doc.md — v2: evidence anchors in contract
 sections, `keywords[]` + per-file `covered_files` hashes, AND `crosslink_tags`
 = one tag body per OUTWARD boundary point in the area's files, or `none`+reason)
@@ -42,6 +42,6 @@ repo believing it was done. At every pause, lead with the coverage line:
 > The {N} docs so far are registered and usable now. Reply **continue** to scan
 > the rest.
 At completion, say **✅ Wiki complete — all {M} areas scanned.** The two must be
-impossible to confuse at a glance.
+impossible to confuse at a glance.
 
 <!-- /orc:layer -->

@@ -524,11 +524,11 @@ test("trace: PHASE-EDGE on a role change, suppressed within a role and for the w
     spawn("orc-trace-writer-haiku-4-5"); // narration — never an edge
     spawn("orc-executor-sonnet-5-high");
     spawn("orc-executor-haiku-4-5"); // same family — no second edge
-    spawn("orc-reviewer-opus-5-med");
+    spawn("orc-reviewer-opus-5-low");
     const { texts } = traceFiles(claudeDir);
     assert.match(texts, /PHASE-EDGE planning :: first=orc-planner-opus-5-med/);
     assert.match(texts, /PHASE-EDGE execution :: first=orc-executor-sonnet-5-high/);
-    assert.match(texts, /PHASE-EDGE review :: first=orc-reviewer-opus-5-med/);
+    assert.match(texts, /PHASE-EDGE review :: first=orc-reviewer-opus-5-low/);
     assert.doesNotMatch(texts, /PHASE-EDGE \S+ :: first=orc-trace-writer/, "the writer never opens a phase");
     assert.strictEqual((texts.match(/PHASE-EDGE execution/g) || []).length, 1, "same-family spawns emit one edge");
     assert.strictEqual((texts.match(/PHASE-EDGE /g) || []).length, 3, "exactly one edge per role change");
@@ -730,6 +730,7 @@ test("statusline: verdict matrix — boosted for opus-4.8 xhigh/max and opus-5/f
     assert.match(render("claude-opus-5-5", "max"), /^🚀 ORC /, "opus-5/max = boosted");
     assert.match(render("claude-opus-5-5", "low"), /^⛔ ORC /, "opus-5/low = degrade");
     assert.match(render("claude-sonnet-5", "high"), /^⛔ ORC /, "sonnet-5/high = degrade");
+    assert.match(render("claude-sonnet-5-5", "high"), /^⛔ ORC /, "sonnet-5-5/high = degrade (v2.1.0 id, never read as opus)");
     assert.match(render("claude-opus-4-7", "high"), /^⛔ ORC /, "opus-4.7 never reads as opus-5");
     // The version is the brand now, and it is the INSTALLED one.
     const v = require("../package.json").version;
@@ -1130,7 +1131,7 @@ test("session hook: SubagentStart hands the gotcha card to a reviewer, and nothi
     );
     const vf = path.join(claudeDir, "hooks", "orc-version.json");
     fs.writeFileSync(vf, JSON.stringify({ version: "t", cli: CLI }) + "\n");
-    const r = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "SubagentStart", agent_type: "orc-reviewer-opus-5-med" });
+    const r = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "SubagentStart", agent_type: "orc-reviewer-opus-5-low" });
     assert.strictEqual(r.status, 0);
     const j = JSON.parse(r.stdout);
     assert.strictEqual(j.hookSpecificOutput.hookEventName, "SubagentStart");
@@ -1165,7 +1166,48 @@ test("session hook: the narration guard blocks ONE stop of a run that dispatched
     // A run that already narrated, or that dispatched nothing yet, is never blocked.
     const t2 = openRun(claudeDir, "t10");
     fs.writeFileSync(t2, hookOnly + "[270926 17:53:00.000] orc      DISPATCH orc-executor-sonnet-4-6-med :: add /time\n");
+    // A CLI-written line has its .jsonl twin (orc trace write writes both).
+    fs.writeFileSync(t2 + ".jsonl", JSON.stringify({ ts: "270926 17:53:00.000", actor: "orc", verb: "DISPATCH orc-executor-sonnet-4-6-med" }) + "\n");
     assert.strictEqual(runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" }).stdout, "");
+    // A CLI line may carry HH:MM:SS with no milliseconds (TS_RE allows it): with its
+    // jsonl row it is NOT hand-written (E21 round 4: an early guard blocked one).
+    const tms = openRun(claudeDir, "t16");
+    fs.writeFileSync(tms, hookOnly + "[270926 17:53:30] orc      DISPATCH orc-executor-sonnet-4-6-med :: add /time\n");
+    fs.writeFileSync(tms + ".jsonl", JSON.stringify({ ts: "270926 17:53:30", actor: "orc", verb: "DISPATCH orc-executor-sonnet-4-6-med" }) + "\n");
+    assert.strictEqual(runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" }).stdout, "", "no ms + a jsonl row = CLI-written");
+    // v2.1.0 (E21 D7): narration written BY HAND (no jsonl row, or no stamp) is
+    // blocked ONCE, with the command that runs the skipped checks.
+    const t4 = openRun(claudeDir, "t12");
+    fs.writeFileSync(t4, hookOnly + "[270926 17:54:27] orc      FINDING-OUTCOME addressed=0 disputed=0 wontfix=0 open=8 pre=0 suppressed=0 :: auth:0/1\n");
+    const hand = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" });
+    assert.strictEqual(JSON.parse(hand.stdout).decision, "block");
+    assert.match(JSON.parse(hand.stdout).reason, /written by hand/);
+    assert.match(JSON.parse(hand.stdout).reason, /orc gotcha observe/);
+    assert.strictEqual(runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" }).stdout, "", "once per run");
+    // v2.1.0 (E21 D8): a FINISHED run that reviewed with findings and recorded no
+    // observation is blocked ONCE; an observation for the run, or a clean review, is quiet.
+    const cliLines = [
+      "[270926 17:56:00.000] orc      FINDING p0=0 p1=0 p2=2 p3=1 pre=3",
+      "[270926 17:57:00.000] orc      FINISH :: done",
+    ];
+    const reviewed = (slug, extra) => {
+      const t = openRun(claudeDir, slug);
+      fs.writeFileSync(t, hookOnly + "[270926 17:55:00.000] hook     RETURN orc-reviewer-opus-5-low :: review dur=0m30s\n" + cliLines.concat(extra || []).join("\n") + "\n");
+      fs.writeFileSync(t + ".jsonl", cliLines.concat(extra || []).map((l) => JSON.stringify({ l })).join("\n") + "\n");
+      return t;
+    };
+    reviewed("t13");
+    const rv = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" });
+    assert.strictEqual(JSON.parse(rv.stdout).decision, "block");
+    assert.match(JSON.parse(rv.stdout).reason, /recorded no outcome/);
+    assert.strictEqual(runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" }).stdout, "", "once per run");
+    reviewed("t14");
+    fs.writeFileSync(path.join(claudeDir, "orc", "observations.jsonl"), JSON.stringify({ obs: "x", author: "orc", run: "run-orc-t14-010126-000000", outcome: "open" }) + "\n");
+    assert.strictEqual(runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" }).stdout, "", "an outcome is recorded");
+    reviewed("t15", ["[270926 17:58:00.000] orc      FINDING-OUTCOME addressed=0 disputed=0 wontfix=0 open=0 pre=0 suppressed=0 :: clean"]);
+    const t15 = path.join(claudeDir, "orc", "logs", "run-orc-t15-010126-000000.txt");
+    fs.writeFileSync(t15, fs.readFileSync(t15, "utf8").replace("FINDING p0=0 p1=0 p2=2 p3=1 pre=3", "FINDING p0=0 p1=0 p2=0 p3=0"));
+    assert.strictEqual(runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" }).stdout, "", "a clean review records nothing");
     const t3 = openRun(claudeDir, "t11");
     fs.writeFileSync(t3, "");
     assert.strictEqual(runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" }).stdout, "");

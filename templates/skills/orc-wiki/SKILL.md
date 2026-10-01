@@ -3,7 +3,7 @@ name: orc-wiki
 description: >
   Build and maintain a persistent project knowledge base for ORC.
   Use for "/orc-wiki", "build the project wiki", "scan the codebase
-  for a knowledge base". Scans the project with Opus 4.8 high and writes
+  for a knowledge base". Scans the project with Opus 5.5 low and writes
   wiki/orc-feature-*, wiki/orc-reference-*, and orc-architecture-overview.md,
   then injects a pointer block into CLAUDE.md so future runs consult it.
   EXPENSIVE and often multi-session — always warns and gets explicit consent
@@ -18,7 +18,7 @@ main spine's machinery (checkpoint, state-of-play, stop-continue, fresh-session
 resume, parallel dispatch, "never scans-and-writes itself — it always spawns")
 with its own phases below, and shares the run-folder discipline: run artifacts
 in `.claude/orc/run/{run-slug}/`, KNOWLEDGE BASE output in the project's
-`wiki/` folder. Run as Opus 4.8 high — orchestrator AND scanning agents; cost
+`wiki/` folder. Run as Opus 5.5 low or better — orchestrator AND scanning agents; cost
 is accepted by design (the trade is knowledge-base QUALITY), which is what
 makes the consent gate mandatory.
 
@@ -29,8 +29,8 @@ makes the consent gate mandatory.
 1. **Never scan before explicit consent.** On a fresh run, show the generic
    cost warning and do NOTHING to the repo until the user says ok/continue/
    proceed. No pre-scan, not even to estimate area count.
-2. **You never scan-and-write yourself — you spawn.** Dispatch scans BY NAME — `orc-wiki-scanner-opus-4-8-high`
-   (pinned in the agent file: the model is enforced, and the trace hook can see it); you plan, dispatch, assemble. Under `opus5_only` the scanner is `orc-wiki-scanner-opus-5-med` — forced, and a full scan is many batches, so it is the costliest place that mode lands (`../_shared/opus5-only.md`).
+2. **You never scan-and-write yourself — you spawn.** Dispatch scans BY NAME — `orc-wiki-scanner-opus-5-low`
+   (pinned in the agent file: the model is enforced, and the trace hook can see it); you plan, dispatch, assemble. Under `opus5_only` BOTH tiers collapse onto `orc-wiki-scanner-opus-5-low`: the light tier flips to it, and the deep tier is already that agent (`../_shared/opus5-only.md`).
 **`orc run inflight` before ANY re-dispatch** (0 clear · 1 in-flight · 2 unknown).
 A Task error does not kill the agent behind it, and exit 2 REFUSES by default —
 `a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `../_shared/return-validation.md` §0.

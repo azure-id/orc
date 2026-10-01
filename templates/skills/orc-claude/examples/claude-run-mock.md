@@ -4,7 +4,7 @@
 
 U: /orc-claude
 C: CLAUDE.md exists, no orc-claude:meta header → UPDATE mode. Spawns
-   orc-claude-writer-opus-4-8-high (the skill never writes the file itself).
+   orc-claude-writer-opus-5-low (the skill never writes the file itself).
 W: Scans: pnpm monorepo (3 workspaces), turbo, eslint+prettier, vitest,
    Postgres migrations under `packages/db/migrations`.
 W: Copies CLAUDE.md → CLAUDE.md.bak. Injects meta header (v0.0.1, 12-07-2026,
@@ -50,10 +50,10 @@ dispatches the trace writer ONCE at run end to append them (`SPAWN`/`RETURN`
 come from the `orc-trace.js` hook as they occur):
 
 ```
-[120726 09:14:02.110] writer   DISPATCH orc-claude-writer :: refresh expect=opus-4-8/high
-[120726 09:14:02.230] hook     SPAWN orc-claude-writer-opus-4-8-high
+[120726 09:14:02.110] writer   DISPATCH orc-claude-writer :: refresh expect=opus-5/low
+[120726 09:14:02.230] hook     SPAWN orc-claude-writer-opus-5-low
 [120726 09:15:47.900] hook     RETURN
-[120726 09:15:48.010] writer   VERIFY writer actual=claude-opus-4-8/high ✅ MATCH
+[120726 09:15:48.010] writer   VERIFY writer actual=claude-opus-5-5/low ✅ MATCH
 [120726 09:15:48.120] writer   FINISH :: refresh CLAUDE.md v0.0.3
 ```
 

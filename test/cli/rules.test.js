@@ -382,7 +382,7 @@ test("the three registries name the same lanes", () => {
     .flatMap((m) => [...m[1].matchAll(/"([a-z-]+)"/g)].map((x) => x[1]))
     .sort();
 
-  assert.equal(packTable.length, 28);
+  assert.equal(packTable.length, 29); // v2.1.0 W6: +orc-fix
   assert.deepEqual(phaseRow, packTable, "LANE_PHASES.rules must equal RULE_LANE_PACKS");
   assert.deepEqual(catalogue, packTable, "the call catalogue's lanes[] must equal RULE_LANE_PACKS");
   for (const set of [packTable, phaseRow, catalogue])

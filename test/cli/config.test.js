@@ -91,6 +91,19 @@ test("config set → override → reset roundtrip, with validator", () => {
   }
 });
 
+test("orchestrator_model accepts claude-sonnet-5-5 (v2.1.0) and still accepts the old claude-sonnet-5", () => {
+  const { root } = freshInstall();
+  try {
+    for (const id of ["claude-sonnet-5-5", "claude-sonnet-5"]) {
+      const set = cli(["config", "set", "orchestrator_model", id, "--dir", root]);
+      assert.strictEqual(set.status, 0, id + " is a known model: " + set.stdout + set.stderr);
+    }
+    assert.notStrictEqual(cli(["config", "set", "orchestrator_model", "claude-sonnet-9", "--dir", root]).status, 0, "an unknown id is refused");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("config: opus5_only forces, warns about what it shadows, and honors the retired name", () => {
   const { root, claudeDir } = freshInstall();
   try {
@@ -113,7 +126,7 @@ test("config: opus5_only forces, warns about what it shadows, and honors the ret
     const on = cli(["config", "set", "opus5_only", "true", "--dir", root]);
     assert.strictEqual(on.status, 0);
     assert.match(on.stdout, /orc-executor-opus-5-low/, "the executor ladder is shown");
-    assert.match(on.stdout, /orc-wiki-scanner-opus-5-med/, "the fixed-role roster is shown");
+    assert.match(on.stdout, /orc-wiki-scanner-opus-5-low/, "the fixed-role roster is shown");
     assert.match(on.stdout, /trace-writer-haiku-4-5/, "the excluded role is named");
     assert.match(on.stdout, /EVERY dispatch does/, "the tier cost is stated");
 
@@ -237,7 +250,7 @@ test("config: every key answers a declared family, and the two contested ones ar
   const { root } = freshInstall();
   try {
     const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    assert.strictEqual(j.keys.length, 106); // v2.0.0 W6c: +notify, +rules_card_compact · v2.0.0 W4: +gotcha_card_budget, +gotcha_sync_hours, +sonar_url, +sonar_project, +sonar_org · v1.6.0: +read_gate, +read_gate_max_lines · v1.8.0: +code_graph and its seven operating keys · v1.8.2: +code_graph_ignore · v2.0.0 W2: +habits, +review_before_push, +mini_tdd, +quick_update_tests
+    assert.strictEqual(j.keys.length, 109); // v2.1.0 W8: +statusline_refresh · v2.1.0 W7: +log_retention_days, +log_retention_auto · v2.0.0 W6c: +notify, +rules_card_compact · v2.0.0 W4: +gotcha_card_budget, +gotcha_sync_hours, +sonar_url, +sonar_project, +sonar_org · v1.6.0: +read_gate, +read_gate_max_lines · v1.8.0: +code_graph and its seven operating keys · v1.8.2: +code_graph_ignore · v2.0.0 W2: +habits, +review_before_push, +mini_tdd, +quick_update_tests
     for (const k of j.keys) {
       assert.ok(k.answers && k.answers.length, k.key + " declares no answers[]");
       for (const a of k.answers) assert.ok(j.families[a.family], k.key + " → unknown family " + a.family);
@@ -394,6 +407,8 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
       "code_graph_hooks",
       // v1.8.2 — the ignore globs, read by the CLI behind the same calls.
       "code_graph_ignore",
+      // v2.1.0 W8 — write-through: the value lives in settings.json.
+      "statusline_refresh",
       "statusline_custom",
       // v1.1.0 — the two operating keys of the WAIT. A lane runs `orc wait plan`
       // and the CLI reads these two; no spine reads either, which is the same
@@ -425,6 +440,10 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
       // picks its own card).
       "notify",
       "rules_card_compact",
+      // v2.1.0 W7 — read by `orc clear logs` and the FINISH sweep in
+      // `orc trace write`, never by a spine.
+      "log_retention_days",
+      "log_retention_auto",
     ]);
   } finally {
     rmrf(root);

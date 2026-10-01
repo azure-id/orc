@@ -1127,6 +1127,8 @@ const KNOWN_MODELS = [
   "claude-opus-5",
   "claude-opus-4-8",
   "claude-opus-4-7",
+  "claude-sonnet-5-5",
+  // Kept so a config written before v2.1.0 still validates.
   "claude-sonnet-5",
   "claude-sonnet-4-6",
   "claude-haiku-4-5",
@@ -1253,6 +1255,8 @@ const vSonarUrl = tag((raw) => {
 // and no "forever": "forever" is the option that makes every other one
 // pointless, and a deadline that renews itself on use is not a deadline.
 const EXTRA_TTL_DAYS = [1, 3, 7, 14, 30, 90, 180, 360];
+// v2.1.0 — the closed set `orc clear logs --older-than` and `log_retention_days` take.
+const LOG_RETENTION_DAYS = [30, 60, 90, 120, 240, 360];
 const EXTRA_ROLES_ALL = [
   "executor",
   "reviewer",
@@ -1496,6 +1500,11 @@ const CONFIG_META = [
   // v1.8.2 W2 (G8) — the key the engine already understood and no config
   // exposed. Same `lanes: []` reason as every graph key: the CLI reads it.
   { key: "code_graph_ignore", def: "", tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vGlobs, options: ["", "vendor/**", "generated/**,*.gen.ts"], desc: "Extra paths the graph never indexes, as a comma-separated list of globs relative to the repository root (`vendor/**,generated/**,*.gen.ts`). The engine always skips node_modules, vendor, dist/build at the root, caches, bundles, `.d.ts` and generated files; this adds to that list. A skipped file is reported `excluded` by `orc graph coverage`, never silently. Empty = nothing extra." },
+  // v2.1.0 (DE-21) — WRITE-THROUGH. The value lives in settings.json
+  // (`statusLine.refreshInterval`), never in orc.config.yaml: `config set` calls
+  // the same core as `orc statusline refresh`, and `config list` READS it back,
+  // so the two can never disagree. 0.2 / 0.5 / 0.7 are below Claude Code's floor.
+  { key: "statusline_refresh", def: "off", tier: "advanced", answers: [{ family: "statusline", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "1", "2", "3", "5", "10"), options: ["off", "1", "2", "3", "5", "10"], desc: "How often the status line redraws when nothing happens, in seconds (off = only on events). Written straight into the settings.json that holds ORC's hook (statusLine.refreshInterval) — the same as `orc statusline refresh <n>`. Claude Code runs the line at most once a second, so 0.2, 0.5 and 0.7 are refused. The timer ticks for every teammate who shares that settings file." },
   { key: "statusline_custom", def: "off", tier: "common", answers: [{ family: "statusline", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether the status line renders YOUR composed layout instead of the shipped two lines. Off is byte-identical to what ships. Compose the layout in `orc ui` > CLI Hook Interface (the CLI half exists so the panel has something to shell). Turning this on with an invalid or missing layout is refused, naming the reason; a layout that later becomes unreadable falls back to the shipped lines silently and is reported by `orc doctor`." },
   { key: "wait_hop_minutes", def: 30, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [5, 10, 15, 30], desc: "How long ONE detached hop waits before ORC re-reads the window. Short on purpose: each wake-up is session activity, and session activity is the only thing that makes the statusline write a fresh reading. One long sleep wakes into a reading as stale as the sleep was long." },
   { key: "wait_max_hops", def: 5, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [1, 2, 3, 5, 8, 12], desc: "How many hops before ORC gives up and stops with the hand-back. A wrong reset time must cost you a bounded wait, never a session that never comes back." },
@@ -1543,7 +1552,7 @@ const CONFIG_META = [
   // decision with a recorded reason (the /orc-pact retirement rule).
   { key: "extra_demote_after", def: 2, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), options: [0, 2, 3, 5], desc: "Consecutive `stalled` dispatches on ONE profile, inside one run, before that profile is DEMOTED to the bottom of the ladder for the rest of the run — so `opus5_only` (or the shipped score table) becomes the effective P0 and the work stays on Claude. Only `stalled` counts: a 401 or a rate limit has its own answer (`extra_on_failure`, the vault, `extra_resume`), and demoting on one would hide a credential problem behind a routing change. A resume of the same stalled attempt is the SAME stall, never a second one. A demotion is RUN state — it never writes your config — it is ANNOUNCED before the next dispatch, and it is never auto-promoted back: `orc extra promote <run> --reason \"<why>\"`. 0 turns this clock off and leaves only extra_demote_stale_min." },
   { key: "extra_demote_stale_min", def: 20, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), options: [0, 10, 20, 45], desc: "Minutes a LIVE foreign attempt may show no observable progress before its profile is demoted. This is a different question from `extra_stall_s`, which stops ONE dispatch after 180s of silence: this clock is about the RUN — two workers in flight, both quiet, and a wave that is going nowhere — so the two have their own budgets and their own off values and neither is a simplification of the other. It reads the journal's own progress file on disk, never a remembered fact. 0 turns this clock off and leaves only extra_demote_after." },
-  { key: "opus5_only", def: false, tier: "common", answers: [{ family: "executor-band", prio: "P1", mode: "replace" }, { family: "fixed-role-model", prio: "P1", mode: "replace" }], lanes: ["orc", "orc-analyze", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-pattern", "orc-quick", "orc-retro", "orc-wiki"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5.5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5.5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks a hand-written rubric_bands_override. Needs an Opus 5.5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
+  { key: "opus5_only", def: false, tier: "common", answers: [{ family: "executor-band", prio: "P1", mode: "replace" }, { family: "fixed-role-model", prio: "P1", mode: "replace" }], lanes: ["orc", "orc-analyze", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-pattern", "orc-quick", "orc-retro", "orc-wiki"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5.5 — with EFFORT as the cost dial (executors: [0,90) low · [90,100] medium; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5.5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks a hand-written rubric_bands_override. Needs an Opus 5.5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
   // --- v0.46.0 — the six new lanes ------------------------------------------
   { key: "pact_gate", def: "warn", tier: "common", answers: [{ family: "pact", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pact"], validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Invariant ledger at Phase 1 + planning: warn = print the one pact line and inject a DRIFTED/BROKEN promise whose anchors intersect the plan's declared files as a planner constraint; off = nothing. NEVER blocks — a promise is advice with a receipt, not a gate. See /orc-pact." },
   { key: "pact_recheck_on_verify", def: "true", tier: "common", answers: [{ family: "pact", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pact"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "Phase 6: re-run the cheap checks for ONLY the invariants the change touched (`orc pact check`), so a promise that just leaked is caught in the run that broke it." },
@@ -1611,7 +1620,9 @@ const CONFIG_META = [
   { key: "wiki_refresh_ask_tasks", def: 3, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-wiki"], validate: vInt(1), desc: "Post-ship wiki refresh ask fires when the run's task count >= this." },
   { key: "wiki_refresh_ask_files", def: 10, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-wiki"], validate: vInt(1), desc: "…or when the run's touched-file count exceeds this (full/ultra lanes)." },
   { key: "retro_repo", def: "azure-id/orc", tier: "advanced", answers: [{ family: "retro", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-retro"], validate: vRepo, desc: "GitHub owner/repo that receives /orc-retro reports (PR preferred, issue fallback)." },
-  { key: "log_dir", def: ".claude/orc/logs", tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-verify", "orc-wiki"], validate: vPath, desc: "Persistent trace folder (never auto-deleted)." },
+  { key: "log_dir", def: ".claude/orc/logs", tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-explain", "orc-export", "orc-fast", "orc-fix", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-verify", "orc-wiki"], validate: vPath, desc: "Persistent trace folder. Kept until you run `orc clear logs --apply`, or until the automatic sweep removes it (`log_retention_auto: on`, older than `log_retention_days`)." },
+  { key: "log_retention_days", def: 90, tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum(...LOG_RETENTION_DAYS.map(String)), options: LOG_RETENTION_DAYS, desc: "The age `orc clear logs` deletes at: finished traces and finished run folders (with their `refs/orc/runs/<slug>/pre` ref) whose LAST activity is older than this many days. It never deletes user data, a waiting run, the active trace, or a file younger than 6 hours. A trace with an ASK line stays for 180 days (habit evidence), and the cutoff never goes below `aftermath_window_days`." },
+  { key: "log_retention_auto", def: "off", tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "on = `orc trace write` runs `orc clear logs --apply` after a lane's FINISH packet, at most once per 24 hours, and writes `last_sweep` into logs-rollup.json. It never blocks a run and never changes the exit code. off (the default) = nothing is deleted unless you run the command." },
   { key: "run_dir", def: RUN_DIR_DEFAULT, tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-challenge", "orc-doc", "orc-pact"], validate: vPath, desc: "Run artifact root (checkpoints/state-of-play) — outside the installer's blast radius." },
   { key: "analyzer_dir", def: ".claude/skills/orc/analyzer", tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-analyze"], validate: vPath, desc: "Internal analyst artifact dir." },
   { key: "planner_dir", def: ".claude/skills/orc/planner", tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["orc"], validate: vPath, desc: "Internal planner artifact dir." },
@@ -1989,8 +2000,17 @@ const STATE_PAINT = {
   learned: (s) => ui.color.cyan(s),
 };
 
+// v2.1.0 (DE-21) — a write-through key is READ from where it lives.
+function withLiveKeys(map, claudeDir) {
+  try {
+    const v = slRefreshInterval(slHookInfo(claudeDir, SL_BOARDS.status), SL_BOARDS.status);
+    map.statusline_refresh = v == null ? "off" : String(v);
+  } catch (_) {}
+  return map;
+}
 function configList(claudeDir) {
-  const { path: p, map } = readOverride(claudeDir);
+  const { path: p, map: raw } = readOverride(claudeDir);
+  const map = withLiveKeys(Object.assign({}, raw), claudeDir);
   console.log(
     `\nORC config  (override: ${p}${fs.existsSync(p) ? "" : "  — not created yet"})\n`
   );
@@ -2062,7 +2082,7 @@ function configList(claudeDir) {
     } catch (_) {}
     console.log(ui.header("Resolve order  (highest wins)"));
     console.log(
-      "\n  extra route row  >  opus5_only  >  rubric_bands_override  >  the default 6-band table\n"
+      "\n  extra route row  >  opus5_only  >  rubric_bands_override  >  the default 5-band table\n"
     );
     if (rows.length)
       console.log(
@@ -2224,7 +2244,7 @@ function shadowReason(key, map, claudeDir) {
 // v1.0.0 W4 — TWO BANDS, not three, and the same 90 edge as the default table's
 // top two rows (D13). That symmetry is the point: once the default table's high
 // end is already Opus 5.5 with effort as the dial, the forcing mode differs from
-// it only BELOW 65, so a third band here would be a distinction the default
+// it only BELOW 41 (v2.1.0; it was 65), so a third band here would be a distinction the default
 // table stopped making.
 //
 // THIS IS THE ONLY COPY. Until W4 there were two arrays with these rows in this
@@ -2266,7 +2286,7 @@ function scoreTableJson(map, claudeDir) {
   //   an extra route row covering this score  (only for the scores it covers)
   //     > opus5_only
   //     > rubric_bands_override
-  //     > the default 6-band table
+  //     > the default 5-band table
   //
   // Extra is an OVERLAY, not a replacement, which is what makes "cheap grunt
   // work goes to DeepSeek, hard work stays on Opus 5.5" a two-command setup
@@ -2332,7 +2352,8 @@ function scoreTableJson(map, claudeDir) {
 // things only a renderer needs: the control shape (derived from the validator),
 // whether another key shadows this one, and the resolved score ladder.
 function configListJson(claudeDir) {
-  const { path: p, map } = readOverride(claudeDir);
+  const { path: p, map: raw } = readOverride(claudeDir);
+  const map = withLiveKeys(Object.assign({}, raw), claudeDir);
   const has = (k) => Object.prototype.hasOwnProperty.call(map, k);
   const learned = configLearned(map, claudeDir);
   const keys = CONFIG_META.map((m) => {
@@ -2473,6 +2494,16 @@ function configSet(claudeDir, key, rawValue) {
     process.exit(1);
   }
   if (res.warn) console.error(`  ${res.warn}`);
+  if (key === "statusline_refresh") {
+    const v = String(res.value);
+    const r = slRefreshApply(claudeDir, SL_BOARDS.status, v === "off" ? null : Number(v));
+    if (!r.ok) {
+      console.error(`❌ ${r.hint}`);
+      process.exit(1);
+    }
+    console.log(`  ${ui.mark.ok(`statusline_refresh = ${v} (written to ${r.settings})`)}`);
+    return;
+  }
   // W8 (v0.51.0) — THE SETUP GATE. `extra_enabled` is the master switch on a
   // subsystem that sends this repo's source code to a third party, and arming it
   // before any connection has ever answered arms nothing: every dispatch falls
@@ -2542,7 +2573,7 @@ function extraShadowNotice(claudeDir) {
     return;
   }
   const bands = rows.map((r) => `[${r.from},${r.to >= 100 ? "100]" : r.to + ")"}`).join(", ");
-  const base = isTrue(map.opus5_only) ? "opus5_only" : map.rubric_bands_override ? "rubric_bands_override" : "the default 6-band table";
+  const base = isTrue(map.opus5_only) ? "opus5_only" : map.rubric_bands_override ? "rubric_bands_override" : "the default 5-band table";
   console.error(
     `  ⚠ ${bands} ${rows.length === 1 ? "is routed to a non-Claude worker and no longer resolves" : "are routed to a non-Claude worker and no longer resolve"} on ${base}.\n` +
       "    Every other score still does — Extra is an overlay, not a replacement.\n" +
@@ -2560,8 +2591,10 @@ const OPUS5_ONLY_ROLES = [
   ["mini plan", "orc-planner-mini-sonnet-5-high", "orc-planner-mini-opus-5-med"],
   ["scout", "orc-scout-sonnet-4-6-high", "orc-scout-opus-5-low"],
   ["pattern codify", "orc-pattern-codifier-sonnet-5-high", "orc-pattern-codifier-opus-5-med"],
-  ["wiki scan", "orc-wiki-scanner-opus-4-8-high", "orc-wiki-scanner-opus-5-med"],
-  ["claude write", "orc-claude-writer-opus-4-8-high", "orc-claude-writer-opus-5-med"],
+  // v2.1.0 (DE-1): the deep scanner is already Opus 5.5 low, so only the LIGHT
+  // half flips, and onto the deep agent. The CLAUDE.md writer is already Opus 5.5
+  // low and has no row.
+  ["wiki scan", "orc-wiki-scanner-sonnet-5-high", "orc-wiki-scanner-opus-5-low"],
   ["retro mine", "orc-retro-sonnet-5-high", "orc-retro-opus-5-med"],
 ];
 
@@ -2572,7 +2605,7 @@ const OPUS5_ONLY_ROLES = [
 function opus5Notice(on, claudeDir) {
   if (!on) {
     console.log(
-      "\n  Every role is back to its default pin (executors → the 6-band mixed-model\n" +
+      "\n  Every role is back to its default pin (executors → the 5-band mixed-model\n" +
         "  table). A hand-written rubric_bands_override is live again."
     );
     return;
@@ -2949,6 +2982,9 @@ const LANES = [
   { lane: "orc-doc", command: "orc-doc" },
   { lane: "orc-explain", command: "orc-explain" },
   { lane: "orc-export", command: "orc-export" },
+  // v2.1.0 W6 — a RIDER, like orc-wait: it opens no run and never writes
+  // `.current`. It records a fix into the run already in flight, or with none.
+  { lane: "orc-fix", command: "orc-fix" },
   { lane: "orc-fast", command: "orc-fast" },
   { lane: "orc-grill", command: "orc-grill" },
   { lane: "orc-handoff", command: "orc-handoff" },
@@ -3439,6 +3475,12 @@ function habitDeps() {
   return { flag, positionals, emitJson, wantsJson, resolveClaudeDir, readOverride, listTraces, traceTs };
 }
 
+// v2.1.0 W7 — `orc clear logs` and the FINISH sweep (bin/clear-logs.js) REUSE
+// the trace-name parser and the per-trace counts `orc stats` adds up.
+function clearLogsDeps() {
+  return { flag, positionals, emitJson, wantsJson, resolveClaudeDir, resolveLogDir, resolveRunDir, readOverride, traceNameInfo, traceCountsOf, LOG_RETENTION_DAYS };
+}
+
 function laneList(claudeDir) {
   const rows = LANES.map((l) => ({
     lane: l.lane,
@@ -3496,7 +3538,7 @@ const LANE_CALLS = {
     on_absent: "exit ≠ 0 → say the CLI is unavailable and use the documented defaults, out loud, treating every P0 forcing mode as OFF",
     canonical: "_shared/config-precedence.md",
     never: "never merge `.claude/orc.config.yaml` yourself, and never re-derive a precedence — the answer already carries it",
-    lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-test", "orc-verify", "orc-wiki"],
+    lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-explain", "orc-export", "orc-fast", "orc-fix", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-test", "orc-verify", "orc-wiki"],
   },
   "run-inflight": {
     cmd: "orc run inflight [--json]",
@@ -3577,6 +3619,37 @@ const LANE_CALLS = {
     canonical: "_shared/gotchas.md",
     never: "never inject the ledger unfiltered — only the entries whose `scope` glob matches the slice",
     lanes: ["orc", "orc-boundary", "orc-brainstorm", "orc-fast", "orc-grill", "orc-mini", "orc-retro", "orc-route"],
+  },
+  // v2.1.0 — the review-close record. It was shared PROSE only and every spine
+  // says "make no other call", so no lane made it and Review Quality read
+  // "0 so far". `orc gotcha quality` now also counts reviews from the traces;
+  // this row is what gives a lane the call for the acceptance half.
+  "gotcha-observe": {
+    cmd: "orc gotcha observe - [--json]",
+    what: "record ONE finding outcome (stdin: one JSON object) — the only writer of observations.jsonl",
+    exits: { 0: "appended, promotion ran", 2: "malformed — the reply names the field" },
+    states: null,
+    cost: "free",
+    when: "at review close, once per finding, after the fixes — `run` is required when author is orc",
+    on_absent: "exit 2 → say it once and go on; it never blocks a run",
+    canonical: "_shared/gotchas.md",
+    never: "never edit `.claude/orc/observations.jsonl` by hand, and never record a clean review here — the trace `FINDING-OUTCOME` line already counts it",
+    lanes: ["orc", "orc-mini", "orc-quick"],
+  },
+  // v2.1.0 — the project review rule. A lane never names it: the answer reaches
+  // the lane as the `review-policy` probe inside `orc lane config`, so this row
+  // is a USER command (`lanes: []`, the `orc graph audit` shape).
+  "review-policy": {
+    cmd: "orc review policy [--json]",
+    what: "does the project's CLAUDE.md / AGENTS.md name its own review — the file, the line, the quote and the name",
+    exits: { 0: "answered in every state — read `policy` (orc | project)" },
+    states: ["orc", "project"],
+    cost: "free",
+    when: "at preflight, through the `review-policy` probe of `orc lane config`",
+    on_absent: "`policy: orc` and `line: null` — no rule, nothing to ask",
+    canonical: "_shared/review-slice.md",
+    never: "never let the rule pick the reviewer — it only adds an OPTION to the §0 question the user answers",
+    lanes: [],
   },
   // v1.8.0 — the code graph. Every row carries `--if-enabled`: the CLI resolves
   // `code_graph`, so no lane reads the key (and /orc-quick can take part).
@@ -4042,7 +4115,7 @@ const LANE_CALLS = {
     // declared far below this catalogue, and reading it here is a temporal dead
     // zone that crashes the CLI on every command. `test/cli/rules.test.js`
     // asserts the two agree.
-    lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-test", "orc-verify", "orc-wiki"],
+    lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-explain", "orc-export", "orc-fast", "orc-fix", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-test", "orc-verify", "orc-wiki"],
   },
 };
 
@@ -4283,7 +4356,7 @@ const PHASE_FILES = {
   },
   "review": {
     file: "_shared/phases/review.md",
-    trace_verbs: ["PHASE", "FINDING", "GRAPH-CHANGES"],
+    trace_verbs: ["PHASE", "FINDING", "GRAPH-CHANGES", "REVIEW-WHICH"],
     layers: ["full", "composed"],
     // v1.0.0 W13 — orc-diy became the second reader, so the phase left
     // orc/references/phases/ for the library. `full` is /orc's procedure;
@@ -4485,6 +4558,17 @@ const PROBE_DEFS = {
     pick: ["packs", "overrides"],
     line: (j) => j.line,
   },
+  // v2.1.0 — the project's own review rule. The line reaches the lane only when a
+  // rule exists (preflight prints one line per probe), so it costs no
+  // always-loaded byte and no spine text.
+  "review-policy": {
+    argv: () => ["review", "policy"],
+    run: () => reviewCmd(),
+    pick: ["policy", "found"],
+    // Every probe carries ONE line (preflight prints one per probe). With no rule
+    // the line says so and the lane changes nothing.
+    line: (j) => j.line || "review: ORC review — no project review rule found",
+  },
   "extra-slot": {
     argv: () => ["extra", "resolve", "--slot", "quick-executor"],
     run: () => extraResolveCmd(resolveClaudeDir(), undefined),
@@ -4500,8 +4584,12 @@ function laneProbeIds(lane) {
   if (LANE_CALLS["graph-status"].lanes.includes(lane)) ids.push("graph-status");
   if (LANE_CALLS["rules-slice"].lanes.includes(lane)) ids.push("rules-slice");
   if (lane === "orc-quick") ids.push("extra-slot");
+  if (REVIEW_POLICY_LANES.includes(lane)) ids.push("review-policy");
   return ids;
 }
+// v2.1.0 (DE-8 a) — every coding lane that can change code asks "which review"
+// before ship when the project names its own review, so every one carries it.
+const REVIEW_POLICY_LANES = ["orc", "orc-mini", "orc-fast", "orc-quick", "orc-diy"];
 
 // Run ONE stand-alone command in this process and take its answer. The argv is
 // swapped in for the call and put back after it; stdout, stderr and exit are
@@ -4587,7 +4675,7 @@ const LANE_TRACE = {
   "orc-mini": {
     tier: "Build lanes",
     token: "mini",
-    spine_verbs: ["PHASE", "GATE", "OUTCOME", "DRIFT", "TDD-RED", "TDD-GREEN", "FINDING", "FINDING-OUTCOME", "GRAPH-CONSULT", "GRAPH-UPDATE", "GRAPH-COMPLEXITY", "GRAPH-NOTES"],
+    spine_verbs: ["PHASE", "GATE", "OUTCOME", "DRIFT", "TDD-RED", "TDD-GREEN", "FINDING", "FINDING-OUTCOME", "REVIEW-WHICH", "GRAPH-CONSULT", "GRAPH-UPDATE", "GRAPH-COMPLEXITY", "GRAPH-NOTES"],
   },
   "orc-fast": { tier: "Build lanes", token: "fast" },
   "orc-wiki": { tier: "Multi-dispatch", token: "wiki" },
@@ -4657,7 +4745,9 @@ const TRACE_VERBS = {
   JUDGE: { grammar: "JUDGE <analysis|plan|implementation> <verdict> round=<n> blocking=<n> advisory=<n> downgraded=<n>", emitter: "orc → writer", meaning: "ultra judgment verdict", owner: "orc/references/ultra-mode.md" },
   OUTCOME: { grammar: "OUTCOME task=<id> score=<n> band=<range> model=<m> retries=<n> requeues=<n> needs_context=<n> unmet=<n>", emitter: "orc → writer", meaning: "task closed — links the scoring band to what it actually took", owner: "_shared/phases/execution.md" },
   FINDING: { grammar: "FINDING p0=<n> p1=<n> p2=<n> p3=<n>[ pre=<n> suppressed=<n> folded=<n>]", emitter: "reviewer→orc → writer", meaning: "review outcome (P0–P3 severity ladder); the tail counts the after-filter's buckets", owner: "_shared/phases/review.md" },
-  "FINDING-OUTCOME": { grammar: "FINDING-OUTCOME addressed=<n> disputed=<n> wontfix=<n> open=<n> pre=<n> suppressed=<n> :: <cat>:<addressed>/<total>,…", emitter: "orc → writer", meaning: "ONE line at review close — what became of each finding; `orc gotcha quality` reads it", owner: "_shared/phases/trace-verbs.md" },
+  "REVIEW-WHICH": { grammar: "REVIEW-WHICH chose=<orc|project|skip> name=<the review the rule names> by=<user|ledger|learned> :: <file:line of the rule>", emitter: "orc → writer", meaning: "the answer to §0 \"which review\" when the project names its own review — written ALWAYS, also under habits off; the FINISH nudge reads it", owner: "_shared/phases/trace-verbs.md" },
+  FIX: { grammar: "FIX source=<sonar|ci|defect|pr|review|other> introduced_by=<orc|ai|human|unknown> by=<user|evidence> obs=<id8>[ missed_by=<run>] :: <path:lines> <rule or finding>", emitter: "cli", meaning: "one fix recorded by `orc fix record` (/orc-fix) into the HOST run's trace — the CLI writes it, never a packet", owner: "orc-fix/SKILL.md" },
+  "FINDING-OUTCOME": { grammar: "FINDING-OUTCOME addressed=<n> disputed=<n> wontfix=<n> open=<n> pre=<n> suppressed=<n> :: <cat>:<addressed>/<total>,…", emitter: "orc → writer", meaning: "ONE line at review close (a clean review too) — what became of each finding; `orc gotcha quality` counts it as a review", owner: "_shared/phases/trace-verbs.md" },
   VERDICT: { grammar: "VERDICT pass|fail :: <detail>", emitter: "verifier→orc → writer", meaning: "verification outcome", owner: "_shared/phases/verify.md" },
   DRIFT: { grammar: "DRIFT loop=<n> :: <user description, compressed>", emitter: "orc → writer", meaning: "mock-example drift-recovery loop opened (hard cap 2 loops)", owner: "_shared/drift-recovery.md" },
   "TDD-RED": { grammar: "TDD-RED task=<id> iter=<n> :: <failing tests>", emitter: "executor→orc → writer", meaning: "TDD repair-loop iteration — the plan's acceptance tests still red", owner: "_shared/phases/trace-verbs.md" },
@@ -4735,7 +4825,7 @@ const LANE_PHASES = {
   rules: [
     "context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini",
     "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude",
-    "orc-diy", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff",
+    "orc-diy", "orc-explain", "orc-export", "orc-fast", "orc-fix", "orc-grill", "orc-handoff",
     "orc-learn", "orc-mini", "orc-pact", "orc-poly", "orc-pr-driver", "orc-pr-setup",
     "orc-quick", "orc-retro", "orc-route", "orc-test", "orc-verify", "orc-wiki",
   ],
@@ -4912,7 +5002,7 @@ const LANE_OWN_PHASES = {
     { ord: 2, id: "phase-f2", file: "orc-fast/SKILL.md", heading: "## Phase F2 — Slice build + dispatch (ONE executor)", read: "section", trace_verbs: ["GATE", "VERIFY", "WIKI-CONSULT"] },
     { ord: 3, id: "phase-f3", file: "orc-fast/SKILL.md", heading: "## Phase F3 — Smoke gate (build + test; blocks ship on red)", read: "section", trace_verbs: [] },
     { ord: 4, id: "phase-f3-5", file: "orc-fast/SKILL.md", heading: "## Phase F3.5 — Mock example (config `mock_example`, default ask)", read: "section", trace_verbs: ["DRIFT", "PHASE"] },
-    { ord: 5, id: "phase-f4", file: "orc-fast/SKILL.md", heading: "## Phase F4 — Ship", read: "section", trace_verbs: ["FINISH", "OUTCOME"] },
+    { ord: 5, id: "phase-f4", file: "orc-fast/SKILL.md", heading: "## Phase F4 — Ship", read: "section", trace_verbs: ["FINISH", "OUTCOME", "REVIEW-WHICH"] },
   ],
   "orc-learn": [
     { ord: 0, id: "mode-a", file: "orc-learn/SKILL.md", heading: "## Mode A — INIT", read: "section", trace_verbs: ["DISPATCH", "FINISH", "VERIFY", "WIKI-CONSULT"] },
@@ -4963,7 +5053,7 @@ const LANE_OWN_PHASES = {
     { ord: 0, id: "q0", file: "orc-quick/SKILL.md", heading: "## Q0 — Preflight (ONE time per session, silent, nothing can stop the run)", read: "section", trace_verbs: ["GATE", "GRAPH-CONSULT"] },
     { ord: 1, id: "q1", file: "orc-quick/SKILL.md", heading: "## Q1 — LOOK (silent — no questions here)", read: "section", trace_verbs: ["GATE", "WIKI-CONSULT", "GRAPH-CONSULT", "GRAPH-MAP"] },
     { ord: 2, id: "q2", file: "orc-quick/SKILL.md", heading: "## Q2 — ASK (ONE user turn: questions + the gate together)", read: "section", trace_verbs: [] },
-    { ord: 3, id: "q3", file: "orc-quick/SKILL.md", heading: "## Q3 — DO (dispatch → build/test → write the doc → offer)", read: "section", trace_verbs: ["DISPATCH", "VERIFY", "REPRO", "GRAPH-CHANGES", "GRAPH-UPDATE", "GRAPH-NOTES", "GRAPH-GAIN", "OUTCOME", "FINDING", "FINDING-OUTCOME", "FINISH"] },
+    { ord: 3, id: "q3", file: "orc-quick/SKILL.md", heading: "## Q3 — DO (dispatch → build/test → write the doc → offer)", read: "section", trace_verbs: ["DISPATCH", "VERIFY", "REPRO", "GRAPH-CHANGES", "GRAPH-UPDATE", "GRAPH-NOTES", "GRAPH-GAIN", "OUTCOME", "FINDING", "FINDING-OUTCOME", "REVIEW-WHICH", "FINISH"] },
   ],
   "orc-wiki": [
     { ord: 0, id: "phase-0", file: "orc-wiki/references/phases/phase-0.md", layers: ["full"], trace_verbs: [] },
@@ -5526,10 +5616,11 @@ const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 // The tier-clip roster. It must contain EVERY agent the default table names —
 // `diyScoreTable()` looks each row's agent up here, so a table row naming an
 // agent this map does not know is a crash, not a fallback. v1.0.0 W4 added the
-// two Opus 5.5 rows for exactly that reason.
+// two Opus 5.5 rows for exactly that reason, and v2.1.0 the two Sonnet 5 rows
+// (`sonnet-5-low`, `sonnet-5-med`).
 //
 // It also feeds `fixed_executor`'s option list, so every entry here is offerable
-// — which is what keeps the four agents no band names reachable (D14).
+// — which is what keeps the seven agents no band names reachable (D14).
 //
 // Effort ranks `low(0) < medium(1) < high(2) < xhigh(3) < max(4)`. There is no
 // session tier at 0: an agent at low effort fits every tier of its own model,
@@ -5538,6 +5629,8 @@ const DIY_EXECUTORS = {
   "orc-executor-haiku-4-5": { model: 1, effort: 1 },
   "orc-executor-sonnet-4-6-med": { model: 2, effort: 1 },
   "orc-executor-sonnet-4-6-high": { model: 2, effort: 2 },
+  "orc-executor-sonnet-5-low": { model: 3, effort: 0 },
+  "orc-executor-sonnet-5-med": { model: 3, effort: 1 },
   "orc-executor-sonnet-5-high": { model: 3, effort: 2 },
   "orc-executor-opus-4-7-med": { model: 4, effort: 1 },
   "orc-executor-opus-4-7-high": { model: 4, effort: 2 },
@@ -5811,7 +5904,7 @@ function diyValidate(cfg) {
   return { errors, warnings };
 }
 
-// The single canonical 6-band score->model table (mirrors skills/orc/config.md
+// The single canonical 5-band score->model table (mirrors skills/orc/config.md
 // — documented drift). No more narrow/wide preset: rubric_bands is granularity
 // only, and this one table maps every score.
 //
@@ -5825,15 +5918,19 @@ function diyValidate(cfg) {
 // TABLE change, and an agent's model change is always a rename — conflating the
 // two is how a downgrade check breaks.
 //
-// THE EDGE IS 90, AND IT IS ROUND (D13). Every other edge in this table is
-// round and half-open, so `[65,90)` and `[90,101]` keep the shape; a score of
-// exactly 90 resolves to `med`.
+// THE EDGE IS 90, AND IT IS ROUND (D13). `[41,90)` and `[90,101]` keep the
+// half-open shape; a score of exactly 90 resolves to `med`.
+//
+// v2.1.0 — FIVE BANDS. The score is always a whole number, so the user's closed
+// ranges 0–20 · 21–30 · 31–40 · 41–89 · 90–100 map exactly to these half-open
+// rows. The bottom three are Sonnet 5 with effort as the dial; from 41 every
+// task runs on Opus 5.5. `haiku-4-5`, `sonnet-4-6-med` and `sonnet-4-6-high` are
+// named by no band now and STAY ON DISK (the same D14 rule as above).
 const DIY_SCORE_TABLE = [
-  [0, 30, "orc-executor-haiku-4-5"],
-  [30, 40, "orc-executor-sonnet-4-6-med"],
-  [40, 55, "orc-executor-sonnet-4-6-high"],
-  [55, 65, "orc-executor-sonnet-5-high"],
-  [65, 90, "orc-executor-opus-5-low"],
+  [0, 21, "orc-executor-sonnet-5-low"],
+  [21, 31, "orc-executor-sonnet-5-med"],
+  [31, 41, "orc-executor-sonnet-5-high"],
+  [41, 90, "orc-executor-opus-5-low"],
   [90, 101, "orc-executor-opus-5-med"],
 ];
 
@@ -5900,8 +5997,18 @@ function diyExtraRows(cfg, claudeDir) {
   }
   if (!ledger || !ledger.routes.length) return null;
   const rows = [];
+  const table = isTrue(map.opus5_only) ? OPUS5_SCORE_TABLE : DIY_SCORE_TABLE;
   for (const r of ledger.routes) {
     const res = extraResolveFor(claudeDir, r.from, { role: "executor" });
+    // v2.1.0 — a user row can span more than one Claude band (a 40-55 row covers
+    // [31,41) AND [41,90) of the five-band table). Name EVERY agent its scores
+    // would fall back to, never only the agent at its first score.
+    const fallbacks = [res.claude.agent];
+    for (const [lo] of table)
+      if (lo > r.from && lo < r.to) {
+        const a = extraResolveFor(claudeDir, lo, { role: "executor" }).claude.agent;
+        if (a && !fallbacks.includes(a)) fallbacks.push(a);
+      }
     rows.push({
       from: r.from,
       to: r.to,
@@ -5910,7 +6017,7 @@ function diyExtraRows(cfg, claudeDir) {
       model: r.model,
       routes: res.resolved === "extra",
       why_short: res.held_back || "not routed",
-      claude_agent: res.claude.agent,
+      claude_agent: fallbacks.join(" / "),
     });
   }
   // A gap is not a hole — it is Claude, split at the Claude table's own edges by
@@ -8167,20 +8274,19 @@ function usageFor(usage, file) {
 }
 
 // ── the scan tier ladder (B5) — the biggest single cut ───────────────────────
-// Every scan-task used to dispatch `orc-wiki-scanner-opus-4-8-high` whether the
+// Every scan-task used to dispatch `orc-wiki-scanner-opus-5-low` whether the
 // delta was 2 lines or 2000. The ladder sends a small, no-new-surface delta to
 // the LIGHT scanner instead. Five rows, in order; first match wins.
 //
 // NEVER SILENT: the resolved tier is printed in `orc wiki plan` and in the
 // refresh confirmation. A cheaper model is a decision the user sees, never a
 // quiet substitution.
-const WIKI_SCANNER_DEEP = "orc-wiki-scanner-opus-4-8-high";
+const WIKI_SCANNER_DEEP = "orc-wiki-scanner-opus-5-low";
 const WIKI_SCANNER_LIGHT = "orc-wiki-scanner-sonnet-5-high";
-// `opus5_only` already forces the wiki scanner to the shipped
-// orc-wiki-scanner-opus-5-med, so BOTH tiers collapse to that one agent while
-// the flag is on. That is why the ladder adds NO row to OPUS5_ONLY_ROLES and no
-// new agent pair: see _shared/opus5-only.md.
-const WIKI_SCANNER_OPUS5 = "orc-wiki-scanner-opus-5-med";
+// `opus5_only` forces the wiki scanner to the deep agent: since v2.1.0 the deep
+// scanner is already Opus 5.5 low, so BOTH tiers collapse onto it while the flag
+// is on. The ladder adds no new agent pair: see _shared/opus5-only.md.
+const WIKI_SCANNER_OPUS5 = "orc-wiki-scanner-opus-5-low";
 
 const WIKI_TIER_LADDER = [
   { id: "first-scan", tier: "deep", why: "first scan of this area (no doc yet)" },
@@ -10302,7 +10408,7 @@ ${line || ""}`;
 // The helpers `bin/gotcha.js` borrows: the v1 parser and paths stay HERE, so
 // `GOTCHA_HEAD` has one home and a 1.9.2 CLI still reads a 2.0 file.
 function gotchaDeps() {
-  return { args, flag, positionals, emitJson, wantsJson, resolveClaudeDir, readOverride, repoRootOf, parseGotchas, gotchasPath, gotchasArchivePath, GOTCHA_HEAD };
+  return { args, flag, positionals, emitJson, wantsJson, resolveClaudeDir, readOverride, repoRootOf, parseGotchas, gotchasPath, gotchasArchivePath, GOTCHA_HEAD, listTraces };
 }
 
 // An async importer that throws: one line, exit 1, never a stack in a lane.
@@ -11528,8 +11634,10 @@ function wiki() {
 
 // ── Run state: `orc resume`, `orc run list|show`, `orc stats` (v0.42.0) ─────
 // Three read-only commands over state ORC already writes. The design constraint
-// shared by all three is SCALE: `log_dir` and `run_dir` are never auto-deleted
-// by design, so 100+ runs is a normal working directory, and a command that
+// shared by all three is SCALE: `log_dir` and `run_dir` are kept until you run
+// `orc clear logs --apply`, or until the automatic sweep removes them
+// (`log_retention_auto: on`, older than `log_retention_days`), so 100+ runs is
+// a normal working directory, and a command that
 // opened every file to build a list would get slower forever. So: enumerate with
 // readdir + stat ONLY, sort, then read a bounded HEAD of just the page being
 // displayed. `checkpoint.json` is never read for a listing — only `run show`
@@ -12229,6 +12337,57 @@ function bar(n, max, width = 12) {
   return "█".repeat(Math.max(1, Math.round((n / max) * width)));
 }
 
+// Lane and date from a trace NAME alone (no file read), or null for a file
+// `orc stats` does not count.
+function traceNameInfo(name) {
+  const m = TRACE_NAME.exec(name);
+  const g = m ? null : TRACE_GENERIC.exec(name);
+  if (!m && !g) return null;
+  return { lane: m ? m[1] : "unknown", date: traceDateIso(m ? m[3] : g[1]) };
+}
+
+// v2.1.0 — ONE trace's counts, exactly as `orc stats` adds them up. Shared
+// with `orc clear logs` (bin/clear-logs.js), which folds these counts into
+// logs-rollup.json BEFORE it deletes the trace, so the totals do not drop.
+function traceCountsOf(dir, name) {
+  const info = traceNameInfo(name);
+  if (!info) return null;
+  const out = { lane: info.lane, date: info.date, dispatches: 0, downgrades: 0, unfinished: 0, agents: {} };
+  const addAgent = (a) => {
+    const key = a.replace(/^\S+\s+/, "").replace(/-(haiku|sonnet|opus|fable)-.*$/, "");
+    out.agents[key] = (out.agents[key] || 0) + 1;
+  };
+  const tail = readTail(path.join(dir, name));
+  const st = parseStatsLine(tail);
+  if (st) {
+    out.dispatches += Number(st.dispatches) || 0;
+    out.downgrades += Number(st.downgrades) || 0;
+    for (const a of tail.match(/\bDISPATCH\s+(orc-[\w.-]+)/g) || []) addAgent(a);
+  } else {
+    // Legacy fallback: count DISPATCH lines. Cheaper detail, same headline.
+    let body = "";
+    try { body = fs.readFileSync(path.join(dir, name), "utf8"); } catch (_) {}
+    out.dispatches += (body.match(/\bDISPATCH\s+\S/g) || []).length;
+    out.downgrades += (body.match(/⛔ DOWNGRADE/g) || []).length;
+    for (const a of body.match(/\bDISPATCH\s+(orc-[\w.-]+)/g) || []) addAgent(a);
+  }
+  if (!/\bFINISH\b/.test(tail)) out.unfinished = 1;
+  return out;
+}
+
+const LOGS_ROLLUP_FILE = "logs-rollup.json";
+
+// The rollup `orc clear logs --apply` writes (DE-19 a). Class b: never deleted,
+// never in the install manifest. `null` when absent or unreadable.
+function readLogsRollup(claudeDir) {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(claudeDir, "orc", LOGS_ROLLUP_FILE), "utf8"));
+    return j && typeof j === "object" ? j : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function stats() {
   const claudeDir = resolveClaudeDir();
   const dir = resolveLogDir(claudeDir);
@@ -12241,7 +12400,7 @@ function stats() {
   const empty = (msg) => {
     if (asJson)
       emitJson(
-        { log_dir: dir, runs: 0, from: null, to: null, lanes: {}, agents: {}, dispatches: 0, downgrades: 0, unfinished: 0, unknown_lane: 0, graph: statsGraph(claudeDir), questions: null },
+        { log_dir: dir, runs: 0, from: null, to: null, lanes: {}, agents: {}, dispatches: 0, downgrades: 0, unfinished: 0, unknown_lane: 0, pruned_runs: 0, graph: statsGraph(claudeDir), questions: null },
         1
       );
     console.log(msg);
@@ -12249,57 +12408,53 @@ function stats() {
   };
 
   let names = [];
+  let noDir = false;
   try {
     names = fs.readdirSync(dir).filter((f) => f.endsWith(".txt"));
   } catch (_) {
-    empty(`No traces yet under ${dir}. Run any ORC lane and they appear here.`);
+    noDir = true;
   }
 
   const lanes = new Map();
   const agents = new Map();
-  let total = 0, dispatches = 0, downgrades = 0, unfinished = 0, unknownLane = 0;
+  let total = 0, dispatches = 0, downgrades = 0, unfinished = 0, unknownLane = 0, prunedRuns = 0;
   let firstDate = null, lastDate = null;
+  const sinceOk = (date) => !(typeof since === "string" && since && date < since);
+  const add = (c, runs) => {
+    total += runs;
+    if (c.lane === "unknown") unknownLane += runs;
+    lanes.set(c.lane, (lanes.get(c.lane) || 0) + runs);
+    if (c.from && (!firstDate || c.from < firstDate)) firstDate = c.from;
+    if (c.to && (!lastDate || c.to > lastDate)) lastDate = c.to;
+    dispatches += Number(c.dispatches) || 0;
+    downgrades += Number(c.downgrades) || 0;
+    unfinished += Number(c.unfinished) || 0;
+    for (const [a, n] of Object.entries(c.agents || {})) agents.set(a, (agents.get(a) || 0) + (Number(n) || 0));
+  };
 
   for (const name of names) {
-    const m = TRACE_NAME.exec(name);
-    const g = m ? null : TRACE_GENERIC.exec(name);
-    if (!m && !g) continue;
-    const date = traceDateIso(m ? m[3] : g[1]);
+    const info = traceNameInfo(name);
+    if (!info) continue;
     // --since filters on the FILENAME date, before any file is opened.
-    if (typeof since === "string" && since && date < since) continue;
-
-    const lane = m ? m[1] : "unknown";
-    if (!m) unknownLane++;
-    total++;
-    lanes.set(lane, (lanes.get(lane) || 0) + 1);
-    if (!firstDate || date < firstDate) firstDate = date;
-    if (!lastDate || date > lastDate) lastDate = date;
-
-    const tail = readTail(path.join(dir, name));
-    const st = parseStatsLine(tail);
-    if (st) {
-      dispatches += Number(st.dispatches) || 0;
-      downgrades += Number(st.downgrades) || 0;
-    } else {
-      // Legacy fallback: count DISPATCH lines. Cheaper detail, same headline.
-      const body = fs.readFileSync(path.join(dir, name), "utf8");
-      dispatches += (body.match(/\bDISPATCH\s+\S/g) || []).length;
-      downgrades += (body.match(/⛔ DOWNGRADE/g) || []).length;
-      for (const a of body.match(/\bDISPATCH\s+(orc-[\w.-]+)/g) || []) {
-        const key = a.replace(/^\S+\s+/, "").replace(/-(haiku|sonnet|opus|fable)-.*$/, "");
-        agents.set(key, (agents.get(key) || 0) + 1);
-      }
-    }
-    if (st) {
-      for (const a of tail.match(/\bDISPATCH\s+(orc-[\w.-]+)/g) || []) {
-        const key = a.replace(/^\S+\s+/, "").replace(/-(haiku|sonnet|opus|fable)-.*$/, "");
-        agents.set(key, (agents.get(key) || 0) + 1);
-      }
-    }
-    if (!/\bFINISH\b/.test(tail)) unfinished++;
+    if (!sinceOk(info.date)) continue;
+    const c = traceCountsOf(dir, name);
+    add(Object.assign(c, { from: c.date, to: c.date }), 1);
   }
 
-  if (!total) empty(since ? `No traces on or after ${since}.` : `No traces yet under ${dir}.`);
+  // v2.1.0 (DE-19 a) — the runs `orc clear logs --apply` pruned. Their counts
+  // were folded into logs-rollup.json before the delete, per lane and month.
+  // Under --since a bucket counts only when its FIRST run is on or after it.
+  const rollup = readLogsRollup(claudeDir);
+  for (const b of Object.values((rollup && rollup.buckets) || {})) {
+    if (!b || !(Number(b.runs) > 0) || !b.from || !sinceOk(b.from)) continue;
+    add(b, Number(b.runs));
+    prunedRuns += Number(b.runs);
+  }
+
+  if (!total)
+    empty(
+      since ? `No traces on or after ${since}.` : noDir ? `No traces yet under ${dir}. Run any ORC lane and they appear here.` : `No traces yet under ${dir}.`
+    );
 
   const laneRows = [...lanes.entries()].sort((a, b) => b[1] - a[1]);
   const agentRows = [...agents.entries()].sort((a, b) => b[1] - a[1]);
@@ -12325,6 +12480,7 @@ function stats() {
           downgrades,
           unfinished,
           unknown_lane: unknownLane,
+          pruned_runs: prunedRuns,
           graph: statsGraph(claudeDir),
           questions,
         },
@@ -12336,6 +12492,7 @@ function stats() {
   }
 
   console.log(ui.header(`ORC usage — ${plural(total, "run")}, ${firstDate} to ${lastDate}`));
+  if (prunedRuns) console.log(ui.color.gray(`includes ${plural(prunedRuns, "pruned run")} (counted in ${LOGS_ROLLUP_FILE} before \`orc clear logs\` deleted the trace)`));
   console.log("\n" + ui.color.bold("Lanes"));
   const maxLane = laneRows[0][1];
   for (const [lane, n] of laneRows) {
@@ -12388,8 +12545,10 @@ function stats() {
     "\n" +
       ui.color.gray(
         "Counts only what traces record. `/orc-retro` and `/orc-explain` never write one,\n" +
-          "so they never appear here. Deleting or moving log_dir resets these numbers;\n" +
-          "nothing auto-prunes traces."
+          "so they never appear here. Deleting or moving log_dir resets these numbers.\n" +
+          "Traces are kept until you run `orc clear logs --apply`, or until the automatic\n" +
+          "sweep removes them (`log_retention_auto: on`, older than `log_retention_days`);\n" +
+          "a pruned run still counts here."
       )
   );
 }
@@ -12866,7 +13025,7 @@ function scoreFromFacets(f, fanIn, fanOut) {
 }
 
 // The resolved score→model table. `opus5_only` outranks everything (3 bands);
-// otherwise the default 6-band table. A hand-written `rubric_bands_override` is
+// otherwise the default 5-band table. A hand-written `rubric_bands_override` is
 // registry-less by design, so the forecast reports it as UNKNOWN rather than
 // pretending to resolve it.
 // v1.0.0 W4 — an ALIAS, not a second array. See OPUS5_SCORE_TABLE's comment:
@@ -12976,8 +13135,8 @@ function parsePlanTasks(text) {
 // Fixed roles a run dispatches besides executors. Named, not guessed: the
 // forecast has to say WHICH roles it priced or the total is unfalsifiable.
 const LANE_FIXED_ROLES = {
-  orc: ["orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-reviewer-opus-5-med", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-4-5"],
-  ultra: ["orc-advisor-opus-5-xhigh", "orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-judge-opus-5-xhigh", "orc-reviewer-opus-5-med", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-4-5"],
+  orc: ["orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-reviewer-opus-5-low", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-4-5"],
+  ultra: ["orc-advisor-opus-5-xhigh", "orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-judge-opus-5-xhigh", "orc-reviewer-opus-5-low", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-4-5"],
   mini: ["orc-analyze-mini-sonnet-5-high", "orc-planner-mini-sonnet-5-high", "orc-trace-writer-haiku-4-5"],
   fast: ["orc-trace-writer-haiku-4-5"],
 };
@@ -14413,6 +14572,82 @@ function exportCmd() {
 }
 
 const IMPORT_CANDIDATES = ["AGENTS.md", "CLAUDE.md", ".cursorrules", ".github/copilot-instructions.md"];
+
+// ── v2.1.0 — `orc review policy`: does the PROJECT ask for its own review? ──
+//
+// Read-only and zero-token. It reads the instruction files `orc export` already
+// knows plus `.claude/CLAUDE.md`, and finds a line that has ALL of: a review
+// word, a duty word, and a NAME (a slash command, a `plugin:skill` id, a
+// backticked name, or "skill"/"command" next to a name). Fenced code is skipped,
+// and a line that names ORC's own reviewer or an ORC command does not count.
+//
+// It is a heuristic, so it NEVER answers anything: house rules "can never change
+// how a lane RUNS". It only adds an OPTION to the question the lane asks before
+// ship (`_shared/review-slice.md` §0). Exit 0 in every state.
+const REVIEW_POLICY_FILES = IMPORT_CANDIDATES.concat([".claude/CLAUDE.md"]);
+const RP_REVIEW = /\b(?:code[- ]?review|reviews?|reviewed)\b|\bCR\b/i;
+const RP_DUTY = /\b(?:must|always|required|needs?|should|only|use)\b/i;
+function reviewPolicyNames(text) {
+  const names = [];
+  const add = (n) => {
+    if (!n) return;
+    const v = n.replace(/[.,;:)]+$/, "");
+    if (/^\/?orc(?:-|$)/.test(v) || /orc-reviewer-/.test(v)) return;
+    if (!names.includes(v)) names.push(v);
+  };
+  for (const m of text.matchAll(/(?:^|[\s(`"'])(\/[a-z][\w:-]*)/g)) add(m[1]);
+  for (const m of text.matchAll(/(?:^|[\s(`"'])([a-z0-9-]+:[a-z0-9-]+)(?=[\s`"').,;]|$)/g)) if (!/^https?:/.test(m[1])) add(m[1]);
+  for (const m of text.matchAll(/`([^`\s]{2,60})`/g)) add(m[1]);
+  for (const m of text.matchAll(/\b(?:skill|command)\s+["']?([a-z][\w:-]{1,60})/gi)) add(m[1]);
+  for (const m of text.matchAll(/\b([a-z][\w:-]{1,60})\s+(?:skill|command)\b/gi)) if (!/^(?:the|a|an|this|that|our|your|its)$/i.test(m[1])) add(m[1]);
+  return names;
+}
+function reviewPolicyCompute(claudeDir) {
+  const root = repoRootOf(claudeDir);
+  const found = [];
+  for (const rel of REVIEW_POLICY_FILES) {
+    let text;
+    try {
+      text = fs.readFileSync(path.join(root, rel), "utf8");
+    } catch (_) {
+      continue;
+    }
+    let fence = false;
+    text.split(/\r?\n/).forEach((raw, i) => {
+      if (/^\s*(```|~~~)/.test(raw)) {
+        fence = !fence;
+        return;
+      }
+      if (fence) return;
+      if (/orc-reviewer-/.test(raw) || !RP_REVIEW.test(raw) || !RP_DUTY.test(raw)) return;
+      const names = reviewPolicyNames(raw);
+      if (!names.length) return;
+      found.push({ file: rel, line: i + 1, quote: raw.trim().slice(0, 200), names });
+    });
+  }
+  const first = found[0];
+  return {
+    ok: true,
+    policy: found.length ? "project" : "orc",
+    found,
+    line: first
+      ? `review: ${first.file}:${first.line} names ${first.names[0]} — before ship, ask which review (_shared/review-slice.md §0)`
+      : null,
+  };
+}
+function reviewCmd() {
+  const pos = positionals();
+  if (pos[1] !== "policy") {
+    if (wantsJson()) emitJson({ ok: false, reason: "usage", message: "usage: orc review policy [--json]" }, 1);
+    console.error("usage: orc review policy [--json]");
+    process.exit(1);
+  }
+  const r = reviewPolicyCompute(resolveClaudeDir());
+  if (wantsJson()) emitJson(r, 0);
+  if (!r.found.length) console.log("review: no project review rule found — ORC review is the default");
+  else for (const f of r.found) console.log(`review: ${f.file}:${f.line} names ${f.names.join(", ")} — "${f.quote}"`);
+  process.exit(0);
+}
 
 function exportImport(claudeDir) {
   const asJson = wantsJson();
@@ -26498,8 +26733,8 @@ const EXTRA_SLOTS = [
   {
     slot: "wiki-scanner-deep",
     lane: "/orc-wiki",
-    claude: ["orc-wiki-scanner-opus-4-8-high"],
-    claude_opus5: ["orc-wiki-scanner-opus-5-med"],
+    claude: ["orc-wiki-scanner-opus-5-low"],
+    claude_opus5: null,
     asks: false,
     announce: "per scan-batch, beside the resolved tier",
     why: "a scanner returns an evidence-anchored doc body the orchestrator writes; every claim in it is anchored to a file you can open.",
@@ -26508,7 +26743,7 @@ const EXTRA_SLOTS = [
     slot: "wiki-scanner-light",
     lane: "/orc-wiki",
     claude: ["orc-wiki-scanner-sonnet-5-high"],
-    claude_opus5: ["orc-wiki-scanner-opus-5-med"],
+    claude_opus5: ["orc-wiki-scanner-opus-5-low"],
     asks: false,
     announce: "per scan-batch, beside the resolved tier",
     why: "the LIGHT tier is already a small no-new-surface delta on an existing doc — the cheapest work the wiki does.",
@@ -35036,6 +35271,32 @@ function doctor() {
     }
   } catch (_) {}
 
+  // 5a-ter) the refresh timer (v2.1.0 W8). Three checks, each a fact about the
+  // settings file: a hand-edited value under Claude Code's 1 s floor (it never
+  // starts the timer), a layout that MOVES with no timer to move it, and a timer
+  // on the sub-agent board, where Claude Code documents no refreshInterval.
+  try {
+    for (const b of [SL_BOARDS.status, SL_BOARDS.subagent]) {
+      const hk = slHookInfo(claudeDir, b);
+      const st = hk && hk.settings ? slReadJson(hk.settings) : null;
+      const raw = st && st[b.setting] ? st[b.setting].refreshInterval : undefined;
+      if (b === SL_BOARDS.subagent) {
+        if (raw !== undefined)
+          warn("statusline-subagent-refresh", `${b.setting}.refreshInterval is set (${raw}), but Claude Code documents no refresh timer for the sub-agent board — it may do nothing`, { fix: `remove refreshInterval from ${b.setting} in ${hk.settings}` });
+        continue;
+      }
+      if (typeof raw === "number" && raw < SL_REFRESH_FLOOR_S)
+        warn("statusline-refresh-below-floor", `statusLine.refreshInterval is ${raw} — below the Claude Code floor (1 s), so the timer never starts`, { fix: "orc statusline refresh 1", fix_command: "orc statusline refresh 1" });
+      let lock = null;
+      try {
+        lock = JSON.parse(fs.readFileSync(slPaths(claudeDir, b).lock, "utf8"));
+      } catch (_) {}
+      const need = lock && lock.needs_refresh_interval;
+      if (need && raw === undefined && String(resolvedConfig(claudeDir).statusline_custom || "off") === "on")
+        warn("statusline-refresh-needed", `your status line layout moves or shows the time, but no refresh timer is set — it changes only on events`, { fix: `orc statusline refresh ${need}`, fix_command: `orc statusline refresh ${need}` });
+    }
+  } catch (_) {}
+
   // 5a-bis) the read gate (v1.6.0). Same two rules as the status line above,
   // for the same reasons. ONLY WHILE ARMED: `read_gate: off` is the default and
   // the overwhelmingly common state, and a doctor that warns about the default
@@ -41498,6 +41759,8 @@ Usage:
                                           [--check]  fail when the export is stale (exit 1)
     orc export import                     read an existing AGENTS.md/.cursorrules as EVIDENCE and
                                           propose ORC config + pact seeds (never applies anything)
+  orc review policy [--json]              does CLAUDE.md / AGENTS.md name the project's own review?
+                                          read-only; it only adds an option to "which review"
   orc pattern [--dir <path>]              cached code-patterns (project-scoped; no --global)
     orc pattern status [<lang>]           whether a cached pattern exists — the deterministic
                                           existence probe every knowledge-gated lane runs first
@@ -41561,6 +41824,11 @@ Usage:
                                           edited later (exit 4)  [--json]
   orc stats [--since YYYY-MM-DD] [--json] how much you actually use each lane and agent, counted
                                           from the trace filenames — no model, instant, free
+  orc clear logs [--older-than 30|60|90|120|240|360] [--apply] [--include-default-dir]
+                                          PRINTS the finished traces and run folders (with their
+                                          git ref) older than \`log_retention_days\`; --apply
+                                          deletes them. Never user data, a waiting run or the
+                                          active trace. \`orc stats\` keeps their counts  [--json]
   orc habit show|log|points|why|accept|decline|forget|reset|doctor|export|purge   your usual answers,
                                           learned from the ASK lines in your traces (config key
                                           \`habits\`, off by default). Never applied without your yes  [--json]
@@ -41569,6 +41837,9 @@ Usage:
                                           \`orc rules slice\` as the LEARNED tier  [--json]
   orc trace write --packet -|<file>       write ONE phase packet into the run's trace pair (.txt +
                                           .jsonl). Exit 2 = a bad packet, nothing written  [--json]
+  orc fix classify|record|list            the deterministic half of /orc-fix — classify a fix from
+                                          evidence, record it (computes the review miss), list them.
+                                          Writes ONE FIX line into the host run's trace  [--json]
   orc wait                                the deterministic half of /orc-wait — a wait costs zero
                                           tokens, because a detached command does it, not a model
     orc wait lanes [--json]               which lanes support a wait, what each one checkpoints,
@@ -41664,6 +41935,7 @@ const WAIT_LANE_SHAPES = [
   { lane: "/orc-pattern", checkpoint: "none", safe_point: "single dispatch" },
   { lane: "/orc-claude", checkpoint: "none", safe_point: "single dispatch" },
   { lane: "/orc-explain", checkpoint: "none", safe_point: "read-only, seconds long" },
+  { lane: "/orc-fix", checkpoint: "none", safe_point: "after the record is written" },
   { lane: "/orc-route", checkpoint: "none", safe_point: "read-only, seconds long" },
   { lane: "/orc-boundary", checkpoint: "none", safe_point: "read-only, seconds long" },
   { lane: "/orc-budget", checkpoint: "none", safe_point: "read-only, seconds long" },
@@ -44690,7 +44962,7 @@ const SL_FIXTURES = {
   degraded: {
     label: "the wrong tier, a full window, and nothing running",
     payload: {
-      model: { id: "claude-sonnet-5", display_name: "Sonnet 5" },
+      model: { id: "claude-sonnet-5-5", display_name: "Sonnet 5" },
       effort: { level: "low" },
       context_window: { used_percentage: 94, remaining_percentage: 6 },
       rate_limits: { five_hour: { used_percentage: 93, resets_at: null }, seven_day: { used_percentage: 88, resets_at: null } },
@@ -44830,7 +45102,7 @@ function statusline() {
        orc statusline expand <line>:<pos>                     a composite, or a group, back into its parts
        orc statusline clone <line>:<pos>
        orc statusline presets [--json] | apply <name> | reset | compile
-       orc statusline refresh <seconds 1-60|off>              the refresh timer in settings.json
+       orc statusline refresh <off|1|2|3|5|10|N>               the refresh timer in settings.json (1 s floor)
        orc statusline preview --frames N [--frame-ms M]       an animated preview
 
 COMPOSE THIS IN \`orc ui\` ▸ CLI Hook Interface. These flags exist so the panel
@@ -45659,34 +45931,51 @@ function slRefreshInterval(hook, board) {
 
 // v2.0.4 — `orc statusline refresh <seconds|off>`: set or remove the timer in
 // the settings file that holds ORC's hook. The rest of the file is kept.
-function slRefreshCmd(claudeDir, p) {
-  const board = slBoard();
-  const arg = String(p[2] == null ? "" : p[2]);
-  const secs = arg === "off" ? null : Number(arg);
-  if (arg !== "off" && (!Number.isInteger(secs) || secs < 1 || secs > 60)) {
-    if (wantsJson()) return emitJson({ ok: false, reason: "bad-arg", hint: "use a whole number of seconds from 1 to 60, or off" }, 2);
-    console.error("usage: orc statusline refresh <seconds 1-60|off> [--board status|subagent]");
-    process.exit(2);
-  }
+// v2.1.0 — ONE core (`slRefreshApply`) for the command, `orc config set
+// statusline_refresh` and the panel; a sub-second value is refused BY NAME
+// (measured: 0.25 s never starts Claude Code's timer).
+const SL_REFRESH_FLOOR_S = 1;
+function slRefreshFloorText(arg) {
+  return `✗ refresh ${arg} s is below the Claude Code floor.\n  Claude Code runs the status line at most once a second (refreshInterval minimum: 1).\n  A lower value does not start the timer. Nearest allowed value: 1.`;
+}
+function slRefreshApply(claudeDir, board, secs) {
   const hook = slHookInfo(claudeDir, board);
-  const refuse = (reason, msg) => {
-    if (wantsJson()) return emitJson({ ok: false, reason, settings: hook.settings || null, hint: msg }, 1);
-    console.error(msg);
-    process.exit(1);
-  };
-  if (!hook.settings) return refuse("not-wired", `ORC's ${board.setting} hook is not in a settings.json. Run: orc update`);
+  if (!hook.settings) return { ok: false, reason: "not-wired", settings: null, hint: `ORC's ${board.setting} hook is not in a settings.json. Run: orc update` };
   let st;
   try {
     st = JSON.parse(fs.readFileSync(hook.settings, "utf8").replace(/^\uFEFF/, ""));
   } catch (_) {
-    return refuse("settings-unparsed", `${hook.settings} is not valid JSON. Correct the file, then try again.`);
+    return { ok: false, reason: "settings-unparsed", settings: hook.settings, hint: `${hook.settings} is not valid JSON. Correct the file, then try again.` };
   }
-  if (!st || typeof st[board.setting] !== "object" || st[board.setting] === null) return refuse("not-wired", `ORC's ${board.setting} hook is not in ${hook.settings}. Run: orc update`);
+  if (!st || typeof st[board.setting] !== "object" || st[board.setting] === null)
+    return { ok: false, reason: "not-wired", settings: hook.settings, hint: `ORC's ${board.setting} hook is not in ${hook.settings}. Run: orc update` };
   if (secs == null) delete st[board.setting].refreshInterval;
   else st[board.setting].refreshInterval = secs;
   fs.writeFileSync(hook.settings, JSON.stringify(st, null, 2) + "\n");
-  if (wantsJson()) return emitJson({ ok: true, refresh_interval: secs, settings: hook.settings }, 0);
-  console.log("  " + ui.mark.ok(secs == null ? `the refresh timer is off (${hook.settings})` : `the status line refreshes every ${secs} s (${hook.settings})`));
+  return { ok: true, refresh_interval: secs, settings: hook.settings };
+}
+function slRefreshCmd(claudeDir, p) {
+  const board = slBoard();
+  const arg = String(p[2] == null ? "" : p[2]);
+  const secs = arg === "off" ? null : Number(arg);
+  if (arg !== "off" && Number.isFinite(secs) && secs > 0 && secs < SL_REFRESH_FLOOR_S) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "below-floor", floor_s: SL_REFRESH_FLOOR_S, nearest: 1, hint: slRefreshFloorText(arg) }, 2);
+    console.error(slRefreshFloorText(arg));
+    process.exit(2);
+  }
+  if (arg !== "off" && (!Number.isInteger(secs) || secs < 1 || secs > 60)) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "bad-arg", hint: "use a whole number of seconds from 1 to 60, or off" }, 2);
+    console.error("usage: orc statusline refresh <off|1|2|3|5|10|N 1-60> [--board status|subagent]");
+    process.exit(2);
+  }
+  const r = slRefreshApply(claudeDir, board, secs);
+  if (!r.ok) {
+    if (wantsJson()) return emitJson(r, 1);
+    console.error(r.hint);
+    process.exit(1);
+  }
+  if (wantsJson()) return emitJson(r, 0);
+  console.log("  " + ui.mark.ok(secs == null ? `the refresh timer is off (${r.settings})` : `the status line refreshes every ${secs} s (${r.settings})`));
 }
 
 function slHookSentence(h) {
@@ -45833,6 +46122,8 @@ const RULE_LANE_PACKS = {
   "orc-test": ["writing", "delivery"],
   "orc-route": ["writing", "delivery"],
   "orc-explain": ["writing", "delivery"],
+  // v2.1.0 W6 — with no run open, /orc-fix may write code (DE-12 c).
+  "orc-fix": ["writing", "code", "delivery"],
   "context-combiner": ["writing", "delivery"],
 };
 
@@ -46955,6 +47246,11 @@ function jsonCrash(err) {
     case "gotcha":
       gotcha();
       break;
+    // v2.1.0 W6 — the deterministic half of `/orc-fix`. It READS `.current`
+    // (the host run) and never writes it: the lane opens no run of its own.
+    case "fix":
+      require("./fix.js").fixCmd(Object.assign(gotchaDeps(), { resolveLogDir, TRACE_NAME, inflightStaleMs: INFLIGHT_STALE_MS }));
+      break;
     case "graph":
       graphCmd();
       break;
@@ -46966,7 +47262,14 @@ function jsonCrash(err) {
     // v2.0.0 T21 — the CLI holds the trace pen: one packet → the .txt + .jsonl
     // pair. The Haiku writer is the fallback when this exits ≠ 0.
     case "trace":
-      require("./trace-write.js").traceCmd({ flag, positionals, emitJson, wantsJson, resolveClaudeDir, resolveLogDir, TRACE_VERBS, readOverride });
+      require("./trace-write.js").traceCmd({
+        flag, positionals, emitJson, wantsJson, resolveClaudeDir, resolveLogDir, TRACE_VERBS, readOverride, reviewPolicyCompute,
+        logSweep: (claudeDir) => require("./clear-logs.js").sweep(claudeDir, clearLogsDeps()),
+      });
+      break;
+    // v2.1.0 W7 — print by default; only --apply deletes (DE-16, DE-17).
+    case "clear":
+      require("./clear-logs.js").clearCmd(clearLogsDeps());
       break;
     case "mock":
       mock();
@@ -46997,6 +47300,10 @@ function jsonCrash(err) {
       break;
     case "export":
       exportCmd();
+      break;
+    // v2.1.0 — does the project ask for its own review? Read-only probe.
+    case "review":
+      reviewCmd();
       break;
     // v0.47.0 — the lane that refuses to produce. Every subcommand is a READ
     // with an exit-code contract except `init`, `record`, `accept`, `rebut`,

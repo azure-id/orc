@@ -109,14 +109,20 @@ this CLI for every write.
 | `aftermath_window_days` | `30` | How far back `/orc-aftermath` grades. |
 | `budget_price_table` | *(shipped)* | Your own dated price table. Older than 90 days prints a warning. |
 | `retro_repo` | `azure-id/orc` | Where `/orc-retro` files its report. |
-| `log_dir` | `.claude/orc/logs` | Behavior traces. Never auto-deleted. |
+| `log_dir` | `.claude/orc/logs` | Behavior traces. Kept until you run `orc clear logs --apply`, or until the automatic sweep removes them (`log_retention_auto: on`, older than `log_retention_days`). |
+| `log_retention_days` | `90` | `30`, `60`, `90`, `120`, `240` or `360`. The age `orc clear logs` deletes at: finished traces and finished run folders (with their `refs/orc/runs/<slug>/pre` ref) whose last activity is older than this. It never deletes user data, a waiting run, the active trace, or a file younger than 6 hours. A trace with an `ASK` line stays for 180 days. The cutoff never goes below `aftermath_window_days`. `orc stats` keeps the counts of a pruned run in `.claude/orc/logs-rollup.json`. |
+| `log_retention_auto` | `off` | `on` = after a lane's `FINISH` packet, `orc trace write` runs `orc clear logs --apply`, at most once per 24 hours. It never blocks a run. `off` = nothing is deleted until you run the command (or press **Clear old logs** in `orc ui` ▸ Maintenance). |
+| `statusline_refresh` | *(not set)* | `off`, `1`, `2`, `3`, `5` or `10` seconds. The timer that redraws the status line while Claude Code is idle, so a moving part (a pet, a clock) moves. This key is not stored in `orc.config.yaml`: `orc config set statusline_refresh 3` writes `statusLine.refreshInterval` in `settings.json`, the same as `orc statusline refresh 3`, and `orc config list` reads it back from there. Claude Code does not accept less than 1 second, so `0.5` is refused and the message gives the nearest value (`1`). Since v2.1.0. |
 | `run_dir` | `.claude/orc/run` | Run state — deliberately outside the installer's reach. |
 | `analyzer_dir` / `planner_dir` / `report_out_dir` | — | Where artifacts are written. |
 | `orchestrator_model` | `claude-opus-4-8` | The main-session model ORC assumes. |
 
 **Behavior-trace logging is permanent.** Every run writes a `.txt` trace under
 `log_dir`: phases, every spawn, the model that actually answered, scores and
-outcomes. There is no on/off key — only `log_dir` moves it.
+outcomes. There is no on/off key — only `log_dir` moves it. Since v2.1.0,
+`orc clear logs` shows which old traces and run folders it can delete, and
+`orc clear logs --apply` deletes them. Nothing is deleted automatically unless you
+set `log_retention_auto: on`.
 
 ---
 

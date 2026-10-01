@@ -47,7 +47,7 @@ function tasks(over) {
     ),
     {
       id: "a2",
-      name: "orc-reviewer-opus-5-med",
+      name: "orc-reviewer-opus-5-low",
       status: "completed",
       model: "claude-opus-5-5",
       effort: "medium",

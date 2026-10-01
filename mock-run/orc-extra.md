@@ -107,13 +107,10 @@ $ orc extra route
 > ORC · extra — the routing table
 >
 >   [0,30)     cheap/deepseek-chat     api · VERIFIED
->   [30,40)    orc-executor-sonnet-4-6-med          claude
->   [40,55)    orc-executor-sonnet-4-6-high         claude
->   [55,65)    orc-executor-sonnet-5-high           claude
->   [65,70)    orc-executor-opus-4-7-med            claude
->   [70,80)    orc-executor-opus-4-7-high           claude
->   [80,90)    orc-executor-opus-4-8-high           claude
->   [90,100]   orc-executor-opus-5-high             claude
+>   [30,31)    orc-executor-sonnet-5-med            claude
+>   [31,41)    orc-executor-sonnet-5-high           claude
+>   [41,90)    orc-executor-opus-5-low              claude
+>   [90,100]   orc-executor-opus-5-med              claude
 >
 >   A gap is not a hole — it is Claude, and it is printed so "I left the top band
 >   on Opus on purpose" and "there is no top band" can never look the same.
@@ -274,10 +271,10 @@ Then the plan, with one extra column:
 > wave 1
 >   T01  add the CSV column headers          score 18   via extra  cheap/deepseek-chat
 >   T02  wire the download button            score 24   via extra  cheap/deepseek-chat
->   T03  stream the rows without buffering   score 61   via claude orc-executor-sonnet-5-high
+>   T03  stream the rows without buffering   score 61   via claude orc-executor-opus-5-low
 >
 > wave 2
->   T04  refund totals in the export         score 46   via claude orc-executor-sonnet-4-6-high
+>   T04  refund totals in the export         score 46   via claude orc-executor-opus-5-low
 >        ⛔ held on Claude — cited risk: money
 > ```
 
@@ -294,7 +291,7 @@ Say the endpoint is down mid-run:
 
 > ```
 > ⚠ T02 foreign dispatch failed (timeout after 900s) — falling back to Claude
->   orc-executor-haiku-4-5 will finish this task. The run continues.
+>   orc-executor-sonnet-5-med will finish this task. The run continues.
 > ```
 
 **A failed foreign dispatch is never a dead run.** It is announced, it falls back

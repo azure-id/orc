@@ -1986,6 +1986,19 @@ test("behaviour: the panel renders the CLI's sentences verbatim and names no sta
   }
 });
 
+// v2.1.0 W5 (A13, A12) — review learning is ALWAYS on, so `habits: off` keeps the
+// Review quality and Gotchas tabs under the off card; the log shows titles.
+test("behaviour: habits off shows the off card AND the review quality + gotchas tabs; the log reads the titles", () => {
+  const js = panelJs("behaviour");
+  assert.match(js, /const BH_TABS_OFF = \["quality", "gotchas"\];/);
+  const off = js.slice(js.indexOf("if (d.ok === false && Array.isArray(d.on))"), js.indexOf("right.append(bhWindowSwitch"));
+  assert.match(off, /bhOffCard\(d\), tabs\.bar, tabs\.panel/, "the off card and the two tabs render together");
+  assert.match(off, /tabs: BH_TABS_OFF/);
+  assert.match(off, /\/api\/gotcha\/quality/);
+  assert.match(js, /read\("\/api\/habits\/points"\)/, "the answer log fetches the labels route once");
+  assert.match(js, /titles\[e\.qid\]/);
+});
+
 test("behaviour: a never habit renders NO button — only the command a person types", () => {
   const js = panelJs("behaviour");
   const fn = /function bhActions\(r, ctx\) \{([\s\S]*?)\n\}/.exec(js);

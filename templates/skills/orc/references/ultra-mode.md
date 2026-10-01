@@ -17,7 +17,7 @@ Apply at Phase 0, on top of the normal config resolution:
 - `pattern_findings` = on · `generate_tests` = on · `security_review` = on.
 - Executor **tier floor**: remap the resolved score→model table so no task
   dispatches below `orc-executor-sonnet-5-high`; bands at/above the opus
-  boundary (65) rise to at least `orc-executor-opus-5-low`. The floor only ever
+  boundary (41) rise to at least `orc-executor-opus-5-low`. The floor only ever
   raises a band, so the top `[90,100]` band keeps `orc-executor-opus-5-med`.
   **Under `opus5_only` the floor raises EFFORT, not model** (every band is
   already Opus 5.5, so there is no model left to raise): the `[0,90)` band rises

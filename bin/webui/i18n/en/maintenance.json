@@ -1,6 +1,6 @@
 {
   "maintenance.title": "Maintenance",
-  "maintenance.sub": "update · upgrade · doctor --fix. Preview first, approve, then it runs — never automatically.",
+  "maintenance.sub": "update · upgrade · doctor --fix · clear logs. Preview first, approve, then it runs — never automatically.",
   "maintenance.banner": "Nothing on this panel runs on its own. Each action shows the CLI's own read-only preview first, and the exact command it will run.",
   "maintenance.network": "Reaches the network and replaces the installed package.",
   "maintenance.advanced": "Advanced",
@@ -48,5 +48,24 @@
   "maintenance.restarting": "Done. Starting the panel again on the same address, then reloading this page.",
   "maintenance.restartFailed": "The panel could not start again on its own. It is still working, but it still runs the old code. Run these two commands:",
   "maintenance.restartTimeout": "The panel did not answer again in time.",
-  "maintenance.startFail": "Could not start it."
+  "maintenance.startFail": "Could not start it.",
+  "maintenance.clearLogs.olderThan": "Older than {days} (Settings ▸ log retention).",
+  "maintenance.clearLogs.days": "{n} days",
+  "maintenance.clearLogs.lastSweep": "Last automatic sweep: {date}, {files} files.",
+  "maintenance.clearLogs.noSweepYet": "The automatic sweep is on. It has not run yet.",
+  "maintenance.clearLogs.autoOff": "The automatic sweep is off (log_retention_auto).",
+  "maintenance.clearLogs.pruned": "orc stats still counts {n} pruned runs.",
+  "maintenance.clearLogs.cutoff": "cutoff",
+  "maintenance.clearLogs.totals": "would delete",
+  "maintenance.clearLogs.totalsValue": "{units} units · {files} files · {bytes} bytes",
+  "maintenance.clearLogs.none": "Nothing is old enough to delete.",
+  "maintenance.clearLogs.colPath": "files",
+  "maintenance.clearLogs.colKind": "kind",
+  "maintenance.clearLogs.colLast": "last activity",
+  "maintenance.clearLogs.colBytes": "bytes",
+  "maintenance.clearLogs.kept": "Kept: {n} — open to see why",
+  "maintenance.clearLogs.defaultDir": "The old default folder {path} still holds {files} files ({bytes} bytes). No reader sees it. To clear it with the same rules, run `orc clear logs --include-default-dir` in a terminal.",
+  "maintenance.clearLogs.defaultIncluded": "The old default folder {path} is included ({files} files, {bytes} bytes).",
+  "maintenance.clearLogs.apply": "Delete old logs",
+  "maintenance.clearLogs.waitingBody": "A waiting run is never deleted. These runs stay: {slugs}"
 }

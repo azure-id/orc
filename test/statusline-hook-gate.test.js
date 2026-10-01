@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — runs the installed status-line hook (runHook)
 // The hook half of the custom status line gate (rung 3 catalog_hash, rung 4
 // unknown ops, the cleared fallback ledger, the commented config key) and the
 // engine additions (cost.*_min, val `tf`, bar `o`). The compiled files are

@@ -179,7 +179,7 @@ test("lane config: effective, not_read and stops are answers, including when emp
     assert.deepStrictEqual(adv.keys, []);
     assert.deepStrictEqual(adv.stops, []);
     assert.deepStrictEqual(adv.roles, {});
-    assert.strictEqual(adv.not_read.length, 102, "it reads none of the 102 keys"); // v1.8.2: +code_graph_ignore · v2.0.0 W4: +5 gotcha engine keys · W6c: +notify, +rules_card_compact
+    assert.strictEqual(adv.not_read.length, 105, "it reads none of the 105 keys"); // v2.1.0 W8: +statusline_refresh · v2.1.0 W7: +log_retention_days, +log_retention_auto · v1.8.2: +code_graph_ignore · v2.0.0 W4: +5 gotcha engine keys · W6c: +notify, +rules_card_compact
   } finally {
     rmrf(root);
   }
@@ -258,6 +258,9 @@ test("lane calls: the exit-code contract — 0 answered, 2 unknown lane or no ar
     const none = cli(["lane", "calls", "orc-advisor", "--dir", root]);
     assert.strictEqual(none.status, 0);
     assert.match(none.stdout, /No catalogued call/);
+    // v2.1.0 W3 — the review-close record is catalogued, so a lane gets the call.
+    const quick = JSON.parse(cli(["lane", "calls", "orc-quick", "--json", "--dir", root]).stdout);
+    assert.ok(JSON.stringify(quick).includes("gotcha-observe"), "orc-quick has the gotcha-observe call");
   } finally {
     rmrf(root);
   }

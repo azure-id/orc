@@ -22,7 +22,7 @@ return spoke of that flywheel. It turns the raw `.txt` traces into an answer to
 three questions: **is the scoring rubric calibrated? are the workers honest?
 where does the pipeline leak?**
 
-Run as Opus 4.8 high (orchestrator). The mining itself is dispatched to
+Run as Opus 5.5 low or better (orchestrator). The mining itself is dispatched to
 `orc-retro-sonnet-5-high` — cheap, because it reads trace text, not code — or
 to `orc-retro-opus-5-med` when `opus5_only: true` forces it
 (`../_shared/opus5-only.md`).

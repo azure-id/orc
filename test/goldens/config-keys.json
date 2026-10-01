@@ -185,6 +185,11 @@
     "default": ""
   },
   {
+    "key": "statusline_refresh",
+    "tier": "advanced",
+    "default": "off"
+  },
+  {
     "key": "statusline_custom",
     "tier": "common",
     "default": "off"
@@ -503,6 +508,16 @@
     "key": "log_dir",
     "tier": "advanced",
     "default": ".claude/orc/logs"
+  },
+  {
+    "key": "log_retention_days",
+    "tier": "advanced",
+    "default": 90
+  },
+  {
+    "key": "log_retention_auto",
+    "tier": "advanced",
+    "default": "off"
   },
   {
     "key": "run_dir",

@@ -13,7 +13,7 @@ is inert.
 
 ## The mapping (only when `opus5_only: true`)
 
-**Scored executors** — one model, EFFORT as the cost dial, replacing the 6-band
+**Scored executors** — one model, EFFORT as the cost dial, replacing the 5-band
 mixed-model table:
 
 | Score | Executor agent |
@@ -23,7 +23,7 @@ mixed-model table:
 
 Two bands, sharing the 90 edge with the default table's top two rows. Since
 v1.0.0 the default table's high end is ALREADY Opus 5.5 with effort as the dial,
-so this mode differs from it only below 65 — a third band here would be a
+so this mode differs from it only below 41 — a third band here would be a
 distinction the default table stopped making.
 
 **Fixed roles** — dispatch the Opus 5.5 variant **instead of** the default role
@@ -37,21 +37,21 @@ agent: same task slice, same return contract, same phase.
 | mini plan | `orc-planner-mini-sonnet-5-high` | `orc-planner-mini-opus-5-med` |
 | scout | `orc-scout-sonnet-4-6-high` | `orc-scout-opus-5-low` |
 | pattern codify | `orc-pattern-codifier-sonnet-5-high` | `orc-pattern-codifier-opus-5-med` |
-| wiki scan | `orc-wiki-scanner-opus-4-8-high` (deep) **or** `orc-wiki-scanner-sonnet-5-high` (light) | `orc-wiki-scanner-opus-5-med` |
-| claude write | `orc-claude-writer-opus-4-8-high` | `orc-claude-writer-opus-5-med` |
+| wiki scan | `orc-wiki-scanner-sonnet-5-high` (light) | `orc-wiki-scanner-opus-5-low` |
 | retro mine | `orc-retro-sonnet-5-high` | `orc-retro-opus-5-med` |
 
-The nine roles already pinned to `claude-opus-5-5` — analyst, planner, reviewer,
-verifier, test-author, combiner, learn-writer, advisor, judge — are already
+The eleven roles already pinned to `claude-opus-5-5` — analyst, planner, reviewer,
+verifier, test-author, combiner, learn-writer, advisor, judge, CLAUDE.md writer
+(`orc-claude-writer-opus-5-low`), deep wiki scanner (`orc-wiki-scanner-opus-5-low`)
+— are already
 compliant and dispatch unchanged (their efforts are NOT rewritten by this mode).
 
-**The wiki scan tier ladder (v0.46.0) adds NO row here, and needs no new pair.**
-Off, the ladder picks deep or light per delta. ON, this mode already forces the
-wiki scanner to `orc-wiki-scanner-opus-5-med` — so **both tiers collapse onto that
-one shipped agent** and the ladder simply stops applying. A cheaper Opus 5.5 scanner
-variant for the light tier does not exist and must never be added: a pair for a
-tier that cannot occur while the flag is on is exactly the phantom this table
-exists to prevent. Ladder: `../orc-wiki/references/partial-refresh.md`.
+**The wiki scan tier ladder (v0.46.0) needs no new pair.**
+Off, the ladder picks deep or light per delta. ON, this mode flips the light tier
+to `orc-wiki-scanner-opus-5-low`. The deep tier is already that agent. So **both
+tiers collapse onto that one shipped agent** and the ladder simply stops applying.
+Do not add a second Opus 5.5 scanner variant. A pair for a tier that cannot occur
+while the flag is on is exactly the phantom this table exists to prevent. Ladder: `../orc-wiki/references/partial-refresh.md`.
 
 ## Out of scope — never forced
 
@@ -114,7 +114,7 @@ first one is true. `orc config list` and `orc config set` NAME the taken bands
 AND the taken positions for exactly that reason: a shadowed setting must never
 be silent, and neither must a partly shadowed one.
 
-Both wiki slots collapse onto `orc-wiki-scanner-opus-5-med` while the mode is on,
+Both wiki slots collapse onto `orc-wiki-scanner-opus-5-low` while the mode is on,
 which is why the slot table adds **no agent and no pair**. A slot names the
 POSITION, not the model.
 

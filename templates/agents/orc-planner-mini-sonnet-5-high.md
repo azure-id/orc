@@ -1,8 +1,8 @@
 ---
 name: orc-planner-mini-sonnet-5-high
 description: >
-  ORC mini Requirement Planner — claude-sonnet-5, high effort. Dispatched by /orc-mini at planning.
-model: claude-sonnet-5
+  ORC mini Requirement Planner — claude-sonnet-5-5, high effort. Dispatched by /orc-mini at planning.
+model: claude-sonnet-5-5
 effort: high
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---

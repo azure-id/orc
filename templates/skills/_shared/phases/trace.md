@@ -66,7 +66,8 @@ PHASE of the analyze run, not a lane. `/orc-retro` writes no trace.
 
 ## Files & lifecycle
 
-- `log_dir` is **never deleted**. One append-only file per run:
+- `log_dir` stays until `orc clear logs --apply` or the `log_retention_auto`
+  sweep. One append-only file per run:
   **`run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`** — `lane` from the enum above,
   `slug` `[a-z0-9-]`, ≤32 chars, no trailing hyphen.
 - Run pointer: at run start, write `log_dir/.current` containing just the trace
@@ -75,9 +76,8 @@ PHASE of the analyze run, not a lane. `/orc-retro` writes no trace.
   A lane that writes code also runs `orc run snapshot --run <run-slug>` in that
   step (what `orc undo` goes back to). Delete the pointer at run end (success or abort).
 - **A SUSPENDED lane re-writes its pointer on RESUME** (`_shared/lane-suspend.md`,
-  `RETURN-TO`): the receiving lane deletes `.current` at its `FINISH`, so the
-  suspending lane re-writes `.current` and must `touch the trace file` it names,
-  in the SAME step.
+  `RETURN-TO`): the receiving lane deleted `.current`, so re-write it and
+  `touch the trace file` it names, in the SAME step.
 
 ## Write cadence — append AS THE RUN GOES, never in one batch at the end
 
