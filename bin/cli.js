@@ -1186,7 +1186,7 @@ const vFallbackAgent = tag((raw) => {
     warn:
       "pinned to one agent — this overrides the score table AND a slot's own pinned agent for every fallback, whatever the task. `band` is what keeps a fallback a change of WHO and not a change of tier.",
   };
-}, { kind: "text", choices: ["band", "ask", "orc-executor-opus-5-med", "orc-executor-opus-5-low", "orc-executor-sonnet-4-6-high"] });
+}, { kind: "text", choices: ["band", "ask", "orc-executor-opus-5-med", "orc-executor-opus-5-low", "orc-executor-sonnet-5-high"] });
 // v2.0.0 W2 (DE-16) — `auto` is refused BY NAME. It is the one value a reader
 // of the research expects, and ORC does not have it: no habit is ever applied
 // without a yes, so a generic "must be one of" would read as a missing feature.
@@ -1539,7 +1539,7 @@ const CONFIG_META = [
   // is a fake fix), a per-profile stall budget (the number describes ORC's
   // patience, not a provider), and a key to disable the stall report.
   { key: "extra_stall_s", def: 180, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), options: [0, 60, 120, 180, 300, 600], desc: "Seconds a foreign worker may produce NOTHING before the dispatch is stopped as `stalled`. The clock is reset by observable progress — new bytes on the worker's stream, new bytes on stderr, or a declared file that changed on disk — so it never fires on a worker that is merely slow. This is what a wall clock cannot see: `extra_timeout_s` measures the whole dispatch, and an opencode that stops mid-task and waits for someone to type `continue` burns all 900 seconds looking like a timeout. A `stalled` dispatch is RETRYABLE, so `extra_resume` continues it from what is already on disk rather than starting over. 0 turns it off and the wall clock is the only stop again. Clamped below the wall clock, because a budget that can never fire is worse than none. Engine `cli` only — engine `api` already has a per-request inactivity timeout on its own socket." },
-  { key: "extra_fallback_agent", def: "band", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"], validate: vFallbackAgent, options: ["band", "ask", "orc-executor-opus-5-med", "orc-executor-opus-5-low", "orc-executor-sonnet-4-6-high"], desc: "WHICH Claude agent picks up a task the foreign worker could not finish. `band` is the pre-v0.56.1 behaviour and stays the default: the exact agent the score table or the slot would have used, so a fallback changes WHO runs it and nothing else. `ask` STOPS and puts the choice to you with the failure and the position already on the table — right when a stall has just cost you fifteen minutes and you would rather pick than accept a default. Any installed agent name is accepted verbatim, for the case where you already know a stalled slice wants more (or less) than its band. It never changes the score, never widens `declared_files` and never moves `acceptance[]` — a fallback is not a re-plan." },
+  { key: "extra_fallback_agent", def: "band", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"], validate: vFallbackAgent, options: ["band", "ask", "orc-executor-opus-5-med", "orc-executor-opus-5-low", "orc-executor-sonnet-5-high"], desc: "WHICH Claude agent picks up a task the foreign worker could not finish. `band` is the pre-v0.56.1 behaviour and stays the default: the exact agent the score table or the slot would have used, so a fallback changes WHO runs it and nothing else. `ask` STOPS and puts the choice to you with the failure and the position already on the table — right when a stall has just cost you fifteen minutes and you would rather pick than accept a default. Any installed agent name is accepted verbatim, for the case where you already know a stalled slice wants more (or less) than its band. It never changes the score, never widens `declared_files` and never moves `acceptance[]` — a fallback is not a re-plan." },
   { key: "extra_resume_max", def: 2, tier: "advanced", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), desc: "Resume attempts per task before the fallback procedure takes over. Bounded like `tdd_loop_max`: hitting the cap STOPS with an honest report naming the Claude agent, never a silent third loop. A resume never widens `declared_files`, never moves `acceptance[]` and never moves the score — it is a continuation, not a discount." },
   // --- v1.0.0 W5 — the stall DEMOTION. THIRTEEN keys became FIFTEEN, and both
   // additions are numbers with a documented off value rather than a switch.
@@ -2586,7 +2586,7 @@ function extraShadowNotice(claudeDir) {
 // a golden test asserts every agent named here exists in templates/agents/).
 const OPUS5_ONLY_ROLES = [
   ["mini executor", "orc-executor-sonnet-5-high", "orc-executor-opus-5-low"],
-  ["fast executor", "orc-executor-sonnet-4-6-high", "orc-executor-opus-5-low"],
+  ["fast executor", "orc-executor-sonnet-5-med", "orc-executor-opus-5-low"],
   ["mini analyze", "orc-analyze-mini-sonnet-5-high", "orc-analyze-mini-opus-5-med"],
   ["mini plan", "orc-planner-mini-sonnet-5-high", "orc-planner-mini-opus-5-med"],
   ["scout", "orc-scout-sonnet-4-6-high", "orc-scout-opus-5-low"],
@@ -13145,7 +13145,7 @@ const LANE_CMD = { orc: "/orc", ultra: "/orc-ultra", mini: "/orc-mini", fast: "/
 // orc-mini and orc-fast dispatch ONE executor for the whole request — they do
 // not score per task. Rendering a per-band table for either would be a table the
 // lane never runs.
-const LANE_ONE_EXECUTOR = { mini: "orc-executor-sonnet-5-high", fast: "orc-executor-sonnet-4-6-high" };
+const LANE_ONE_EXECUTOR = { mini: "orc-executor-sonnet-5-high", fast: "orc-executor-sonnet-5-med" };
 
 function laneForecast(lane, tasks, rates, cfg, claudeDir) {
   const rows = [];
@@ -26682,7 +26682,7 @@ const EXTRA_SLOTS = [
   {
     slot: "quick-executor",
     lane: "/orc-quick",
-    claude: ["orc-executor-sonnet-4-6-med", "orc-executor-opus-5-low"],
+    claude: ["orc-executor-sonnet-5-med", "orc-executor-opus-5-low"],
     claude_opus5: ["orc-executor-opus-5-low"],
     asks: true,
     announce: "the dispatch gate — offered as a third option, never a default",
@@ -26691,7 +26691,7 @@ const EXTRA_SLOTS = [
   {
     slot: "fast-executor",
     lane: "/orc-fast",
-    claude: ["orc-executor-sonnet-4-6-high"],
+    claude: ["orc-executor-sonnet-5-med"],
     claude_opus5: ["orc-executor-opus-5-med"],
     asks: false,
     announce: "the F0 preflight `extra:` line, before wave 1",
@@ -30165,7 +30165,7 @@ function extraResumeTarget(v, result, cfg) {
 const EXTRA_FALLBACK_ALTERNATES = [
   { agent: "orc-executor-opus-5-med", why: "more thinking than most bands buy, without the top-tier cost." },
   { agent: "orc-executor-opus-5-low", why: "the same model on the cheapest rung — right when the slice turned out to be mechanical." },
-  { agent: "orc-executor-sonnet-4-6-high", why: "a different model entirely, for a slice where Opus is not the constraint." },
+  { agent: "orc-executor-sonnet-5-high", why: "a different model entirely, for a slice where Opus is not the constraint." },
 ];
 
 function extraFallbackChoice(cfg, claude) {

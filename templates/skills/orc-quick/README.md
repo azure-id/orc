@@ -113,15 +113,15 @@ Now the **one** user turn — questions and the agent choice together:
      Z  delete now — breaks clients still sending `a`
 
 Which executor?
-  1. orc-executor-sonnet-4-6-med    3 files, mechanical
+  1. orc-executor-sonnet-5-med    3 files, mechanical
   2. orc-executor-opus-5-low        thinks harder, ~3× cost
 ```
 
 > **You:** `1: Y, 2: Y, executor 1`
 
 ```
-dispatching orc-executor-sonnet-4-6-med…
-✅ returned · 3 files · expect=sonnet-4-6/medium actual=sonnet-4-6/medium
+dispatching orc-executor-sonnet-5-med…
+✅ returned · 3 files · expect=sonnet-5-5/medium actual=sonnet-5-5/medium
 
 build          npm run build → GREEN
 tests reached  1 file (call 1) → 4 passed
@@ -204,7 +204,7 @@ this needs more reading than I should do myself, so it wants a dispatch.
 
 Entry 2 is a context dig. Which agent should look?
 
-  1. orc-recon-sonnet-4-6-med     finding things, not deciding      → suggested
+  1. orc-recon-sonnet-5-med     finding things, not deciding      → suggested
   2. orc-recon-opus-5-low         a wide or subtle question
   3. other — name a model (effort follows your session; not traced by the hook)
 
@@ -271,7 +271,7 @@ of you:
 ```
 kind: defect — the fix will be shown red first.
 
-dispatching orc-executor-sonnet-4-6-med…
+dispatching orc-executor-sonnet-5-med…
 ✅ returned · 2 files
 
 repro red     npm test -- tests/orders.search.test.js   exit 1
@@ -349,12 +349,12 @@ There is **no smoke gate** in this lane. Two simple rules instead.
 build   tsc → ❌ RED (14 errors)
 starting repair — rounds 1–2 reuse this executor.
 
-repair 1/3 · orc-executor-sonnet-4-6-med    RED (6 errors)
-repair 2/3 · orc-executor-sonnet-4-6-med    RED (4 errors)
+repair 1/3 · orc-executor-sonnet-5-med    RED (6 errors)
+repair 2/3 · orc-executor-sonnet-5-med    RED (4 errors)
 
 2 rounds in, still red. The rest is type-level, not mechanical.
 Round 3 — which executor?
-  1. orc-executor-sonnet-4-6-med    current
+  1. orc-executor-sonnet-5-med    current
 → 2. orc-executor-opus-5-low        stronger
 ```
 
@@ -366,8 +366,8 @@ After 3 rounds it stops and shows you **how the errors moved**:
 ```
 3 rounds, still red.
   left    2 errors, middleware/validate.ts:31
-  tried   r1 sonnet-4-6-med  14 → 6
-          r2 sonnet-4-6-med   6 → 4
+  tried   r1 sonnet-5-med  14 → 6
+          r2 sonnet-5-med   6 → 4
           r3 opus-5-low       4 → 2
 
   1. 3 more rounds

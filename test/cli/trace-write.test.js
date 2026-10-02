@@ -431,15 +431,15 @@ test("trace write: a second recon gate after a recon SPAWN is a new answer, not 
     fs.writeFileSync(path.join(p.logs, ".current"), Q + "\n");
     fs.writeFileSync(
       path.join(p.logs, Q),
-      "[011026 09:01:00.000] quick    ASK quick.q2.gate.recon :: offered=orc-recon-sonnet-4-6-med|orc-recon-opus-5-low rec=orc-recon-sonnet-4-6-med chose=orc-recon-sonnet-4-6-med by=user\n" +
-        "[011026 09:02:00.000] hook     SPAWN orc-recon-sonnet-4-6-med :: dig\n"
+      "[011026 09:01:00.000] quick    ASK quick.q2.gate.recon :: offered=orc-recon-sonnet-5-med|orc-recon-opus-5-low rec=orc-recon-sonnet-5-med chose=orc-recon-sonnet-5-med by=user\n" +
+        "[011026 09:02:00.000] hook     SPAWN orc-recon-sonnet-5-med :: dig\n"
     );
-    const pk = 'phase: q2\nevents:\n  - {ts: "011026 09:10:00.000", verb: "ASK quick.q2.gate.recon", tail: "offered=sonnet-4-6-med|opus-5-low rec=sonnet-4-6-med chose=sonnet-4-6-med by=user"}\n';
+    const pk = 'phase: q2\nevents:\n  - {ts: "011026 09:10:00.000", verb: "ASK quick.q2.gate.recon", tail: "offered=sonnet-5-med|opus-5-low rec=sonnet-5-med chose=sonnet-5-med by=user"}\n';
     const r = write(p.root, pk, ["--json"]);
     assert.strictEqual(r.status, 0, r.stdout + r.stderr);
     assert.strictEqual(JSON.parse(r.stdout).ask_rejected, undefined, "not refused as a follow-up");
     const last = lines(path.join(p.logs, Q)).pop();
-    assert.match(last, /chose=orc-recon-sonnet-4-6-med by=user/, "and stored with the canonical name (A1)");
+    assert.match(last, /chose=orc-recon-sonnet-5-med by=user/, "and stored with the canonical name (A1)");
   } finally { rmrf(p.root); }
 });
 

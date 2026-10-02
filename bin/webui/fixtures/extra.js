@@ -838,10 +838,10 @@ const extraRole = {
       verify_state: "VERIFIED", verify_age_days: 1, model_known: false,
       meaning: "the user picks the agent for every entry anyway, so a foreign worker is one more option on a menu they already read.",
       asks: true, announce_point: "the dispatch gate — offered as a third option, never a default",
-      claude: { via: "claude", agent: "orc-executor-sonnet-4-6-med", agents: ["orc-executor-sonnet-4-6-med", "orc-executor-opus-5-low"], table: "shipped" },
+      claude: { via: "claude", agent: "orc-executor-sonnet-5-med", agents: ["orc-executor-sonnet-5-med", "orc-executor-opus-5-low"], table: "shipped" },
       resolved: "extra", held_back: null,
-      why: "slot row quick-executor holds this position and outranks orc-executor-sonnet-4-6-med.",
-      announce: "quick-executor (/orc-quick) → deepseek/deepseek-coder via api (profile cheap) — displaces orc-executor-sonnet-4-6-med; this sends the slice to a third party.",
+      why: "slot row quick-executor holds this position and outranks orc-executor-sonnet-5-med.",
+      announce: "quick-executor (/orc-quick) → deepseek/deepseek-coder via api (profile cheap) — displaces orc-executor-sonnet-5-med; this sends the slice to a third party.",
       next: null,
     },
     {
@@ -851,10 +851,10 @@ const extraRole = {
       verify_state: "STALE", verify_age_days: 15, model_known: true,
       meaning: "one executor, one slice, a build+test smoke gate behind it — the checks that catch a bad implementation here are engine-blind.",
       asks: false, announce_point: "the F0 preflight `extra:` line, before wave 1",
-      claude: { via: "claude", agent: "orc-executor-sonnet-4-6-high", agents: ["orc-executor-sonnet-4-6-high"], table: "shipped" },
+      claude: { via: "claude", agent: "orc-executor-sonnet-5-med", agents: ["orc-executor-sonnet-5-med"], table: "shipped" },
       resolved: "extra", held_back: null,
-      why: "slot row fast-executor holds this position and outranks orc-executor-sonnet-4-6-high; verification is 15d old (STALE — still routes, re-pinged before the wave).",
-      announce: "fast-executor (/orc-fast) → zai/glm-4.6 via claude-shim (profile glm) — displaces orc-executor-sonnet-4-6-high; this sends the slice to a third party.",
+      why: "slot row fast-executor holds this position and outranks orc-executor-sonnet-5-med; verification is 15d old (STALE — still routes, re-pinged before the wave).",
+      announce: "fast-executor (/orc-fast) → zai/glm-4.6 via claude-shim (profile glm) — displaces orc-executor-sonnet-5-med; this sends the slice to a third party.",
       next: null,
     },
     {
@@ -962,7 +962,7 @@ const extraLanes = {
     {
       lane: "/orc-fast", shape: "slot", agent: null, routes: "roles",
       slots: [
-        { slot: "fast-executor", routes: true, profile: "glm", model: "glm-4.6", claude: "orc-executor-sonnet-4-6-high", held_back: null, why: "slot row fast-executor holds this position and outranks orc-executor-sonnet-4-6-high." },
+        { slot: "fast-executor", routes: true, profile: "glm", model: "glm-4.6", claude: "orc-executor-sonnet-5-med", held_back: null, why: "slot row fast-executor holds this position and outranks orc-executor-sonnet-4-6-high." },
       ],
       detail: "fast-executor is held by a non-Claude worker; every position with no row stays on its pinned Claude agent.",
     },
@@ -976,7 +976,7 @@ const extraLanes = {
       // user gets to make, per entry.
       lane: "/orc-quick", shape: "gated-choice", agent: null, routes: "offered",
       slots: [
-        { slot: "quick-executor", routes: true, profile: "cheap", model: "deepseek-chat", claude: "orc-executor-sonnet-4-6-med", held_back: null, why: "slot row quick-executor holds this position and outranks orc-executor-sonnet-4-6-med." },
+        { slot: "quick-executor", routes: true, profile: "cheap", model: "deepseek-chat", claude: "orc-executor-sonnet-5-med", held_back: null, why: "slot row quick-executor holds this position and outranks orc-executor-sonnet-4-6-med." },
       ],
       detail: "quick-executor is OFFERED as one more option at the dispatch gate. It never becomes a default and never sticks — this lane asks before every dispatch.",
     },

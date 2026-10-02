@@ -193,7 +193,7 @@ Wave 1 of 5 — 3 tasks
 
   T01  TDD: red proof for store-credit refund      sonnet-5-high   [EXECUTE]
   T02  TDD: red proof for the PACT-006 exception   sonnet-5-high   [EXECUTE]
-  T03  Add the store_credit type to the API        sonnet-4-6-high [EXECUTE]
+  T03  Add the store_credit type to the API        sonnet-5-high   [EXECUTE]
 
   wiki: orc-feature-refunds.md → T01, T02, T03
 ```
@@ -205,7 +205,7 @@ Wave 3 of 5 — 3 tasks
        card: api/refunds — this touches money and PACT-006's new exception.
        Rina must read this before ship.
 
-  T09  Show the store-credit option in the UI   sonnet-4-6-high [EXECUTE]
+  T09  Show the store-credit option in the UI   sonnet-5-high   [EXECUTE]
 
   T12  Create the store_credit table            NOT DISPATCHED  [REFUSE]     ← 02
        db/migrations card: no down-migration, no staging database.

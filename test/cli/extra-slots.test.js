@@ -191,7 +191,7 @@ test("hold-backs, each named: unverified profile · missing profile · cited ris
   assert.equal(risky.resolved, "claude");
   assert.equal(risky.held_back, "risk");
   assert.ok(risky.would_have_been, "it names what it would have been");
-  assert.ok(risky.why.includes("orc-executor-sonnet-4-6-high"), "it names where it is held back TO");
+  assert.ok(risky.why.includes("orc-executor-sonnet-5-med"), "it names where it is held back TO");
 
   // boundary REFUSE holds, and holds in `warn` too.
   const ref = json(run(p, ["extra", "resolve", "--slot", "fast-executor", "--boundary", "REFUSE", "--json"]));

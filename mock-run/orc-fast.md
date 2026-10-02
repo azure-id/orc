@@ -39,12 +39,12 @@ Fit gate + one question
 
 > nothing, follow api/orders/
 
-Dispatch  orc-executor-sonnet-4-6-high
+Dispatch  orc-executor-sonnet-5-med
   slice carries:
     · wiki pointers   wiki/orc-feature-orders.md  (the route table)
     · the express pattern, copied in literally
     · your one constraint
-  returned as: claude-sonnet-4-6 / high      ✓
+  returned as: claude-sonnet-5-5 / medium     ✓
 
 Smoke gate
   build   ✓

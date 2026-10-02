@@ -38,7 +38,7 @@ model change, and an agent's model change is always a RENAME.
 | orc-analyze-mini-sonnet-5-high | claude-sonnet-5-5 | high | mini analysis |
 | orc-planner-mini-sonnet-5-high | claude-sonnet-5-5 | high | mini planning |
 | orc-scout-sonnet-4-6-high | claude-sonnet-4-6 | high | deep-analysis code scout (read-only) |
-| orc-recon-sonnet-4-6-med | claude-sonnet-4-6 | medium | answer ONE repository question with file:line evidence (/orc-quick read-only entries; never edits, never plans) |
+| orc-recon-sonnet-5-med | claude-sonnet-5-5 | medium | answer ONE repository question with file:line evidence (/orc-quick read-only entries; never edits, never plans) |
 | orc-recon-opus-5-low | claude-opus-5-5 | low | the same contract for a WIDE or SUBTLE question — a blast radius across areas, a defect with no obvious anchor |
 | orc-context-combiner-opus-5-high | claude-opus-5-5 | high | combine 2+ related analyses (full lane) |
 | orc-pattern-codifier-sonnet-5-high | claude-sonnet-5-5 | high | reconcile per-language playbook vs. project files → cached code-pattern (opt-in) |
@@ -96,7 +96,7 @@ variant. Under this mode a lane skips graph notes and prints
 Opus 5.5 dispatch, and the graph's structure layer costs no model at all.
 
 Mini execution reuses orc-executor-sonnet-5-high. Fast-lane (orc-fast)
-execution reuses orc-executor-sonnet-4-6-high — no dedicated agent. Under
+execution reuses orc-executor-sonnet-5-med — no dedicated agent. Under
 `opus5_only` both reuse orc-executor-opus-5-low.
 
 ## orc-quick — the user picks, and no config can override it
@@ -106,8 +106,8 @@ agent to spawn before EVERY dispatch, and reuses shipped agents:
 
 | Dispatch kind | Offered | Hook-traced |
 |---|---|---|
-| writes code | orc-executor-sonnet-4-6-med · orc-executor-opus-5-low | yes |
-| read-only recon | orc-recon-sonnet-4-6-med · orc-recon-opus-5-low · or `other — name a model` | yes · yes · no |
+| writes code | orc-executor-sonnet-5-med · orc-executor-opus-5-low | yes |
+| read-only recon | orc-recon-sonnet-5-med · orc-recon-opus-5-low · or `other — name a model` | yes · yes · no |
 | review | orc-reviewer-opus-5-low · or ad-hoc | yes / no |
 
 The only dispatch it does not re-ask is build-repair rounds 1–2, which reuse the

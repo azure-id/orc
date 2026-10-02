@@ -22,9 +22,9 @@ O: [6 tasks with declared_files incl. tests + per-file grounding attestations + 
 O: Refined: medium, partially dependent. Recommend PARALLEL waves. Confirm? U: yes. Batch pause? U: every 2 waves.
 O: Facet scoring (planner facets → formula → band; facet gate: breadth + fan recomputed, risk cites checked):
    T1 3·new-surface·stateful·new-tests·fan0/3·low = 6+18+16+8+9 = 57 → sonnet-5-high (keystone — every later task imports its enum)
-   T2 3·imitate·branching·new-tests·fan1/0·low = 6+8+8+8+5 = 35 → sonnet-4-6-med
-   T3 3·imitate·branching·update-existing·fan1/0·low = 6+8+8+4+5 = 31 → sonnet-4-6-med
-   T4 2·imitate·branching·update-existing·fan1/0·low = 6+8+8+4+5 = 31 → sonnet-4-6-med
+   T2 3·imitate·branching·new-tests·fan1/0·low = 6+8+8+8+5 = 35 → sonnet-5-high
+   T3 3·imitate·branching·update-existing·fan1/0·low = 6+8+8+4+5 = 31 → sonnet-5-high
+   T4 2·imitate·branching·update-existing·fan1/0·low = 6+8+8+4+5 = 31 → sonnet-5-high
    T5 1·mechanical·none·update-existing·fan0/0·low = 2+0+0+4 = 6 → haiku-4-5
    T6 1·mechanical·none·none·fan0/0·low = 2+0+0+0 = 2 → haiku-4-5
    Plan: 6 tasks, 3 waves W1{T1} W2{T2,T3,T4} W3{T5,T6}, all spawned. Anticipated escalations? U: none, go.
@@ -32,7 +32,7 @@ O: Facet scoring (planner facets → formula → band; facet gate: breadth + fan
 ## Phase 3 — Execution (ALL spawned; orchestrator coordinates only)
 O: [checkpoint + state-of-play written into run/merchant-notifications/ BEFORE dispatch]
 ▶ W1: spawn Agent-A(T1, sonnet-5-high) — milestones 40%→100% — return validated ✓ (evidence: `yarn jest models/` exit 0, tail quoted; unmet[] empty) — log: DECISION type enum.
-▶ W2: spawn 3 agents (sonnet-4-6-med each).
+▶ W2: spawn 3 agents (sonnet-5-high each).
    Agent-C needs_context (1/2): "needs T1's enum interface" → O adjudicates in-scope → re-slices → resumes. (User never bothered.)
    Agent-C user escalation: "digest send time?" → U: 07:00 fixed → ANSWER broadcast to log.
    Returns validated ✓ · collision audit clean.

@@ -1138,7 +1138,7 @@ test("every coding agent has a one-line description that names its own model and
 // nobody ships, or a `repro` field asked for in a slice and never owed back.
 test("the recon pair ships as a pair, and each file matches its own name", () => {
   for (const [name, model, effort] of [
-    ["orc-recon-sonnet-4-6-med", "claude-sonnet-4-6", "medium"],
+    ["orc-recon-sonnet-5-med", "claude-sonnet-5-5", "medium"],
     ["orc-recon-opus-5-low", "claude-opus-5-5", "low"],
   ]) {
     const md = read(path.join("agents", name + ".md"));
@@ -1156,14 +1156,14 @@ test("the recon pair ships as a pair, and each file matches its own name", () =>
   }
   // The gate offers both, and the escape hatch is a MODEL, not an effort.
   const gate = read("skills/orc-quick/references/dispatch-gate.md");
-  for (const name of ["orc-recon-sonnet-4-6-med", "orc-recon-opus-5-low"])
+  for (const name of ["orc-recon-sonnet-5-med", "orc-recon-opus-5-low"])
     assert.ok(gate.includes(name), "dispatch-gate.md never offers " + name);
   assert.match(gate, /other — name a model/, "the escape hatch must name a model only");
   assert.match(gate, /no per-call effort knob/, "the reason the effort option went must be stated");
   // And MODEL-MAPPING carries a row for each, because that is where a lane looks
   // a name up instead of reconstructing it.
   const map = read("agents/MODEL-MAPPING.md");
-  for (const name of ["orc-recon-sonnet-4-6-med", "orc-recon-opus-5-low"])
+  for (const name of ["orc-recon-sonnet-5-med", "orc-recon-opus-5-low"])
     assert.ok(map.includes("| " + name + " |"), "MODEL-MAPPING.md has no row for " + name);
 });
 

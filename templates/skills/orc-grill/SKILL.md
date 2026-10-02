@@ -93,7 +93,7 @@ words:
 **Fact-finding dispatches.** Read-only recon is an **ad-hoc dispatch by model +
 effort** (the `/orc-quick` recon precedent), never a pinned agent — so no agent
 file ships for this lane and the hook writes no `SPAWN`/`RETURN` for it. Announce
-it on one line before it goes out (`recon: claude-sonnet-4-6 / medium — where
+it on one line before it goes out (`recon: claude-sonnet-5-5 / medium — where
 refunds are written`) so the spend is never silent, but do NOT stop the round
 waiting for permission. Emit `DISPATCH … adhoc=true` and `VERIFY` yourself; the
 agent reports its own `actual_model` / `actual_effort`.

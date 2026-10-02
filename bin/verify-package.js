@@ -485,7 +485,7 @@ const required = [
   "templates/agents/orc-scout-sonnet-4-6-high.md",
   // v1.9.0 — the /orc-quick recon pair. Both halves must ship: the gate offers
   // them side by side, so a missing file makes half the menu a dead option.
-  "templates/agents/orc-recon-sonnet-4-6-med.md",
+  "templates/agents/orc-recon-sonnet-5-med.md",
   "templates/agents/orc-recon-opus-5-low.md",
   "templates/agents/orc-test-author-opus-5-med.md",
   "templates/agents/orc-pattern-codifier-sonnet-5-high.md",

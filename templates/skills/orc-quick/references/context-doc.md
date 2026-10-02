@@ -75,8 +75,8 @@ Use as many of these as apply. Leave out what does not fit.
 **dispatches**
 | # | kind | agent / model | expect | actual | result |
 |---|---|---|---|---|---|
-| 1 | recon | `orc-recon-sonnet-4-6-med` | sonnet-4-6/medium | sonnet-4-6/medium ✅ | what it found |
-| 2 | executor | `orc-executor-sonnet-4-6-med` | sonnet-4-6/medium | sonnet-4-6/medium ✅ | 3 files |
+| 1 | recon | `orc-recon-sonnet-5-med` | sonnet-5-5/medium | sonnet-5-5/medium ✅ | what it found |
+| 2 | executor | `orc-executor-sonnet-5-med` | sonnet-5-5/medium | sonnet-5-5/medium ✅ | 3 files |
 
 Only an **other** dispatch keeps the `*(ad-hoc, untraced-by-hook)*` mark. A
 dispatch of either pinned recon agent is a normal row with the agent's name.

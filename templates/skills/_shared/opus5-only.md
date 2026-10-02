@@ -32,7 +32,7 @@ agent: same task slice, same return contract, same phase.
 | Role | Default agent | Opus-5-only variant |
 |------|---------------|---------------------|
 | mini executor | `orc-executor-sonnet-5-high` | `orc-executor-opus-5-low` |
-| fast executor | `orc-executor-sonnet-4-6-high` | `orc-executor-opus-5-low` |
+| fast executor | `orc-executor-sonnet-5-med` | `orc-executor-opus-5-low` |
 | mini analyze | `orc-analyze-mini-sonnet-5-high` | `orc-analyze-mini-opus-5-med` |
 | mini plan | `orc-planner-mini-sonnet-5-high` | `orc-planner-mini-opus-5-med` |
 | scout | `orc-scout-sonnet-4-6-high` | `orc-scout-opus-5-low` |

@@ -10,6 +10,60 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v2.1.1 — the quick and fast lanes move to Sonnet 5 _(2026-10-02)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+This release changes the models that `/orc-quick`, `/orc-fast` and `orc extra`
+use. Sonnet 4.6 leaves the coding lanes. Sonnet 5 (`claude-sonnet-5-5`) replaces it.
+
+**1. The quick dispatch gate**
+
+- Code entries: `orc-executor-sonnet-5-med` or `orc-executor-opus-5-low`. The
+  default suggestion for a mechanical edit is `orc-executor-sonnet-5-med`.
+- Read-only entries: `orc-recon-sonnet-5-med` or `orc-recon-opus-5-low`.
+- An agent's model change is a rename:
+  `orc-recon-sonnet-4-6-med` → `orc-recon-sonnet-5-med`. The agent count stays 51.
+
+**2. orc extra**
+
+- The `quick-executor` slot uses `orc-executor-sonnet-5-med`.
+- `extra_fallback_agent` options and the fallback menu show
+  `orc-executor-sonnet-5-high`. They showed `orc-executor-sonnet-4-6-high`. A
+  config that names the old agent is still accepted.
+
+**3. /orc-fast**
+
+- The one executor is `orc-executor-sonnet-5-med`. It was
+  `orc-executor-sonnet-4-6-high`. The `fast-executor` extra slot, `orc budget`
+  and the `opus5_only` table use the new name. Under `opus5_only` it is still
+  `orc-executor-opus-5-low`.
+- Run the lane from a Sonnet 5 (or higher) main session. A Sonnet 4.6 session is
+  below the executor's pin.
+
+**4. Text and examples**
+
+- `/orc`: the "even the smallest task gets a cheap subagent" rule names Sonnet 5
+  low. The examples dispatch Sonnet 5 high for scores 31–40.
+- `/orc-grill`: the recon line names `claude-sonnet-5-5 / medium`.
+
+**Not changed:** Sonnet 4.6 stays for the graph noter, the scout, the `orc diy`
+choices and the opt-in executors (`orc-executor-sonnet-4-6-med`,
+`orc-executor-sonnet-4-6-high`).
+
+**What you have to do:** `orc update --prune`. If a script names
+`orc-recon-sonnet-4-6-med`, change it to `orc-recon-sonnet-5-med`.
+
+---
+
 ### v2.1.0 — the review counts, the score table moves up, and old logs can go _(2026-10-02)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

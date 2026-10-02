@@ -33,7 +33,7 @@ plan (wave → tasks → pause marks) to the user BEFORE wave 1 in both styles.
 
 - **Low**, or heavy shared data/code → **sequential**: one scored subagent at a
   time, in dependency order (still grouped into waves). Even a single trivial
-  task = one cheap subagent (typically Sonnet 4.6 medium), never the
+  task = one cheap subagent (typically Sonnet 5 low), never the
   orchestrator itself.
 - **Medium** → sequential by default; **parallel** intra-wave if 3+ genuinely
   independent areas.

@@ -10,8 +10,8 @@ what is about to be spent, before it is spent.
 
 | Kind | Offer | Traced by the hook | Downgrade check |
 |------|-------|--------------------|-----------------|
-| Writes code | `orc-executor-sonnet-4-6-med` · `orc-executor-opus-5-low` · **a third option when a `quick-executor` position is held** | yes | yes (a foreign return has no `actual_model` — §2b) |
-| Read only (recon) | `orc-recon-sonnet-4-6-med` · `orc-recon-opus-5-low` · **other — name a model** | yes · yes · no | yes |
+| Writes code | `orc-executor-sonnet-5-med` · `orc-executor-opus-5-low` · **a third option when a `quick-executor` position is held** | yes | yes (a foreign return has no `actual_model` — §2b) |
+| Read only (recon) | `orc-recon-sonnet-5-med` · `orc-recon-opus-5-low` · **other — name a model** | yes · yes · no | yes |
 | Review | `orc-reviewer-opus-5-low` · or ad-hoc | yes / no | yes |
 | Build repair, round 1–2 | *reused — not asked* | yes | yes |
 | Build repair, round 3 | asked again | yes | yes |
@@ -28,7 +28,7 @@ each outcome with `orc gotcha observe` (one per finding, with `run`) and the
 ```
 Which executor for entry 2 — "add retry header"?
 
-  1. orc-executor-sonnet-4-6-med    cheap, fits a 3-file change
+  1. orc-executor-sonnet-5-med    cheap, fits a 3-file change
   2. orc-executor-opus-5-low        thinks harder, about 3× the cost   → suggested: callers 9 in 5 files
 
 Your choice — nothing runs until you answer.
@@ -49,7 +49,7 @@ Show a third line ONLY when all three are true:
 ```
 Which executor for entry 2 — "add retry header"?
 
-  1. orc-executor-sonnet-4-6-med    cheap, fits a 3-file change
+  1. orc-executor-sonnet-5-med    cheap, fits a 3-file change
   2. orc-executor-opus-5-low        thinks harder, about 3× the cost
   3. deepseek/deepseek-chat         via profile `ds` — sends this slice to a third party
 ```
@@ -89,7 +89,7 @@ else.
 ```
 Entry 3 is a context dig. Which agent should look?
 
-  1. orc-recon-sonnet-4-6-med     finding things, not deciding      → suggested
+  1. orc-recon-sonnet-5-med     finding things, not deciding      → suggested
   2. orc-recon-opus-5-low         a wide or subtle question
   3. other — name a model (effort follows your session; not traced by the hook)
 
@@ -133,12 +133,12 @@ count (`../../_shared/habits.md`), never from a feeling. Suggest
 | confident callers of the files to change ≥ 8 (from the dig, or from `orc graph changes`) | the change is felt in more places than a cheap pass checks |
 | a risk class is visible: auth · money · migration · security · concurrency · data-integrity | the same six classes the full lane's planner floors to 70 |
 | more than 3 files will really change | the cheap executor's sweet spot is a 1–3 file change |
-| **otherwise** → `orc-executor-sonnet-4-6-med` | the boring choice for a mechanical edit |
+| **otherwise** → `orc-executor-sonnet-5-med` | the boring choice for a mechanical edit |
 
 **Always print the reason beside the marker.** A marker with no reason is a
 default wearing a recommendation's clothes, and rule 1 forbids it.
 
-For recon, the suggestion is simpler: `orc-recon-sonnet-4-6-med` finds things;
+For recon, the suggestion is simpler: `orc-recon-sonnet-5-med` finds things;
 `orc-recon-opus-5-low` is for a wide or a subtle question.
 
 ## Rules
@@ -200,8 +200,8 @@ bad day worse, so:
 ```
 3 rounds, still red.
   left    2 errors, middleware/validate.ts:31
-  tried   r1 sonnet-4-6-med  14 → 6
-          r2 sonnet-4-6-med   6 → 4
+  tried   r1 sonnet-5-med  14 → 6
+          r2 sonnet-5-med   6 → 4
           r3 opus-5-low       4 → 2
 
   1. 3 more rounds

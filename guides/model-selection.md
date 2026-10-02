@@ -93,8 +93,8 @@ somewhere else (`orc extra role`, v0.55.0):
 
 | position | lane | the agent it takes the job from |
 |---|---|---|
-| `quick-executor` | `/orc-quick` | `orc-executor-sonnet-4-6-med` · `orc-executor-opus-5-low` |
-| `fast-executor` | `/orc-fast` | `orc-executor-sonnet-4-6-high` |
+| `quick-executor` | `/orc-quick` | `orc-executor-sonnet-5-med` · `orc-executor-opus-5-low` |
+| `fast-executor` | `/orc-fast` | `orc-executor-sonnet-5-med` |
 | `doc-writer` | `/orc-doc` | `orc-doc-writer-opus-5-med` |
 | `doc-checker` | `/orc-doc` | `orc-doc-checker-opus-5-low` |
 | `wiki-scanner-deep` | `/orc-wiki` | `orc-wiki-scanner-opus-5-low` |
@@ -105,7 +105,7 @@ A position with no row stays on the agent above, and it **keeps its row** in
 checker" never look the same.
 
 **`/orc-quick`'s recon pair is NOT a position, and that is on purpose (v1.9.0).**
-`orc-recon-sonnet-4-6-med` and `orc-recon-opus-5-low` read the repository and
+`orc-recon-sonnet-5-med` and `orc-recon-opus-5-low` read the repository and
 hand back an answer the dispatch gate is expected to trust. Sending that job to
 a third party is a different question from sending a code edit there: a wrong
 edit fails a build, and a wrong answer is believed. So recon and review stay on

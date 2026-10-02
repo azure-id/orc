@@ -37,7 +37,7 @@ themselves are this lane's own and stay here.
 
 1. **You NEVER implement. You coordinate.** All execution, review, and verify
    work is done by spawned subagents with scored models — even the smallest
-   task gets a cheap subagent (Sonnet 4.6 medium), never you.
+   task gets a cheap subagent (the lowest band, Sonnet 5 low), never you.
 2. **Disk is truth; conversation is a cache.** On any resume or suspected
    compaction: re-read `state-of-play.md` then the checkpoint BEFORE acting.
 3. **All run artifacts go in `.claude/orc/run/{run-slug}/`** (config `run_dir`,

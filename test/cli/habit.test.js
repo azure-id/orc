@@ -139,8 +139,8 @@ test("parser: a gate answer is stored with the canonical agent name", () => {
   assert.strictEqual(P("offered=sonnet|opus|extra rec=sonnet chose=sonnet by=user").chose, "sonnet", "a bare family word with no menu match is never guessed");
   const full = P("offered=orc-executor-sonnet-4-6-med|orc-executor-opus-5-low rec=orc-executor-sonnet-4-6-med chose=orc-executor-sonnet-4-6-med by=user");
   assert.strictEqual(full.chose, a.chose, "the full and the short spelling are ONE option");
-  const recon = H.parseAskLine("[011026 10:00:00.000] quick  ASK quick.q2.gate.recon :: offered=sonnet-4-6-med|opus-5-low rec=sonnet-4-6-med chose=sonnet-4-6-med by=user");
-  assert.strictEqual(recon.chose, "orc-recon-sonnet-4-6-med", "the recon gate maps to the recon agent, never the executor");
+  const recon = H.parseAskLine("[011026 10:00:00.000] quick  ASK quick.q2.gate.recon :: offered=sonnet-5-med|opus-5-low rec=sonnet-5-med chose=sonnet-5-med by=user");
+  assert.strictEqual(recon.chose, "orc-recon-sonnet-5-med", "the recon gate maps to the recon agent, never the executor");
 });
 
 // v2.1.0 W5 (A10, A11) — a run is dated by its trace NAME, and a lane has ONE name.

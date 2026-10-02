@@ -87,8 +87,8 @@ const TWINS = [
       desc: "ORC Pattern Codifier — claude-opus-5-5, medium effort. Dispatched by orc-pattern, instead of orc-pattern-codifier-sonnet-5-high when `opus5_only: true`." },
   ] },
   { family: "recon", variants: [
-    { name: "orc-recon-sonnet-4-6-med", model: "claude-sonnet-4-6", effort: "medium", who: "Sonnet 4.6, medium",
-      desc: "ORC Recon — claude-sonnet-4-6, medium effort. Dispatched by /orc-quick at the dispatch gate, for a read-only question. It never edits." },
+    { name: "orc-recon-sonnet-5-med", model: "claude-sonnet-5-5", effort: "medium", who: "Sonnet 5, medium",
+      desc: "ORC Recon — claude-sonnet-5-5, medium effort. Dispatched by /orc-quick at the dispatch gate, for a read-only question. It never edits." },
     { name: "orc-recon-opus-5-low", model: "claude-opus-5-5", effort: "low", who: "Opus 5.5, low",
       desc: "ORC Recon — claude-opus-5-5, low effort. Dispatched by /orc-quick at the dispatch gate, for a WIDE or SUBTLE read-only question. It never edits." },
   ] },

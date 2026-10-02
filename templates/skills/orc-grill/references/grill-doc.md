@@ -76,7 +76,7 @@ Say why, in the user's terms. A scope boundary with no reason gets re-litigated.
 | fact | source | value |
 |---|---|---|
 | is there a notifications table | wiki FRESH · wiki/orc-feature-notifications.md | yes, `notifications(id, kind, payload)` |
-| does this project retry payouts | recon dispatch (sonnet-4-6/medium) | yes, `src/jobs/payout-retry.js:88` |
+| does this project retry payouts | recon dispatch (sonnet-5-5/medium) | yes, `src/jobs/payout-retry.js:88` |
 
 This table is what stops the next lane re-deriving the same things.
 

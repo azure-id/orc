@@ -45,8 +45,8 @@ $ orc extra role
 ORC · extra — the positions
 ───────────────────────────
 
-  quick-executor      claude · orc-executor-sonnet-4-6-med    /orc-quick
-  fast-executor       claude · orc-executor-sonnet-4-6-high   /orc-fast
+  quick-executor      claude · orc-executor-sonnet-5-med     /orc-quick
+  fast-executor       claude · orc-executor-sonnet-5-med     /orc-fast
   doc-writer          claude · orc-doc-writer-opus-5-med      /orc-doc
   doc-checker         claude · orc-doc-checker-opus-5-low     /orc-doc
   wiki-scanner-deep   claude · orc-wiki-scanner-opus-5-low /orc-wiki
@@ -127,7 +127,7 @@ anything — it just **adds a third line to the menu you already read**:
 ```
 Which executor for entry 2 — "add retry header"?
 
-  1. orc-executor-sonnet-4-6-med    cheap, fits a 3-file change
+  1. orc-executor-sonnet-5-med    cheap, fits a 3-file change
   2. orc-executor-opus-5-low        thinks harder, about 3× the cost
   3. deepseek/deepseek-chat         via profile `ds` — sends this slice to a third party
 ```

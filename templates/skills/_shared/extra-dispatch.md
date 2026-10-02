@@ -148,8 +148,8 @@ too.
 
 | slot | lane | the Claude agent it displaces | asked or announced | why this position may be held by a foreign worker |
 |---|---|---|---|---|
-| `quick-executor` | `/orc-quick` | `orc-executor-sonnet-4-6-med` · `orc-executor-opus-5-low` | **asked**, at the dispatch gate | the user picks the agent for every entry anyway, so a foreign worker is one more option on a menu they already read |
-| `fast-executor` | `/orc-fast` | `orc-executor-sonnet-4-6-high` | announced, F0 preflight | one executor, one slice, a build+test smoke gate behind it — the checks that catch a bad implementation here are engine-blind |
+| `quick-executor` | `/orc-quick` | `orc-executor-sonnet-5-med` · `orc-executor-opus-5-low` | **asked**, at the dispatch gate | the user picks the agent for every entry anyway, so a foreign worker is one more option on a menu they already read |
+| `fast-executor` | `/orc-fast` | `orc-executor-sonnet-5-med` | announced, F0 preflight | one executor, one slice, a build+test smoke gate behind it — the checks that catch a bad implementation here are engine-blind |
 | `doc-writer` | `/orc-doc` | `orc-doc-writer-opus-5-med` | announced, before the wave, naming the sections | a writer owns ONE part file and invents no fact; its output is read by a checker and by you before it ships |
 | `doc-checker` | `/orc-doc` | `orc-doc-checker-opus-5-low` | announced, before the wave | the checker reads one bounded part and reports; it rewrites nothing |
 | `test-designer` | `/orc-test` | `orc-test-designer-opus-5-high` | announced, the T1 `extra:` line, before any case runs | the designer writes a FILE the CLI reads back through a validating command, and a row that fails validation is refused BY NAME — so its output is checked before anything is sent |
@@ -1226,7 +1226,7 @@ Three rules hold it together.
 2. **The menu is COMPUTED and the band's own agent LEADS it.** It is what
    happens if the user just presses enter. The three alternates —
    `orc-executor-opus-5-med`, `orc-executor-opus-5-low`,
-   `orc-executor-sonnet-4-6-high` — are offered, and so is any installed agent
+   `orc-executor-sonnet-5-high` — are offered, and so is any installed agent
    name, because the roster is generated and a closed list here would go stale
    the next time a band moves.
 3. **It changes WHO, never WHAT.** The score does not move, `declared_files` is

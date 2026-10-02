@@ -5,7 +5,7 @@ description: >
   analyst and no planner. Use for "use orc-fast to implement X" or "/orc-fast".
   Requires TWO prerequisites: a fresh project wiki (orc-wiki) AND a cached
   code-pattern for the request's language. If either is missing, it falls back
-  to orc-mini. One Sonnet 4.6 high executor, a build+test smoke gate, one repair
+  to orc-mini. One Sonnet 5 medium executor, a build+test smoke gate, one repair
   round, ship.
 ---
 
@@ -18,7 +18,7 @@ the wiki is fresh, so the two prerequisite gates below are hard: fail either →
 **fall back to orc-mini** carrying whatever intake was done. Fallback is the
 router — orc-fast is always safe to try.
 
-Runs fine with the orchestrator at **Sonnet 4.6 / Sonnet 5, medium effort** —
+Runs fine with the orchestrator at **Sonnet 5, medium effort** (a Sonnet 4.6 main session is below the executor pin) —
 no scoring, no planning judgment (the effort guard only gates the full `orc`
 skill). **You never implement — you spawn.**
 
@@ -97,7 +97,7 @@ migration) and write the intent-spec + a minimal checkpoint.
 
 ## Phase F2 — Slice build + dispatch (ONE executor)
 
-Build one slice for `orc-executor-sonnet-4-6-high` (dispatch BY NAME; model
+Build one slice for `orc-executor-sonnet-5-med` (dispatch BY NAME; model
 pinned in the agent file). **Under `opus5_only` it is `orc-executor-opus-5-low`** — forced, and while that mode is on this lane needs an Opus 5.5 main session, so the "runs fine at Sonnet medium" premise applies only with it off (`../_shared/opus5-only.md`).
 
 **Extra (`extra_enabled`, `../_shared/extra-dispatch.md`):** the same slice may run off Claude. **This lane has no score at all, so it holds a POSITION, not a band:** resolve `orc extra resolve --slot fast-executor --json` (set with `orc extra role set fast-executor <profile>/<model>`). No row on that slot = Claude, and that is an answer, not a gap. The `extra:` line joins the F0 preflight (P0, printed whenever the gate is on) and NAMES the agent it displaces — `orc-executor-sonnet-4-6-high`; dispatch through `orc extra dispatch --task <file> --json` with `slot: "fast-executor"` and **no `score`** (both is refused by name); validate with `return-validation.md` **§2b, not §2**; a failure runs `orc extra reconcile <task_id>` FIRST — a worktree that moved is RESUMED, never re-done — then falls back to that same pinned agent BY NAME, announced. Extra is orthogonal to the knowledge gate — a fresh wiki and a cached pattern are still required, and a foreign worker gets the same pointers-not-content slice.

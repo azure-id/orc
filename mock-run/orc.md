@@ -73,8 +73,8 @@ TDD: 3 tasks get a red-proof task first. 2 do not:
 ```
 Task                                   facets                     score  model
 T1 order note column + migration       3 files · new · stateful     62   sonnet-5 high
-T2 POST /orders accepts note           2 files · imitate            38   sonnet-4-6 med
-T3 checkout note box                   2 files · imitate            35   sonnet-4-6 med
+T2 POST /orders accepts note           2 files · imitate            38   sonnet-5 high
+T3 checkout note box                   2 files · imitate            35   sonnet-5 high
 T4 order page shows the note           1 file  · mechanical         12   haiku-4-5
 T5 label text                          1 file  · mechanical          4   haiku-4-5
 

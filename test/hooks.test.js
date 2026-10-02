@@ -317,10 +317,10 @@ test("trace: an orc-recon-* spawn opens the `recon` family, and it is traced at 
     // v1.9.0. /orc-quick's read-only half used to be dispatched ad-hoc by model
     // name, which the hook cannot see at all: no SPAWN, nothing for
     // `orc run inflight` to find, nothing for /orc-retro to count.
-    spawn("orc-recon-sonnet-4-6-med");
+    spawn("orc-recon-sonnet-5-med");
     const { texts } = traceFiles(claudeDir);
-    assert.match(texts, /SPAWN orc-recon-sonnet-4-6-med/, "a recon dispatch must be traced");
-    assert.match(texts, /PHASE-EDGE recon :: first=orc-recon-sonnet-4-6-med/);
+    assert.match(texts, /SPAWN orc-recon-sonnet-5-med/, "a recon dispatch must be traced");
+    assert.match(texts, /PHASE-EDGE recon :: first=orc-recon-sonnet-5-med/);
     // Recon is NOT analysis. An analyst produces a spec for a planner; recon
     // answers one question for a person. Folding them together would report a
     // phase /orc-quick does not have.

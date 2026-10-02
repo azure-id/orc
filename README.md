@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.1.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.1.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v2.1.0** · updated 02-10-2026 · [full changelog](CHANGELOG.md)
+**Latest: v2.1.1** · updated 02-10-2026 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -741,39 +741,27 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v2.1.0 — the review counts, the score table moves up, and old logs can go _(2026-10-02)_
+### v2.1.1 — the quick and fast lanes move to Sonnet 5 _(2026-10-02)_
 
-- **A new score table with five bands.** Scores 0–40 go to Sonnet 5 (low,
-  medium, high). Scores 41–89 go to Opus 5.5 low, and 90–100 to Opus 5.5 medium.
-  Haiku is no longer in the table. **Every band from 41 needs an Opus 5.5 main
-  session.**
-- **Sonnet 5 runs on `claude-sonnet-5-5`.** The price table is correct again.
-- **The reviewer is `orc-reviewer-opus-5-low`.** In the live eval, low effort
-  found every seeded defect that was still in the diff.
-- **The wiki scanner and the CLAUDE.md writer use Opus 5.5 low** (they used Opus
-  4.8).
-- **Review quality no longer says "0 so far" after real reviews.** It counts
-  reviews from the traces. A clean review counts too.
-- **Your project's own review rule.** When CLAUDE.md or AGENTS.md asks for a
-  different review (for example `/code-review`), the lanes ask "ORC review, that
-  review, or skip". `orc review policy` shows what ORC found.
-- **New lane `/orc-fix`.** It records a fix after a review (Sonar, a red CI, a
-  bug) and who added the bug. The reviewer card shows it, and the panel shows
-  "Fixes after review".
-- **`orc clear logs`** shows old traces and run folders. `--apply` deletes them.
-  Nothing is deleted automatically unless you set `log_retention_auto: on`.
-- **The status line timer:** 1, 2, 3, 5 or 10 seconds. Below 1 second is refused,
-  because Claude Code does not support it.
-- **Behaviour tab fixes:** with `habits: off` you still see Review quality and
-  Gotchas, `/orc-fast` records your answers, and the answer log shows the question.
+- **`/orc-quick` offers Sonnet 5 medium and Opus 5.5 low.** For code:
+  `orc-executor-sonnet-5-med` or `orc-executor-opus-5-low`. For a question:
+  `orc-recon-sonnet-5-med` or `orc-recon-opus-5-low`.
+- **`/orc-fast` uses `orc-executor-sonnet-5-med`** (it used Sonnet 4.6 high). Run it
+  from a Sonnet 5 or Opus main session.
+- **`/orc` examples and the "cheap subagent" rule name Sonnet 5.** Sonnet 4.6 stays
+  only for the graph noter, the scout, `orc diy` choices and opt-in names.
+- **The recon agent has a new name:** `orc-recon-sonnet-4-6-med` →
+  `orc-recon-sonnet-5-med`.
+- **`orc extra`:** the `quick-executor` slot uses `orc-executor-sonnet-5-med`. The
+  `extra_fallback_agent` options show `orc-executor-sonnet-5-high` (not Sonnet 4.6).
 
-**What you have to do:** `orc update`. If you compiled an `orc diy` flow, run
-`orc diy compile`. If a script names `orc-reviewer-opus-5-med`, change it to
-`orc-reviewer-opus-5-low`. The cost changes: read the CHANGELOG.
+**What you have to do:** `orc update --prune`. If a script names
+`orc-recon-sonnet-4-6-med`, change it to `orc-recon-sonnet-5-med`.
 
 <details>
-<summary><strong>Earlier releases</strong> — 127 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 128 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.1.0** — the review counts, the score table moves up, and old logs can go · _2026-10-02_
 - **v2.0.4** — design the status line to the last cell · _2026-09-30_
 - **v2.0.3** — the status line you designed is the status line you see · _2026-09-30_
 - **v2.0.2** — the lanes record what you answered, and the reviewer always gets the card · _2026-09-28_

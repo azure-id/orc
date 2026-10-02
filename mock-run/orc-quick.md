@@ -46,7 +46,7 @@ Two questions:
   2  Should the badge colour change too?
 
 And which agent should do it?
-  a  orc-executor-sonnet-4-6-med    small, one file    → suggested: 1 file, no risk class
+  a  orc-executor-sonnet-5-med    small, one file    → suggested: 1 file, no risk class
   b  orc-executor-opus-5-low        thinks harder, about 3× the cost
   c  other — name a model
 
@@ -61,8 +61,8 @@ The menu still waits for you.
 ### Q3 — Do
 
 ```
-Dispatch  orc-executor-sonnet-4-6-med
-  returned as: claude-sonnet-4-6 / medium     ✓
+Dispatch  orc-executor-sonnet-5-med
+  returned as: claude-sonnet-5-5 / medium     ✓
 
 repro red      npm test -- web/refunds/RefundBadge.test.tsx   exit 1
                → expected "sent to bank", received "pending"
@@ -104,7 +104,7 @@ Your next request becomes entry 2 in the same file, and so on.
 **You asked:** the badge shows pending after the webhook lands.
 **Decided:** add the missing `sent_to_bank` case only; amber colour.
 **Why:** the whole map is fine — one case was never added.
-**Agents:** orc-executor-sonnet-4-6-med (you chose it).
+**Agents:** orc-executor-sonnet-5-med (you chose it).
 **repro** red → green · `npm test -- web/refunds/RefundBadge.test.tsx` (before: exit 1 · after: exit 0)
 **blast radius** 1 symbol · callers 2 in 2 files · tests reach 1 · risk none
 **Not done:** the admin list has the same map and was NOT touched.
