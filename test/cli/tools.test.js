@@ -301,6 +301,53 @@ test("pr stack status: the exit code IS the contract (0 READY, 1 absent | unfill
   }
 });
 
+// v2.1.2 F19 — the probe was wrong in BOTH directions: a kept comment, a fenced
+// PR template, a generic or a tag read as a hole; `<n>`, a long hole and the
+// two-line Decisions placeholder did not.
+test("pr stack status: comments, fenced templates, generics and inline tags are not holes; <n>, long and multi-line holes are", () => {
+  const root = tmpdir();
+  try {
+    const plan = path.join(root, "stacked-pr", "demo", "stack-plan.md");
+    assert.strictEqual(cli(["pr", "stack", "template", "demo", "--dir", root]).status, 0);
+    const skeleton = fs.readFileSync(plan, "utf8").replace(/\r\n/g, "\n");
+    const comment = /<!--[\s\S]*?-->/.exec(skeleton)[0];
+    const decisions = /## Decisions\n\n(<[^<>]*\n[^<>]*>)/.exec(skeleton)[1];
+    assert.match(comment, /<\.\.\.>/, "the skeleton's own comment holds a <...>");
+
+    // One engine: the human exit and `--json` `plan.ready` must agree, always.
+    const probe = (body) => {
+      fs.writeFileSync(plan, body);
+      const human = cli(["pr", "stack", "status", "demo", "--dir", root]);
+      const asJson = cli(["pr", "stack", "status", "demo", "--json", "--dir", root]);
+      const d = JSON.parse(asJson.stdout);
+      assert.strictEqual(d.plan.ready, human.status === 0, "--json agrees with the human exit");
+      assert.strictEqual(asJson.status, human.status);
+      return { status: human.status, stdout: human.stdout, problems: d.plan.problems };
+    };
+
+    // NOT holes.
+    const kept = probe(FILLED_PLAN.replace("# Stack plan: refund adapter\n", "# Stack plan: refund adapter\n\n" + comment + "\n"));
+    assert.strictEqual(kept.status, 0, "the instruction comment, kept, is not a hole: " + kept.stdout);
+    const fenced = probe(FILLED_PLAN + "\n## PR template\n\n```markdown\n## What\n<one paragraph — what this PR changes>\n```\n");
+    assert.strictEqual(fenced.status, 0, "a fenced PR template is not a hole: " + fenced.stdout);
+    const prose = probe(FILLED_PLAN + "\n<!-- note -->\nThe handler returns Promise<Order> now.<br>\n");
+    assert.strictEqual(prose.status, 0, "a comment, a generic and an inline tag are not holes: " + prose.stdout);
+
+    // Holes the 2.1.1 probe did not see.
+    const one = probe(FILLED_PLAN.replace("- totals: 850 LoC", "- totals: <n> LoC"));
+    assert.strictEqual(one.status, 1, "a one-character hole is a hole");
+    assert.match(one.problems.join(" "), /<n>/);
+    assert.match(one.stdout, /1 unfilled placeholder \(e\.g\. <n>\)/);
+    const twoLine = probe(FILLED_PLAN.replace("Schema vs handler seam: user chose two layers; review owners differ.", decisions));
+    assert.strictEqual(twoLine.status, 1, "the two-line Decisions placeholder is a hole");
+    assert.match(twoLine.problems.join(" "), /unfilled placeholder/);
+    const long = probe(FILLED_PLAN.replace("- Value class: CONTRACT", "- Value class: <USER | OPERATOR | CONTRACT | FOUNDATION — FOUNDATION must name its consumer layer>"));
+    assert.strictEqual(long.status, 1, "a hole longer than 60 characters is a hole");
+  } finally {
+    rmrf(root);
+  }
+});
+
 // A LARGE `--json` payload must survive the pipe. `emitJson` used to
 // `process.stdout.write(...)` and then `process.exit(...)`; on macOS and Linux a
 // pipe write is asynchronous, so the exit discarded the tail. `orc ui` reads

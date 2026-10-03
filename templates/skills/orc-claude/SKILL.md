@@ -74,7 +74,7 @@ set in "Behavior trace").
    does not change this role) with: `mode`, `repo_root`,
    `budget` (from a `budget=N` argument, else null), and the paths to
    `references/template.md` + `references/refresh.md`. **Trace:** emit
-   `DISPATCH orc-claude-writer :: <mode> expect=opus-5/low` just before the
+   `DISPATCH orc-claude-writer :: <mode> expect=opus-5-5/low` just before the
    spawn (the expectation is derived from the agent NAME you actually
    dispatched, never from this line's default; the hook then adds
    `SPAWN`/`RETURN` on its own).
@@ -175,7 +175,7 @@ Dispatch-only lane: emit ONLY the markers it can truthfully witness — **not**
 `PHASE`/`SCORE`/`FINDING`/`VERDICT`, because scan/generate/report run INSIDE
 the writer sub-agent and there is no scoring or review here. The marker set, in
 order (actor `orc`, plus the hook's `SPAWN`/`RETURN`): `DISPATCH
-orc-claude-writer :: <mode> expect=opus-5/low` before the spawn (the mode
+orc-claude-writer :: <mode> expect=opus-5-5/low` before the spawn (the mode
 rides in this tail and in `FINISH`, so no separate mode marker) · `VERIFY writer
 actual=<model>/<effort>` · `FINISH :: <mode_ran> CLAUDE.md v<X.Y.Z>`, where
 `mode_ran` may be `noop`. A noop refresh still traces the full cycle.
@@ -207,11 +207,11 @@ documented defaults, out loud. Priorities and families:
 ## Calls
 
 **ONE catalogue, and it is not you:** `orc lane calls orc-claude --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
+SHARED CLI call this lane makes, each with its exit-code contract, its cost, when to run
 it, and what an EMPTY answer means. Never invent a spelling, never re-word an
 exit code, and never re-derive a state word — the CLI's state words are the only
 state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
+a failure**. A call that neither it nor this skill names is a call this lane does not make.
 Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
 command you are about to run, out loud, before running it.
 

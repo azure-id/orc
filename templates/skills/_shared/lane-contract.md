@@ -10,13 +10,17 @@ those values, and a spine never restates this file.
 ## Calls
 
 **ONE catalogue, and it is not you:** `orc lane calls <lane> --json` names every
-CLI call the lane makes. Each row gives the exit-code contract, the cost, when
-to run the call, and what an EMPTY answer means.
+SHARED CLI call (a call that two or more lanes make). Each row gives the
+exit-code contract, the cost, when to run the call, and what an EMPTY answer
+means.
 
+- A call that only this lane makes is not in the catalogue. Its spelling and its
+  exit codes are in the lane's own skill files.
 - Never invent a spelling. Never re-word an exit code.
 - Never re-derive a state word. The CLI's state words are the only state words.
 - **An exit code is an ANSWER wherever that contract says so, not a failure.**
-- A call that the answer does not name is a call the lane does not make.
+- A call that neither the answer nor the lane's own skill files name is a call
+  the lane does not make.
 - The catalogue itself exits ≠ 0 → say that the CLI is unavailable. Before you
   run a command, name it out loud.
 

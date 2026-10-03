@@ -29,8 +29,10 @@ Two reasons it is worth shipping, and the second is the interesting one:
 with an `orc-export:derived` header carrying the `source_commit` and a fingerprint
 of every source it was built from, so `orc export --check` can prove it is current
 — the same discipline `orc wiki sync --check` holds `INDEX.md` to. A file without
-that header is a hand-written `AGENTS.md`, and `--check` says so rather than
-overwriting it silently.
+that header is a hand-written `AGENTS.md`, and `--check` reports it as STALE (exit 1).
+`orc export` itself OVERWRITES the file. So the lane ALWAYS runs
+`orc export --check --json` first, and when `exists: true` and the file has no
+`orc-export:derived` header, it asks the user before it writes.
 
 ## Mostly CLI, minimal model
 
@@ -54,7 +56,7 @@ Sources, in the order they appear in the output:
 | `.claude/orc/boundary/*.md` | where an agent should not act alone, with the checklist |
 | `.claude/orc/patterns/<lang>-pattern.md` | how code in this repo is actually written |
 | `wiki/orc-feature-*`, `wiki/orc-reference-*` | architecture and features, evidence-anchored |
-| a PASSED `orc/orc-challenge/<slug>/` cycle | OPTIONAL — a **reviewed artifacts** section: which documents were graded, against what goal, and what was accepted as a known gap. Portable evidence that a spec was checked, not just written. A cycle that is not `PASSED` is never exported: an in-flight review is not a claim |
+| a PASSED `orc/orc-challenge/<slug>/` cycle | OPTIONAL — a **reviewed artifacts** section: which documents were graded, against what goal, and what was accepted as a known gap. Portable evidence that a spec was checked, not just written. A cycle that is not `PASSED` is never exported: an in-flight review is not a claim. **Not read in 2.1.x** — `exportSources` does not collect it yet; no reviewed-artifacts section is written |
 
 Each source's own frontmatter is stripped — that is ORC's bookkeeping, not portable
 context — and the prose is copied through unchanged. **Never re-summarise a source
@@ -88,8 +90,9 @@ verdict, and cannot authorize a write.
 
 So import **proposes**, and the user confirms. Two things it produces:
 
-1. **What is already wrong.** Every file path the context names that does not exist,
-   every command it names that the manifest does not have. This is a very good first
+1. **What is already wrong.** Every file path it names that does not exist
+   (`wrong[]`); commands it names go to `seed_invariants[]` for the model to check
+   against `package.json` scripts. This is a very good first
    impression, and it is free: those lines have been lying to somebody's agent for
    months.
 2. **Seeds.** Candidate pact entries (each would become a `command` check with an
@@ -173,11 +176,11 @@ never a silent choice) and `rules_overridden[]`.
 ## Calls
 
 **ONE catalogue, and it is not you:** `orc lane calls orc-export --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
+SHARED CLI call this lane makes, each with its exit-code contract, its cost, when to run
 it, and what an EMPTY answer means. Never invent a spelling, never re-word an
 exit code, and never re-derive a state word — the CLI's state words are the only
 state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
+a failure**. A call that neither it nor this skill names is a call this lane does not make.
 Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
 command you are about to run, out loud, before running it.
 

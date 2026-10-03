@@ -13,7 +13,7 @@ explaining anything twice.
 
 That is why a 900-line TSD does not end a session. Nothing that holds context
 ever holds the document: each writer owns exactly ONE file, each checker reads
-ONE bounded part, and the orchestrator holds a map.
+only the bounded part files of its slice, and the orchestrator holds a map.
 
 And since v0.49.0 there is a second sentence:
 
@@ -159,7 +159,7 @@ orc doc parts my-prd                       # what is written, and what is not
 orc doc compile my-prd [--partial]         # sections/ -> document.md. FREE
 orc doc lint my-prd                        # the free check (0 clean / 1 findings)
 orc doc map my-prd                         # fresh line numbers, never stored
-orc doc plan my-prd --role check --json    # one bounded part file per checker
+orc doc plan my-prd --role check --json    # bounded part files per checker slice
 orc doc split my-prd --section 04-design --by-heading   # store a big section in parts
 orc doc split my-prd                       # recover sections/ from document.md
 orc doc status my-prd                      # 0 nothing to do / 1 something to do / 2 unknown

@@ -117,11 +117,11 @@ one consumer, so it stays home.
 | 3 | Phase 3 | `references/phases/phase-3.md` | `full` |
 | 4 | Phase 3c | `references/phases/phase-3c.md` | `full` |
 
-## Code-pattern pre-warm (opt-in — only when config `orc_wiki_pattern_findings: on`)
+## Code-pattern pre-warm (opt-in — only when config `orc_wiki_pattern_findings: true`)
 
 Default OFF. When on, after Phase 3 codify the code-pattern for every detected
 FE/BE language as a scan byproduct (no separate ask — rides the scan consent).
-Load `references/pattern-prewarm.md` when the flag is on.
+Load `references/pattern-prewarm.md` when the flag is `true`.
 
 ## Crosslink — cross-repo boundary publish + resolve (references/crosslink.md)
 
@@ -181,11 +181,11 @@ never a silent choice) and `rules_overridden[]`.
 ## Calls
 
 **ONE catalogue, and it is not you:** `orc lane calls orc-wiki --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
+SHARED CLI call this lane makes, each with its exit-code contract, its cost, when to run
 it, and what an EMPTY answer means. Never invent a spelling, never re-word an
 exit code, and never re-derive a state word — the CLI's state words are the only
 state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
+a failure**. A call that neither it nor this skill names is a call this lane does not make.
 Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
 command you are about to run, out loud, before running it.
 

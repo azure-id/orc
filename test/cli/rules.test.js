@@ -513,3 +513,24 @@ test("orc rules slice — rules_card_compact: on (the default) compacts mini and
   assert.equal(mini.line, before.mini.line, "the rules-in-force line never changes");
   assert.deepStrictEqual(slice("orc"), before.orc, "the full lane is never touched");
 });
+
+// ── v2.1.2 F01 — the regex escape ──────────────────────────────────────────
+// A scripted edit once wrote `$&` inside a `String.replace` replacement, and
+// JavaScript expanded it to the matched text: a section heading landed inside
+// the OSW-10 escape. No lexicon word holds a metacharacter, so nothing showed.
+test("every regex escape in bin/ inserts the match (\\$&), never other text", () => {
+  const bin = path.join(__dirname, "..", "..", "bin");
+  const needle = ".replace(/[.*+?^${}()|[\\]\\\\]/g, ";
+  const want = '"\\\\$&")';
+  let sites = 0;
+  for (const f of fs.readdirSync(bin).filter((n) => n.endsWith(".js"))) {
+    const src = fs.readFileSync(path.join(bin, f), "utf8");
+    for (let i = src.indexOf(needle); i !== -1; i = src.indexOf(needle, i + 1)) {
+      sites++;
+      const line = src.slice(0, i).split("\n").length;
+      const arg = src.slice(i + needle.length, i + needle.length + want.length);
+      assert.equal(arg, want, `${f}:${line} escapes with ${JSON.stringify(arg)}`);
+    }
+  }
+  assert.ok(sites >= 7, "the scan must find the escapes it guards, found " + sites);
+});

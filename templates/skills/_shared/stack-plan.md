@@ -22,7 +22,7 @@ to the driver.
 ## Existence probe (deterministic — never an ad-hoc `find`)
 
 `orc pr stack status [<slug>]` — exit **0** = a READY plan (exists, no unfilled
-`<...>` placeholders, ≥2 layers), exit **1** = absent or unfilled. Same
+`<...>` placeholder outside an HTML comment or a fenced block, ≥2 layers), exit **1** = absent or unfilled. Same
 exit-code convention as `orc pattern status <lang>` and `orc diy status`. Run it
 FIRST; do not second-guess a positive probe.
 

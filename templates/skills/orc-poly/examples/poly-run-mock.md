@@ -11,10 +11,10 @@ PEER path `C:\dev\shop-web`.
 the screen, consumes the endpoint). Slug = `saved-carts`.
 
 **P1 — Knowledge gate.**
-- `orc wiki status` in HOST → present, FRESH. `WIKI-CONSULT tier=FRESH ::
-  shop-api`.
+- `orc wiki status` in HOST → present, FRESH. `WIKI-CONSULT fresh ::
+  repo=shop-api`.
 - Reads `C:\dev\shop-web\wiki\wiki-meta.json` directly → AGING.
-  `WIKI-CONSULT tier=AGING :: shop-web`. `GATE knowledge shop-api=wiki
+  `WIKI-CONSULT aging :: repo=shop-web`. `GATE knowledge shop-api=wiki
   shop-web=wiki`.
 - Both have wikis → reads each repo's crosslink boundary tags: shop-web already
   consumes `GET /carts` from shop-api, so the new endpoint extends a known seam.

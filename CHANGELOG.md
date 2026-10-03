@@ -10,6 +10,194 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v2.1.2 — a typed /orc meets the effort guard, and the budget uses each model's price _(2026-10-03)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+This is a fix release. It closes gaps between what the lanes say and what the
+CLI does. It adds two commands (`orc wait start`, `orc wait end`) and two flags
+(`orc doc parts --checked`, `--findings`).
+
+**1. The effort guard for a typed `/orc`**
+
+- The effort guard did not run when you typed `/orc` or `/orc-diy`. A typed
+  command does not cause a `PreToolUse` Skill call. Now a second event,
+  `UserPromptExpansion`, runs the same guard. A session below the necessary
+  effort is stopped at $0.
+- `orc update` and `orc doctor --fix` add ONE `settings.json` entry:
+  `hooks.UserPromptExpansion`, matcher `orc|orc-diy`. A hand-edited matcher is
+  repaired.
+- `orc doctor` shows `typed /orc + /orc-diy gate wired`. It warns
+  `typed-gate-unwired` or `typed-gate-matcher`. The fix for each is `orc update`.
+- A typed `/orc-diy` with no compiled flow is refused at $0.
+- The status-line bridge (`session-model.json`) has a new `session_id` field. A
+  bridge that v2.1.1 wrote still gives the `PreToolUse` medium allowance. A
+  bridge from a different session does not.
+- **Limits you must know.** The guard fails open on each error. The typed gate
+  reads the bridge that the ORC status line writes. Where the ORC status line
+  does not run, the typed gate lets the prompt through. This is possible in the
+  desktop app Code tab, and it is not checked yet. The behaviour on an older
+  Claude Code build that does not know the `UserPromptExpansion` event is not
+  verified. If you change the model or the effort with a key shortcut, a false
+  block is possible until the status line shows again.
+
+**2. Budget pricing**
+
+- `orc budget` priced each token at the Opus 4.8 rate. Now each row uses the
+  rate of its pinned model. The USD figures for forecast and actual are lower.
+  Tokens, weighted tokens and quota do not change.
+- `bands[]` and `fixed_roles[]` have a new `model` field.
+- With `extra_enabled` on and an empty provider rate table, USD is `null` in
+  `--json` and "unavailable" in the text.
+- Calibration now joins a point release to its family (`opus-5/low` and
+  `claude-opus-5-5`). The `unattributed` figure is lower.
+- The pinned model id is correct for each shipped agent. This moves the context
+  window figure, the `orc wiki plan` price and the document cost.
+- `orc budget forecast` with no plan exits 3 (it exited 1) and prints one
+  `--json` object.
+
+**3. `orc wait start` and `orc wait end`**
+
+- No command recorded a wait that started. Two new commands do:
+  `orc wait start <spec> --mode <safe|soft|hard> [--trigger user|gate] [--run <slug>] [--hop] [--max-hops] [--json]`
+  and
+  `orc wait end [<slug>] --reason <elapsed|recovered|cancelled|max-hops> [--json]`.
+- `orc wait start` exits 0 when it records the wait, and also when there is no
+  run (`recorded:false reason:no-run`). It exits 1 for `no-mode`, `bad-trigger`,
+  `already-waiting` or a spec it cannot parse. It exits 2 for `no-reading`.
+- `orc wait end` exits 0. It exits 1 for `no-run`, `no-wait` or `no-reason`.
+- The trace has the lines
+  `WAIT mode=… requested=…m start=HH:MM end=HH:MM hops=<planned>/<max> trigger=…`
+  and `WAIT end :: done=k/n reason=…`. A block writes
+  `WAIT block :: reason=… by=user`, and its end writes `WAIT unblock`.
+- `orc wait status --json` has a new `stale` field. `waiting` and `hops_done`
+  come from the clock. `orc wait cancel` refuses a stale wait.
+- An old `wait.json` that holds only a block reads as "not waiting".
+- **Known limits.** A wait that `max_hops` cuts short keeps its full `ends_at`,
+  so `status` shows `waiting` until `orc wait end` runs. A spec token that is
+  equal to a `--mode`, `--trigger` or `--run` value is ambiguous.
+
+**4. orc-doc: `--checked` and `--findings`**
+
+- No CLI path marked a section as checked, so `orc doc next` named the paid
+  check again. Two new flags record the check:
+  `orc doc parts <slug> --checked <ids>` and `--findings <id>=<n>,…`.
+- A refusal exits 1 with `not-confirmed`, `no-such-section` or `bad-findings`,
+  and writes nothing.
+- `orc doc parts --json` has new fields: `checked[]`,
+  `flagged[{id,findings}]` and `edit_rounds`. In `doc.json`, a section has
+  `checked_cycle` and `edit_rounds`.
+- `orc doc next` has a new action, `plan-edit`. After 2 edit rounds on one
+  section it stops and asks you.
+- The lane text says that a checker reads only the bounded part files of one
+  slice. The request log runs after the slug exists. An edit does not leave the
+  section as `user-edited`.
+- **Known limits.** `edit_rounds` does not reset. `--confirm` and `--checked`
+  in one call are not atomic.
+
+**5. The graph word focus**
+
+- `orc graph map --focus <word>` ignored a plain word and said
+  "focus not in the graph". Now a word resolves to the files that hold it.
+- `orc graph map --json` has new fields: `focus_words` and `focus_common`.
+- The trace says `repo` when nothing resolved. `focus=` shows a maximum of 8
+  files, then `,+N`.
+
+**6. `/orc-fix`: the host run and the FIX source**
+
+- A stale `.current` (older than 6 hours), or a bootstrap `.current` with no
+  lane, was read as a host run. Now it gives `mode: may-fix`, `host: null`, no
+  `FIX` line and no `fix_run`.
+- The classify JSON has a new `open_run` field.
+- The `FIX` trace line and the stored row now show the same source.
+
+**7. Boundary block lists**
+
+- `orc boundary status` read only inline lists. It now reads block lists
+  (`- item` lines) also.
+- A REFUSE card that uses a block list exits 2. It exited 3 (MALFORMED).
+- Staleness counts only the commits that touch an anchored file.
+- A field that is not a list gives this text:
+  "`<field>` is not a list — write `- item` lines or [a, b]".
+- The header parser: ` #` inside quotes is text, and a comma inside quotes does
+  not split an inline item. The wiki documents use the same parser.
+
+**8. Pact, aftermath and stack status**
+
+- `orc pact`: the DRIFTED reason counted each anchor. Now it reads
+  "N commits since X touched K of M anchored files (a, b)". Each row has a new
+  `touched_files` field.
+- `orc aftermath status` graded the open trace of its own lane. The open run
+  now has no row. A project that has only the open run exits 3 with `shallow`.
+- `orc pr stack status`: `<n>` and `<m>`, a hole of 120 characters or less, and
+  a paragraph that is only a placeholder count as not filled. Comments, code
+  fences, generics and inline tags do not count. **A plan that v2.1.1 showed as
+  READY can show NOT READY.**
+- The PR split does not pull. It runs
+  `git merge-base --is-ancestor <trunk> $SNAPSHOT` and stops when the trunk
+  moved. A pull that moved the trunk caused a silent revert.
+
+**9. The call catalogue and the trace verbs**
+
+- `orc lane calls`: the catalogue rows that listed only exit 0 now list each
+  exit code. The `budget-forecast` row has the correct codes. The catalogue
+  gaps are closed.
+- The trace accepts three more verbs: `DOC`, `WAIT` and `GRAPH-COVERAGE`. The
+  `orc-mini` and `orc-fast` trace grammar includes the `GRAPH-*` verbs.
+- `orc-learn` and `orc-poly` do not write a `WIKI-CONSULT` head that is not
+  declared.
+
+**10. Small text and CLI fixes**
+
+- Four refusals for a human reader crashed because a status mark was not
+  defined. They print the refusal now.
+- The lexicon escape does not insert a stray comment line.
+- `orc_wiki_pattern_findings`: the skills and the CLI use the same value.
+- The `/orc-fast` text names the executor that it dispatches,
+  `orc-executor-sonnet-5-med`. Its `opus5_only` twin is `orc-executor-opus-5-low`
+  in the CLI also.
+- `/orc-test`: the text names the server that `orc test env up` leaves running.
+- `/orc-challenge` does not point its intake at the build-lane intake file.
+- `/orc-export`: the text is correct for the challenge cycle source, for
+  `--check` with a hand-written `AGENTS.md`, and for the import of commands.
+- The code-graph text says that the gain meter cannot see `graph_used: none`
+  yet, so `avoided` still counts that card.
+- 9 `expect=` spellings in the templates changed to the pinned model ids.
+
+**Changed behaviour**
+
+- `orc budget forecast` with no plan: exit 3 (was 1).
+- `orc budget`: lower USD figures; `model` in `bands[]` and `fixed_roles[]`;
+  USD `null` / "unavailable" with `extra_enabled` and no provider rates.
+- `orc boundary status`: a block-list REFUSE card exits 2 (was 3); the new
+  "is not a list" text; staleness counts anchored-file commits only.
+- `orc pact`: new DRIFTED `why` text; `touched_files` in each row.
+- `orc pr stack status`: a READY plan from v2.1.1 can show NOT READY.
+- `orc aftermath status`: no row for the open run; exit 3 `shallow` when that
+  is the only run.
+- `/orc-fix`: `mode: may-fix` and `host: null` for a stale or lane-less
+  `.current`; `open_run` in the classify JSON.
+- `orc graph map --focus <word>`: a word now focuses; `focus_words` and
+  `focus_common` in `--json`.
+- `orc wait status --json`: `stale`; `cancel` refuses a stale wait; an old
+  block-only `wait.json` reads as not waiting.
+- `orc doc parts --json`: `checked[]`, `flagged[]`, `edit_rounds`; `orc doc
+  next` can return `plan-edit`.
+- `session-model.json`: `session_id`.
+
+**What you have to do:** run `orc update` once. It adds the
+`UserPromptExpansion` entry to `settings.json`.
+
+---
+
 ### v2.1.1 — the quick and fast lanes move to Sonnet 5 _(2026-10-02)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

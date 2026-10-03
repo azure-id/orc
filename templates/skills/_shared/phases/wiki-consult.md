@@ -120,7 +120,7 @@ where it is used**, not only where it was selected.
 gets a wiki continuation naming the docs and the tier AT TIME OF USE:**
 
 ```
-DISPATCH orc-executor-sonnet-5-high :: T4 modify health API expect=sonnet-5/high
+DISPATCH orc-executor-sonnet-5-high :: T4 modify health API expect=sonnet-5-5/high
   wiki: FRESH — 2 docs → orc-feature-health.md, orc-reference-api-surface.md
 ```
 

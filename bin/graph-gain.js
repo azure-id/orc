@@ -27,7 +27,8 @@
 //     executor-window delta, with N and the spread beside it)
 //   · never count a hook coverage note as avoided anything — it adds, it saves
 //     nothing, and it is listed as paid only
-//   · never count a card the agent's return marked `graph_used: none`
+//   · NOT DONE YET: a card the agent's return marked `graph_used: none` is not
+//     a saving, but the meter cannot see a return, so `avoided` still counts it
 //   · never block a read: the ledger is appended AFTER the answer is out, and a
 //     failed append is silent
 

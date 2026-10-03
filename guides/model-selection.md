@@ -166,6 +166,12 @@ anything you already have:
   refuses to start `/orc` below **high** effort. `claude-opus-5-5` and
   `claude-fable-5` are cleared from **medium** up, because both outrank the
   Opus 4.8 baseline. This is the half Claude Code lets a hook enforce.
+  The hook runs on two events. `PreToolUse` gates a `/orc` or `/orc-diy` that
+  Claude starts through the Skill tool. `UserPromptExpansion` (v2.1.2) gates a
+  `/orc` or `/orc-diy` that you type. The typed gate reads the effort that the
+  ORC status line wrote for this session. If that reading is not there (no ORC
+  status line, or a headless `claude -p`), the typed command is not stopped.
+  `orc doctor` tells you when the typed gate is not wired; `orc update` adds it.
 - **Model — a warning only.** Claude Code does not expose the model id to a
   blocking hook, so the tier cannot be hard-stopped. `hooks/orc-statusline.js`
   carries the verdict in its ICON — `✅` good, `🚀` better, `⛔` ORC will degrade,

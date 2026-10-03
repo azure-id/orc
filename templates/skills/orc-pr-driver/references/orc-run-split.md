@@ -41,11 +41,20 @@ layer, they just do not count toward a budget.
 ## Step 2 — start the stack from the trunk
 
 ```bash
-git checkout <trunk> && git pull --ff-only
+git checkout <trunk>
+git merge-base --is-ancestor <trunk> $SNAPSHOT   # exit 1 → STOP (below)
 gh stack init -b <trunk>
 ```
 
 The worktree now shows trunk state. The change is safe in `$SNAPSHOT`.
+
+**Do not pull here.** The stack starts from the trunk commit the change was cut
+from, so `git checkout $SNAPSHOT -- <file>` reproduces exactly the change and
+Step 4 compares like with like. The trunk is not an ancestor of `$SNAPSHOT`
+(it moved after the change was cut) → **STOP** and ask: rebase the snapshot
+first (`git rebase <trunk> orc-stack-snapshot/<slug>`), or stop. A remote trunk
+that moved ahead is `gh stack sync` after submit (`conflict-playbook.md`, "the
+trunk moved") — never a pull in the middle of a split.
 
 ## Step 3 — materialize each layer, bottom-up
 

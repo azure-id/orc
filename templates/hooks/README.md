@@ -45,7 +45,10 @@ If ORC cannot read its own version, it shows `ORC` with no number. It does not
 guess.
 
 **This line can only warn you.** A status line cannot stop a command. The
-`orc-effort-guard.js` hook is what stops a run at a low effort.
+`orc-effort-guard.js` hook is what stops a run at a low effort. It reads the
+effort two ways. A Skill call carries it. A typed `/orc` or `/orc-diy` reads the
+effort that THIS line wrote for THIS session. With no ORC status line (headless
+`claude -p`, or a line of your own), a typed `/orc` is not stopped.
 
 ### 2. `context (34%)`
 

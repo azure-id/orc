@@ -74,6 +74,69 @@ test("every §4x pointer resolves to a heading in knowledge.md", () => {
   );
 });
 
+// v2.1.2 — text fixes F28-F33. Each case pins one sentence that told the lane
+// to do something the CLI does not do.
+const T = (...p) => fs.readFileSync(path.join(REPO, "templates", ...p), "utf8");
+const flat = (s) => s.replace(/\s+/g, " ");
+
+test("F28 orc-doc: the D1 request is logged after `orc doc init`, not at D1", () => {
+  const skill = flat(T("skills", "orc-doc", "SKILL.md"));
+  assert.ok(!skill.includes("log the request: at **D1**"), "the slug does not exist at D1");
+  assert.ok(skill.includes("right after `orc doc init` (D5) log the D1 request"));
+  for (const ref of ["gates.md", "resume-protocol.md"]) {
+    const t = flat(T("skills", "orc-doc", "references", ref));
+    assert.ok(!/calls it at D1|`orc doc log` at D1/.test(t), `${ref} still logs at D1`);
+  }
+});
+
+test("F29 orc-doc: a D8 edit round confirms the sections it touched", () => {
+  const skill = T("skills", "orc-doc", "SKILL.md");
+  const d8 = skill.slice(skill.indexOf("## D8 "), skill.indexOf("## D9 "));
+  assert.ok(d8.includes("--confirm"), "D8 must run `orc doc parts <slug> --confirm <ids>`");
+  assert.ok(flat(T("skills", "orc-doc", "references", "chunking.md")).includes("and after each D8 edit round"));
+});
+
+test("F30 orc-doc: a checker reads the part files of its slice, not ONE file", () => {
+  const dir = path.join(REPO, "templates", "skills", "orc-doc");
+  const files = [];
+  (function walk(d) {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith(".md")) files.push(p);
+    }
+  })(dir);
+  const agents = path.join(REPO, "templates", "agents");
+  for (const a of fs.readdirSync(agents)) if (a.startsWith("orc-doc-checker")) files.push(path.join(agents, a));
+  const bad = files.filter((f) => /one bounded part (file )?(per checker|and nothing|,)/i.test(flat(fs.readFileSync(f, "utf8"))) ||
+    /ONE bounded part/.test(flat(fs.readFileSync(f, "utf8"))));
+  assert.deepStrictEqual(bad.map((f) => path.relative(REPO, f)), []);
+  assert.ok(flat(T("skills", "orc-doc", "SKILL.md")).includes("bounded part files** (`files[]`, one or more)"));
+});
+
+test("F31 orc-export: the challenge-cycle source row says it is not read", () => {
+  const row = T("skills", "orc-export", "SKILL.md").split("\n").find((l) => l.includes("orc/orc-challenge/<slug>/"));
+  assert.ok(row && row.includes("Not read in 2.1.x"), "the row must say the source is not read");
+});
+
+test("F32 orc-export: the lane runs --check before a write that overwrites", () => {
+  for (const rel of [["skills", "orc-export", "SKILL.md"], ["commands", "orc-export.md"]]) {
+    const t = flat(T(...rel));
+    assert.ok(!t.includes("rather than overwriting it silently"), `${rel.join("/")} promises a guard the CLI lacks`);
+    assert.ok(t.includes("OVERWRITES"), `${rel.join("/")} must say the write overwrites`);
+    assert.ok(/ALWAYS runs? `orc export --check --json` first/.test(t), `${rel.join("/")} must run --check first`);
+    assert.ok(/asks? the user before/.test(t), `${rel.join("/")} must ask before the write`);
+  }
+});
+
+test("F33 orc-export: import does not claim a manifest command check", () => {
+  for (const rel of [["skills", "orc-export", "SKILL.md"], ["commands", "orc-export.md"]]) {
+    const t = flat(T(...rel));
+    assert.ok(!t.includes("the manifest does not have"), `${rel.join("/")} describes a check the CLI does not do`);
+    assert.ok(t.includes("`seed_invariants[]`") && t.includes("`wrong[]`"));
+  }
+});
+
 test("knowledge.md's own § ids are unique", () => {
   if (!fs.existsSync(KNOWLEDGE)) {
     console.log("    (skipped: knowledge.md is git-ignored and absent)");

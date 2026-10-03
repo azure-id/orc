@@ -480,3 +480,40 @@ test("install: the session hook is wired on Stop, SessionStart compact and Subag
   assert.match(f.message, /not wired on Stop — notify is bell, but the bell never rings/);
   assert.equal(f.fix_command, "orc update");
 });
+
+// ── v2.1.2 (F13) — the effort guard is wired a SECOND time, for a typed command
+test("install: the typed-command gate is wired once on UserPromptExpansion orc|orc-diy, idempotent; doctor names a missing one", () => {
+  const { claudeDir, root } = freshInstall();
+  const settingsPath = path.join(claudeDir, "settings.json");
+  const wiring = () => {
+    const hooks = (JSON.parse(fs.readFileSync(settingsPath, "utf8")) || {}).hooks || {};
+    const out = [];
+    for (const [event, arr] of Object.entries(hooks))
+      for (const entry of arr || [])
+        for (const h of entry.hooks || [])
+          if (event !== "PreToolUse" && String(h.command || "").includes("orc-effort-guard")) out.push([event, entry.matcher || null]);
+    return out.sort();
+  };
+  assert.deepStrictEqual(wiring(), [["UserPromptExpansion", "orc|orc-diy"]]);
+  const before = fs.readFileSync(settingsPath, "utf8");
+  assert.equal(cli(["update", "--dir", root]).status, 0);
+  assert.equal(fs.readFileSync(settingsPath, "utf8"), before, "re-wiring is idempotent, byte for byte");
+
+  const ids = () => (JSON.parse(cli(["doctor", "--dir", root, "--json"]).stdout).findings || []);
+  assert.ok(!ids().some((f) => /^typed-gate-/.test(f.id)));
+  const settings = JSON.parse(before);
+  settings.hooks.UserPromptExpansion[0].matcher = "orc";
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  const m = ids().find((x) => x.id === "typed-gate-matcher");
+  assert.ok(m, "a hand-edited matcher is named");
+  assert.equal(m.fix_command, "orc update");
+  delete settings.hooks.UserPromptExpansion;
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  const f = ids().find((x) => x.id === "typed-gate-unwired");
+  assert.ok(f, JSON.stringify(ids().map((x) => x.id)));
+  assert.equal(f.fix_command, "orc update");
+  // `orc update` is the repair for both.
+  assert.equal(cli(["update", "--dir", root]).status, 0);
+  assert.deepStrictEqual(wiring(), [["UserPromptExpansion", "orc|orc-diy"]]);
+  rmrf(root);
+});

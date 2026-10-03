@@ -51,9 +51,11 @@
  *
  * This is the ONLY place Claude Code exposes the live model id, so it also
  * writes a fail-silent session-model bridge (.claude/orc/session-model.json)
- * that the PreToolUse effort guard reads — the guard can't see the model id
- * on its own, so the bridge is how the Opus 5.5 / Fable 5 medium-effort allowance
- * reaches it.
+ * = {model_id, effort, session_id, written_at}. The effort guard reads it on
+ * the Skill call (the guard can't see the model id on its own, so the bridge is
+ * how the Opus 5.5 / Fable 5 medium-effort allowance reaches it) and on a TYPED
+ * /orc (the effort itself); the session id stops one session's reading gating
+ * another.
  *
  * Also appends a "newer orc version available" hint from the 24h update cache
  * (cache-only here — never a network call in the statusline hot path; the
@@ -542,8 +544,10 @@ process.stdin.on("end", () => {
 
   // ── Session-model bridge (fail-silent) ─────────────────────────────────────
   // The PreToolUse effort guard cannot see the model id; it can only read
-  // effort. Persist {model_id, effort, written_at} here so the guard can grant
-  // the Opus 5.5 / Fable 5 medium-effort allowance. The statusline re-renders constantly
+  // effort. Persist {model_id, effort, session_id, written_at} here: the guard
+  // reads it on the Skill call (the Opus 5.5 / Fable 5 medium allowance) and on
+  // a TYPED /orc (the effort itself); the session id stops one session's
+  // reading gating another (v2.1.2, F13). The statusline re-renders constantly
   // while a session is active, so written_at stays fresh; the guard treats a
   // stale file (older than its freshness window) as absent and never blocks on
   // it. Any error (no dir, read-only fs) is swallowed — this is a nicety, not a
@@ -558,7 +562,7 @@ process.stdin.on("end", () => {
       fs.mkdirSync(orcDir, { recursive: true });
       fs.writeFileSync(
         path.join(orcDir, "session-model.json"),
-        JSON.stringify({ model_id: model, effort, written_at: Date.now() }) + "\n"
+        JSON.stringify({ model_id: model, effort, session_id: String(d.session_id || ""), written_at: Date.now() }) + "\n"
       );
     }
   } catch (_) {}

@@ -4,7 +4,7 @@ const { test } = require("node:test");
 const assert = require("node:assert");
 const fs = require("fs");
 const path = require("path");
-const { runHook, rmrf, freshInstall, CLI } = require("./_helpers");
+const { runHook, rmrf, freshInstall, CLI, FAKE_HOME } = require("./_helpers");
 
 // The trace hook writes under <project>/.claude/orc/logs (default). freshInstall
 // gives us <root>/.claude, so PROJECT_ROOT for the installed hook is <root>.
@@ -708,6 +708,174 @@ test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fab
   }
 });
 
+// ── v2.1.2 (F13) — the TYPED path. A typed /orc or /orc-diy reaches the guard
+// on UserPromptExpansion, with no effort in the payload: the effort is the
+// status line's reading for THIS session, and an unreadable one never blocks.
+const GUARD = "orc-effort-guard.js";
+function bridge(claudeDir, o) {
+  const p = path.join(claudeDir, "orc", "session-model.json");
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  if (o === null) return fs.rmSync(p, { force: true });
+  fs.writeFileSync(p, typeof o === "string" ? o : JSON.stringify({ written_at: Date.now(), ...o }));
+}
+function typed(claudeDir, root, cmd, args, extra) {
+  const transcript = path.join(root, "transcript.jsonl");
+  if (!fs.existsSync(transcript)) fs.writeFileSync(transcript, "");
+  const { env, ...over } = extra || {};
+  return runHook(
+    claudeDir,
+    GUARD,
+    { hook_event_name: "UserPromptExpansion", command_name: cmd, command_args: args, session_id: "S1", cwd: root, transcript_path: transcript, ...over },
+    env
+  );
+}
+const diyLock = (claudeDir, tier) => {
+  const p = path.join(claudeDir, "orc", "diy", "flow.lock.json");
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify({ session_tier: tier }));
+};
+
+test("effort-guard (typed): a same-session bridge below the tier blocks a typed /orc (exit 2)", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    bridge(claudeDir, { model_id: "claude-opus-4-8", effort: "medium", session_id: "S1" });
+    const r = typed(claudeDir, root, "orc", "build it");
+    assert.strictEqual(r.status, 2);
+    assert.match(r.stderr, /required effort not met/);
+    assert.match(r.stderr, /ORC status line/, "the block names where the effort came from");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("effort-guard (typed): Opus 5.5 at medium and Opus 4.8 at high pass", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    bridge(claudeDir, { model_id: "claude-opus-5-5", effort: "medium", session_id: "S1" });
+    assert.strictEqual(typed(claudeDir, root, "orc", "x").status, 0, "opus-5.5 medium clears");
+    bridge(claudeDir, { model_id: "claude-opus-4-8", effort: "high", session_id: "S1" });
+    assert.strictEqual(typed(claudeDir, root, "orc", "x").status, 0, "opus-4.8 high clears");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("effort-guard (typed): an effort nobody can read never blocks", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const low = { model_id: "claude-opus-4-8", effort: "low" };
+    bridge(claudeDir, null);
+    assert.strictEqual(typed(claudeDir, root, "orc", "x").status, 0, "no bridge");
+    bridge(claudeDir, { ...low, session_id: "S1", written_at: Date.now() - 31 * 60 * 1000 });
+    assert.strictEqual(typed(claudeDir, root, "orc", "x").status, 0, "a 31-minute-old bridge");
+    bridge(claudeDir, { ...low, session_id: "S2" });
+    assert.strictEqual(typed(claudeDir, root, "orc", "x").status, 0, "another session's bridge");
+    bridge(claudeDir, low);
+    assert.strictEqual(typed(claudeDir, root, "orc", "x").status, 0, "a bridge with no session_id");
+    bridge(claudeDir, "{not json");
+    assert.strictEqual(typed(claudeDir, root, "orc", "x").status, 0, "a garbage bridge");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("effort-guard (typed): a /effort typed after the bridge makes the gate fail open", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const at = Date.now() - 60 * 1000;
+    bridge(claudeDir, { model_id: "claude-opus-4-8", effort: "medium", session_id: "S1", written_at: at });
+    const line = (ms) =>
+      JSON.stringify({
+        type: "user",
+        timestamp: new Date(ms).toISOString(),
+        message: { content: "<command-name>/effort</command-name>\n<command-args>high</command-args>" },
+      }) + "\n";
+    const transcript = path.join(root, "transcript.jsonl");
+    fs.writeFileSync(transcript, line(at + 5000));
+    assert.strictEqual(typed(claudeDir, root, "orc", "x").status, 0, "a newer /effort → the reading is old → allow");
+    fs.writeFileSync(transcript, line(at - 5000));
+    assert.strictEqual(typed(claudeDir, root, "orc", "x").status, 2, "an older /effort changes nothing");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("effort-guard (typed): /orc-diy follows the compiled tier", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    // No lock → the fail-closed onboarding block, with or without a bridge.
+    const none = typed(claudeDir, root, "orc-diy", "add a route");
+    assert.strictEqual(none.status, 2);
+    assert.match(none.stderr, /no compiled flow in this project/);
+    // compile / status pass at any effort — a string (2.1.287) or an array (docs).
+    assert.strictEqual(typed(claudeDir, root, "orc-diy", "compile").status, 0);
+    assert.strictEqual(typed(claudeDir, root, "orc-diy", ["status"]).status, 0);
+
+    bridge(claudeDir, { model_id: "claude-opus-5-5", effort: "medium", session_id: "S1" });
+    diyLock(claudeDir, "opus-5-high");
+    assert.strictEqual(typed(claudeDir, root, "orc-diy", "x").status, 2, "medium is below a high flow (no medium allowance for DIY)");
+    diyLock(claudeDir, "opus-5-med");
+    assert.strictEqual(typed(claudeDir, root, "orc-diy", "x").status, 0, "medium meets a med flow");
+    bridge(claudeDir, null);
+    diyLock(claudeDir, "opus-5-high");
+    assert.strictEqual(typed(claudeDir, root, "orc-diy", "x").status, 0, "a lock and no bridge → fail open");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("effort-guard (typed): other commands pass, and $CLAUDE_EFFORT is not read", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    bridge(claudeDir, { model_id: "claude-opus-4-8", effort: "low", session_id: "S1" });
+    assert.strictEqual(typed(claudeDir, root, "orc-mini", "x").status, 0, "orc-mini is not gated");
+    const r = typed(claudeDir, root, "orc", "x", { env: { CLAUDE_EFFORT: "max" } });
+    assert.strictEqual(r.status, 2, "a parent process's $CLAUDE_EFFORT never unblocks the typed path");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("effort-guard: on a Skill call, another session's bridge never grants the medium allowance; a bridge with no session_id still does", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const payload = { tool_name: "Skill", tool_input: { skill: "orc" }, effort: { level: "medium" }, session_id: "S1", cwd: root };
+    bridge(claudeDir, { model_id: "claude-opus-5-5", effort: "medium", session_id: "S2" });
+    assert.strictEqual(runHook(claudeDir, GUARD, payload).status, 2, "another session's bridge is never read");
+    bridge(claudeDir, { model_id: "claude-opus-5-5", effort: "medium" });
+    assert.strictEqual(runHook(claudeDir, GUARD, payload).status, 0, "a 2.1.1 bridge (no session_id) keeps the allowance");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("effort-guard (typed): an allow writes only the JSON nudge to stdout", () => {
+  const { root, claudeDir } = freshInstall();
+  const cache = path.join(FAKE_HOME, ".orc-update-check.json");
+  try {
+    fs.writeFileSync(cache, JSON.stringify({ checkedAt: Date.now(), latest: "99.0.0" }));
+    bridge(claudeDir, { model_id: "claude-opus-5-5", effort: "medium", session_id: "S1" });
+    const r = typed(claudeDir, root, "orc", "x", { env: { ORC_NO_UPDATE_CHECK: "0", CI: "false" } });
+    assert.strictEqual(r.status, 0);
+    assert.match(JSON.parse(r.stdout).systemMessage, /orc 99\.0\.0 available/);
+  } finally {
+    fs.rmSync(cache, { force: true });
+    rmrf(root);
+  }
+});
+
+test("effort-guard: the typed matcher names exactly the skills the guard gates", () => {
+  // Two files, one list — asserted on source text (the OPUS5_BANDS technique):
+  // a skill gated in the hook and missing from the matcher is never checked.
+  const cliSrc = fs.readFileSync(CLI, "utf8");
+  const matcher = /const TYPED_GATE_MATCHER = "([^"]+)";/.exec(cliSrc);
+  assert.ok(matcher, "bin/cli.js no longer declares TYPED_GATE_MATCHER");
+  const guardSrc = fs.readFileSync(path.join(__dirname, "..", "templates", "hooks", GUARD), "utf8");
+  const gated = [...guardSrc.matchAll(/const is(?:Orc|Diy) = \/\^([\w-]+)\$\/i\.test\(skill\);/g)].map((m) => m[1]);
+  assert.deepStrictEqual(gated.sort(), ["orc", "orc-diy"]);
+  assert.deepStrictEqual(matcher[1].split("|").sort(), gated);
+});
+
 test("statusline: verdict matrix — boosted for opus-4.8 xhigh/max and opus-5/fable-5 medium+, degrade below", () => {
   const { root, claudeDir } = freshInstall();
   const render = (model, effort) =>
@@ -746,13 +914,15 @@ test("statusline: writes the session-model bridge the guard reads", () => {
   try {
     runHook(claudeDir, "orc-statusline.js", {
       cwd: root,
+      session_id: "S9",
       model: { id: "claude-fable-5", display_name: "Fable 5" },
       effort: { level: "medium" },
     });
-    const bridge = path.join(claudeDir, "orc", "session-model.json");
-    assert.ok(fs.existsSync(bridge), "bridge file written");
-    const j = JSON.parse(fs.readFileSync(bridge, "utf8"));
+    const file = path.join(claudeDir, "orc", "session-model.json");
+    assert.ok(fs.existsSync(file), "bridge file written");
+    const j = JSON.parse(fs.readFileSync(file, "utf8"));
     assert.strictEqual(j.model_id, "claude-fable-5");
+    assert.strictEqual(j.session_id, "S9", "the bridge names its session (v2.1.2, F13)");
     assert.ok(typeof j.written_at === "number", "written_at stamped");
   } finally {
     rmrf(root);

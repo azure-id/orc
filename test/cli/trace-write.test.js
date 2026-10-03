@@ -542,3 +542,76 @@ test("trace write: an ASK with an unknown question id is refused and the lane's 
     rmrf(root);
   }
 });
+
+// ── v2.1.2 — verbs the payload emitted and the closed set refused ────────────
+
+// F08 — `/orc-doc` names `DOC` in its spine and no manifest row claimed it, so
+// the lint could not see the gap and every wave paid for the fallback writer.
+test("trace write: DOC is a declared verb — an orc-doc wave packet lands verbatim in both halves", () => {
+  const { root, logs } = project();
+  try {
+    const name = "run-doc-demo-031026-101500.txt";
+    fs.writeFileSync(path.join(logs, ".current"), name + "\n");
+    fs.writeFileSync(path.join(logs, name), "");
+    const r = write(root, 'phase: wave 1\nevents:\n  - {ts: "031026 10:20:00.000", verb: DOC, tail: "cycle=1 sections=4/12 wave=1/3"}\n', ["--json"]);
+    assert.strictEqual(r.status, 0, r.stderr + r.stdout);
+    const txt = lines(path.join(logs, name));
+    assert.strictEqual(txt.length, 1);
+    assert.match(txt[0], /^\[031026 10:20:00\.000\] orc\s+DOC\b.*cycle=1 sections=4\/12 wave=1\/3$/);
+    const rows = lines(path.join(logs, name + ".jsonl")).map((l) => JSON.parse(l));
+    assert.strictEqual(rows.length, 1, "one row in the .jsonl half");
+    assert.match(rows[0].verb, /^DOC\b/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+// F11 — `WAIT` is the CLI's own line (the `FIX` precedent): `orc wait` writes
+// it into the open trace, so a packet that carries it is a second writer.
+test("trace write: WAIT is the CLI's verb — a packet carrying it is refused, nothing written", () => {
+  const { root, logs } = project();
+  try {
+    fs.writeFileSync(path.join(logs, ".current"), RICH + "\n");
+    fs.writeFileSync(path.join(logs, RICH), "");
+    const r = write(root, 'phase: x\nevents:\n  - {ts: "240726 00:30:39.881", verb: "VERIFY T1", tail: "ok"}\n  - {ts: "240726 00:30:40.000", verb: "WAIT unblock"}\n', ["--json"]);
+    assert.strictEqual(r.status, 2);
+    const j = JSON.parse(r.stdout);
+    assert.match(j.reason, /WAIT is written by the CLI itself \(see _shared\/wait\.md\)/);
+    assert.strictEqual(fs.readFileSync(path.join(logs, RICH), "utf8"), "", "the valid event is not written either");
+    assert.ok(!fs.existsSync(path.join(logs, RICH + ".jsonl")));
+  } finally {
+    rmrf(root);
+  }
+});
+
+// F68 — `orc graph coverage` printed a `trace` whose verb was not in the closed
+// set, so a lane that copied it VERBATIM lost the whole packet. The goldens are
+// the frozen `--json` answers of every graph read: each `trace` must be
+// writable as it stands.
+test("trace write: every trace a graph read prints is in the closed set", () => {
+  const dir = path.join(__dirname, "..", "goldens", "graph-json-1.9.0");
+  const traces = [];
+  for (const f of fs.readdirSync(dir).sort()) {
+    // A golden may wrap the answer; the `trace` field is found wherever it sits.
+    for (const m of fs.readFileSync(path.join(dir, f), "utf8").matchAll(/"trace":\s*("(?:[^"\\]|\\.)*")/g))
+      traces.push(JSON.parse(m[1]));
+  }
+  assert.ok(traces.some((t) => t.startsWith("GRAPH-COVERAGE ")), "the coverage read is in the set");
+  assert.ok(traces.length >= 10, "the goldens carry the graph reads");
+  const { root, logs } = project();
+  try {
+    fs.writeFileSync(path.join(logs, ".current"), RICH + "\n");
+    fs.writeFileSync(path.join(logs, RICH), "");
+    const events = traces.map((t) => {
+      const cut = t.indexOf(" :: ");
+      const e = { ts: "240726 00:30:39.881", verb: cut < 0 ? t : t.slice(0, cut) };
+      if (cut >= 0) e.tail = t.slice(cut + 4);
+      return e;
+    });
+    const r = write(root, JSON.stringify({ phase: "graph", events }), ["--json"]);
+    assert.strictEqual(r.status, 0, r.stderr + r.stdout);
+    assert.strictEqual(lines(path.join(logs, RICH)).length, traces.length);
+  } finally {
+    rmrf(root);
+  }
+});

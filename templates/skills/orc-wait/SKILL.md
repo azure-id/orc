@@ -104,6 +104,10 @@ that is exactly why it is fast. When you use it, name what may be lost:
 Run each hop as a **detached** command so no model is running and no tokens are
 spent. One hop per entry in `hops[]` from W1.
 
+0. `orc wait start <spec> --mode <mode> --json`, before the first hop. It records
+   the wait and writes the `WAIT` line. `recorded: false` (no run in flight) is
+   an ANSWER — wait all the same.
+
 After every hop:
 
 1. `orc usage check --json` (exit 0 → the window recovered; go to W6)
@@ -114,6 +118,9 @@ Print the END TIME every hop, not only the length: "hop 2 of 4, ends 19:14".
 A user who cannot see when a wait ends cannot tell it from a hang.
 
 ## W6 — come back
+
+First: `orc wait end --reason <elapsed|recovered|cancelled|max-hops> --json`.
+Exit 1 `no-run` or `no-wait` (no run in flight) is an ANSWER — continue.
 
 Read `context` from `orc usage check --json`.
 
@@ -148,8 +155,9 @@ before, cancel is during. Never present them as the same choice.
 
 ## Trace
 
-The CLI writes the `WAIT` lines itself, into the trace already open. You do not
-narrate them and you do not repeat them.
+The CLI writes the `WAIT` lines itself (`orc wait start`, `end`, `block`,
+`unblock`), into the trace already open. You do not narrate them and you do not
+repeat them.
 
 `/orc-wait` opens no run, so it is **not a lane** in the trace enum and writes
 no `run-<lane>-<slug>` pointer — the `/orc-explain` precedent. With no run in

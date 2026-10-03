@@ -24,6 +24,7 @@ Installed into /home/rina/shopcart/.claude
 
 Merged into .claude/settings.json (nothing of yours was replaced):
   · PreToolUse effort guard
+  · UserPromptExpansion effort gate (typed /orc, /orc-diy)
   · statusline  (you had none — if you had, I would print the snippet instead)
 
 Next: orc onboarding first-run
@@ -42,7 +43,7 @@ orc doctor — /home/rina/shopcart/.claude
   payload      ✓ every shipped file present
   orphans      3 files ORC owns are no longer in the payload
                fix: orc update --prune   (it will name all three first)
-  settings     ✓ guard wired · ✓ statusline wired
+  settings     ✓ guard wired · ✓ typed /orc gate wired · ✓ statusline wired
   trace        ✓ pointer valid
   diy          STALE — compiled before the last update
 

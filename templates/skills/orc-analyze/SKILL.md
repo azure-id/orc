@@ -210,8 +210,8 @@ exist). Menu rules, relatedness gate, combiner handling:
 
 ## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-- **Calls:** `orc lane calls orc-analyze --json` names every call and its exit codes.
-  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Calls:** `orc lane calls orc-analyze --json` names shared calls and exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Own calls are here; make no other.
 - **Config:** `orc lane config orc-analyze --json`. Obey `effective`, print every line
   in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
   Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).

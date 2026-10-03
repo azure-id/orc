@@ -47,8 +47,8 @@ single-dispatch lane — dispatches the trace writer ONCE at run end to append
 them (`SPAWN`/`RETURN` come from the `orc-trace.js` hook as they occur):
 
 ```
-[170726 10:02:01.050] writer   WIKI-CONSULT tier=FRESH :: topic-pick
-[170726 10:02:44.310] writer   DISPATCH orc-learn-writer :: init orders expect=opus-5/low
+[170726 10:02:01.050] writer   WIKI-CONSULT fresh :: docs=orders
+[170726 10:02:44.310] writer   DISPATCH orc-learn-writer :: init orders expect=opus-5-5/low
 [170726 10:02:44.420] hook     SPAWN orc-learn-writer-opus-5-low
 [170726 10:06:12.900] hook     RETURN
 [170726 10:06:13.010] writer   VERIFY writer actual=claude-opus-5-5/low ✅ MATCH

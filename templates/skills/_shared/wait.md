@@ -132,13 +132,22 @@ no model runs during it.
 
 ```
 1. Write the hand-back for the mode (above).
+1a. `orc wait start <spec> --mode <m> --trigger <user|gate>`
 2. remaining = the requested time, or resets_at - now
 3. hop = min(wait_hop_minutes, remaining)
 4. Run a DETACHED command that waits hop seconds.
 5. On wake: `orc usage check --json`
 6. Exit 0, or the requested time has elapsed → continue. Else go to 3.
 7. wait_max_hops reached → stop, keep the hand-back, say why.
+8. `orc wait end --reason <elapsed|recovered|cancelled|max-hops>`
 ```
+
+Steps 1a and 8 are how the CLI knows a wait is running: `orc wait start` records
+it in `wait.json` and `orc wait end` closes it. The computed gate passes
+`--trigger gate`. With no run in flight, `start` records nothing and answers
+`recorded: false`; that is an answer, and the wait continues. A wait's activity
+is COMPUTED from its start and the clock, so a wait that a dead session left
+open reads `stale` in `orc wait status`, never `waiting`.
 
 **A hop is short on purpose.** Each wake-up is session activity, and session
 activity is the only thing that makes the statusline run again — so each hop
@@ -233,10 +242,13 @@ in the trace enum and has no `run-<lane>-<slug>` pointer — the `/orc-explain`
 precedent, a stated blind spot rather than an oversight.
 
 ```
-WAIT   mode=hard requested=30m start=18:44 end=19:14 hops=1/4 trigger=user
-WAIT   block reason="window resets in 5m, task needs 10" by=user
+WAIT   mode=hard requested=30m start=18:44 end=19:14 hops=1/5 trigger=user
+WAIT   end :: done=1/1 reason=elapsed
+WAIT   block :: reason="window resets in 5m, task needs 10" by=user
 WAIT   unblock
 ```
+
+`hops=` is planned hops / `wait_max_hops`.
 
 A wait that leaves no line cannot be counted, and a block that leaves no line
 hides the fact that a run continued through a gate on the user's authority.

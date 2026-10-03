@@ -299,8 +299,8 @@ What a returning user needs, and where it lives:
 `document.md`. `context.md` and `outline.md` are exactly what a resumed session
 is *instructed* to read. Surfacing them is that rule working, not an exception.
 
-**`orc doc log` is how a request gets recorded**, and the skill calls it at D1
-(the request, **verbatim**), at every settled D4/D5 decision, at the opening of
+**`orc doc log` is how a request gets recorded**, and the skill calls it right after
+`orc doc init` at D5 (the D1 request, **verbatim**), at every settled D4/D5 decision, at the opening of
 every edit round, on every resume, and on return from a `/orc-grill` suspend
 (with `--source`). It appends through `docWrite`, so `doc.json` still has
 exactly one writer.

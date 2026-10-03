@@ -168,11 +168,14 @@ Canonical contract: `../_shared/live-target.md`. Read it before phase T1.
   SHARED, and it is written for someone who does not read code. Then **STOP**
   and offer: re-run a tier · widen the surface · `/orc-pact` the invariant this
   run proved · `/orc-challenge` the report. Never proceed on your own.
+  If `orc test env <slug> --json` shows `process.alive: true`, say ONCE: "The
+  server ORC started is still running — pid <pid> (`<cmd>`), since <at>. ORC
+  never stops it." This is a fact for the user, never an offer to stop it.
 
 ## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-- **Calls:** `orc lane calls orc-test --json` names every call and its exit codes.
-  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Calls:** `orc lane calls orc-test --json` names shared calls and exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Own calls are here; make no other.
 - **Config:** `orc lane config orc-test --json`. Obey `effective`, print every line
   in `announce[]` VERBATIM at preflight, and honour `stops[]` before the first case runs.
   Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).

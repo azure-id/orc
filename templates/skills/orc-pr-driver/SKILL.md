@@ -85,7 +85,8 @@ without the manifest (`../_shared/lane-contract.md` §Phases).
 The change already exists in the worktree, so **preserve it before touching
 branches** — `references/orc-run-split.md` is the exact procedure: commit the
 whole change to a scratch snapshot branch, verify the snapshot contains every
-changed path from `git status --short`, and only then move to the trunk. Every
+changed path from `git status --short`, and only then move to the trunk, which
+must be an ancestor of the snapshot. Every
 layer is later materialized with `git checkout <snapshot> -- <that layer's
 files>`; deletions are applied as `git rm`. The snapshot branch stays until the
 last layer merges — it is the undo button.
@@ -169,8 +170,8 @@ answers verbatim).
 
 ## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-- **Calls:** `orc lane calls orc-pr-driver --json` names every call and its exit codes.
-  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Calls:** `orc lane calls orc-pr-driver --json` names shared calls and exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Own calls are here; make no other.
 - **Config:** `orc lane config orc-pr-driver --json`. Obey `effective`. Never merge
   `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`). Nothing
   here is contested, gated or a stop: no preflight line, no gate to honour.

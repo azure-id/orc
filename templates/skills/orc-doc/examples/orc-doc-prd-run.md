@@ -224,7 +224,7 @@ $ orc doc plan checkout-refund --role check --json
       "changed_subparts": [] } ] } ] }
 ```
 
-**One bounded part file per checker**, so there is no line arithmetic anywhere in
+**Bounded part files per checker slice**, so there is no line arithmetic anywhere in
 the check loop and no two checkers ever share a file. The slice carries the
 lint's findings for that file. It never re-reports one: paying a model to repeat
 a free check is the mistake this ordering exists to prevent.
@@ -242,6 +242,13 @@ findings:
 coverage: "sections/04-goals-and-success-metrics.md in full, 1 section, no gaps"
 ```
 
+The return is validated, then RECORDED. One P1 finding is a blocking finding, so
+the section is flagged and the next step is the edit:
+
+```
+$ orc doc parts checkout-refund --findings 04-goals-and-success-metrics=1 --json
+```
+
 ---
 
 ## D8 — the edit wave (cap 2 rounds)
@@ -254,6 +261,10 @@ section. The writer's slice is that one file, the finding, and the instruction.
 
 $ orc doc compile checkout-refund
 ✓ compiled 17 sections → …/document.md  (500 lines)
+
+$ orc doc parts checkout-refund --confirm 04-goals-and-success-metrics --json
+  … the section goes back to the check, and the re-check is clean …
+$ orc doc parts checkout-refund --checked 04-goals-and-success-metrics --json
 ```
 
 For a section stored as sub-parts it opens only the sub-part that needs changing:

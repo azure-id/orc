@@ -6,14 +6,14 @@ exists, executors may still receive wiki page pointers, but freshness is
 never computed and never surfaced.
 <!-- /diy:when -->
 <!-- diy:when wiki_gate=notice -->
-Compute the wiki freshness tier exactly as the full lane does (follow the
-read-side procedure in `.claude/skills/orc-wiki/references/staleness.md`).
+Read the wiki freshness tier from `orc wiki status --json` (`state`, then
+`tier`) — the CLI is its only executor; never compute it yourself.
 Fresh → use silently; aging → one-line notice, continue; stale → warn the
 user that wiki hints may be outdated, continue. Never block on it.
 <!-- /diy:when -->
 <!-- diy:when wiki_gate=hard -->
-Compute the wiki freshness tier exactly as the full lane does (follow the
-read-side procedure in `.claude/skills/orc-wiki/references/staleness.md`).
+Read the wiki freshness tier from `orc wiki status --json` (`state`, then
+`tier`) — the CLI is its only executor; never compute it yourself.
 Fresh or aging → proceed. Stale or missing → STOP and ask the user: refresh
 the wiki first (recommended), or continue anyway with hints demoted. Respect
 the precedence rule from that reference in every consumer slice.

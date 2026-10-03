@@ -36,6 +36,18 @@ const TABLES = { en, id: i18nTable("id") };
 //
 // Split out of webui.test.js in v0.48.1, alongside bin/webui/ itself.
 
+// v2.1.2 — the Extra fixture named a retired executor beside the fast-executor
+// slot. The panel must show the agent that /orc-fast really dispatches.
+test("the Extra fixture names the executor /orc-fast really dispatches", () => {
+  const skill = fs.readFileSync(path.join(REPO, "templates", "skills", "orc-fast", "SKILL.md"), "utf8");
+  const src = fs.readFileSync(path.join(WEBUI, "fixtures", "extra.js"), "utf8");
+  const rows = src.split(/\r?\n/).filter((l) => /fast-executor/.test(l));
+  const named = new Set(rows.flatMap((l) => l.match(/orc-executor-[a-z0-9-]+/g) || []));
+  assert.ok(named.size > 0, "no fast-executor row names an executor");
+  assert.deepStrictEqual([...named], ["orc-executor-sonnet-5-med"]);
+  assert.ok(skill.includes("orc-executor-sonnet-5-med"), "orc-fast SKILL.md does not name the executor");
+});
+
 test("fixtures match the live --json shapes for the routes they stand in for", () => {
   const { root } = freshInstall();
   try {

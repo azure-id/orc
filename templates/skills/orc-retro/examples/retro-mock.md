@@ -46,7 +46,7 @@ lane wrote:
 non-hook line was written by the trace writer from a phase packet):
 ```
 [090726 14:40:02.300] writer   SCORE task=T3 score=72 band=[41,90) model=opus-5 :: multi-file, judgment
-[090726 14:40:03.010] writer   DISPATCH orc-executor-opus-5-low :: T3 expect=opus-5/low
+[090726 14:40:03.010] writer   DISPATCH orc-executor-opus-5-low :: T3 expect=opus-5-5/low
 [090726 14:44:12.900] writer   VERIFY T3 actual=opus-5/low ✅ MATCH
 [090726 14:44:13.000] writer   VERIFY T5 actual=sonnet-4-6/high ⛔ DOWNGRADE expected=opus-5/med
 [090726 15:02:00.000] reviewer FINDING p0=1 p1=0 p2=3 p3=2
@@ -59,7 +59,7 @@ non-hook line was written by the trace writer from a phase packet):
 `run-claude-readme-100726-091401.txt` (single-dispatch lane — ONE end-of-run
 packet; its meaningful signal is the writer's tier honesty):
 ```
-[100726 09:14:02.110] writer   DISPATCH orc-claude-writer :: refresh expect=opus-5/low
+[100726 09:14:02.110] writer   DISPATCH orc-claude-writer :: refresh expect=opus-5-5/low
 [100726 09:14:02.230] hook     SPAWN orc-claude-writer-opus-5-low
 [100726 09:15:47.900] hook     RETURN
 [100726 09:15:48.010] writer   VERIFY writer actual=sonnet-4-6/high ⛔ DOWNGRADE expected=opus-5/low

@@ -33,6 +33,10 @@ const ADDED = {
   // R4 (W5): where a language server should be asked, on every symbol card.
   "ctx-symbol": ["lsp_at"],
   "ctx-source": ["lsp_at"],
+  // v2.1.2 F05: what each plain focus word reached, and the too-common ones.
+  // The unfocused map carries both too, empty — one answer shape, focus or not.
+  map: ["focus_words", "focus_common"],
+  "map-focus": ["focus_words", "focus_common"],
 };
 
 // Values a release after 1.9.0 deliberately CHANGED, by golden name, as dotted
@@ -44,12 +48,18 @@ const CHANGED = {
   // one number the meter called exact was four to eight times too small.
   // A4 also moves `avoided`: the map's counterfactual prices the files the map
   // PRINTED, and A4 changed which files those are.
-  gain: ["line", "trace", "paid.total", "net.low", "net.high", "avoided.low", "avoided.high", "calls.low", "calls.high"],
+  // v2.1.2 F05 moves `paid.card`: the `map --focus orders` card in this ledger
+  // is now a FOCUSED card (its focus row and its `focus words` row).
+  gain: ["line", "trace", "paid.total", "paid.card", "net.low", "net.high", "avoided.low", "avoided.high", "calls.low", "calls.high"],
   // A1 — the density rides on the line and the trace a lane already prints.
   // W5b (DE-15) — `graph@6`: the one engine change 1.9.1 makes, on purpose.
   // Every COUNT on this fixture is unchanged (it has no Options API object and
   // no constant), which is the promise the engine bump keeps.
   status: ["line", "trace", "engine"],
+  // v2.1.2 F05: a word now resolves. The golden asks `--focus orders` — a WORD —
+  // and froze the bug: `focus: []` under a trace that said `focused`. The word
+  // now reaches the files that hold it, so the ranking and the card move.
+  "map-focus": ["focus", "focus_missing", "files", "shown", "card", "budget", "trace", "hidden", "has_more"],
 };
 
 // Walk the golden and the live answer together. Every golden key must be
