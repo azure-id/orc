@@ -187,6 +187,56 @@ test("map --focus — a name in nothing is REPORTED, and the map is still an ans
   assert.match(m.card, /focus not in the graph: noSuchThingAnywhere/);
 });
 
+// v2.1.2 (F05). Two lane spines pass "<3–6 words from the request>", and before
+// this a phrase was ONE token that matched no file and no symbol: the map was
+// the plain repository ranking under a trace that still said `focused`.
+test("graph map: plain words focus the map on the files that hold them", () => {
+  const F = require("./_graph-fixture");
+  const { root, git } = F.fixtureRepo({ build: false, history: false });
+  // Nine files under one directory: more than max(8, 10% of the files), so the
+  // directory's own word is in too many files to be a hint.
+  for (let i = 1; i <= 9; i++) write(root, `src/widget/part${i}.js`, [`function part${i}Size() { return ${i}; }`, `module.exports = { part${i}Size };`]);
+  git("add", "-A");
+  git("commit", "-qm", "widgets");
+  assert.equal(graph(root, "update").status, 0);
+
+  const m = json(graph(root, "map", "--focus", "orders count", "--json"));
+  assert.ok(m.focus.length > 0, "a word reaches the files whose path or symbol names hold it");
+  assert.ok(m.focus.includes("src/routes/orders.js"), "a PATH word");
+  assert.ok(m.focus.includes("src/stores/orderStore.js"), "a camelCase path word, and the symbol `OrderStore`");
+  assert.match(m.trace, /^GRAPH-MAP focused :: .* focus=\S/);
+  const order = m.focus_words.find((w) => w.word === "order");
+  assert.ok(order && order.used && order.files === m.focus.length, "`orders` is stemmed to `order`, and it is counted");
+  assert.deepEqual(m.focus_missing, ["count"], "a word in no file is reported, beside the words that resolved");
+  assert.match(m.card, /focus words: order \d+ · count 0/);
+
+  // A stop word and a two-letter word are not words at all.
+  const stop = json(graph(root, "map", "--focus", "fix the orders in src", "--json"));
+  assert.deepEqual(stop.focus_words.map((w) => w.word), ["order"]);
+  assert.deepEqual(stop.focus, m.focus);
+
+  // Too common: reported, not used — a hint must not become the whole repository.
+  const wide = json(graph(root, "map", "--focus", "widget", "--json"));
+  assert.deepEqual(wide.focus_common, ["widget"]);
+  assert.deepEqual(wide.focus_words, [{ word: "widget", files: 9, used: false }]);
+  assert.deepEqual(wide.focus, []);
+  assert.deepEqual(wide.focus_missing, []);
+  assert.match(wide.trace, /^GRAPH-MAP repo :: /);
+  assert.match(wide.card, /focus words: widget \(too common\)/);
+
+  // Nothing resolved: the trace says `repo`, never `focused` with an empty list.
+  const none = json(graph(root, "map", "--focus", "zzqx", "--json"));
+  assert.deepEqual(none.focus, []);
+  assert.deepEqual(none.focus_missing, ["zzqx"]);
+  assert.match(none.trace, /^GRAPH-MAP repo :: /);
+  assert.ok(!/focus=/.test(none.trace), "no `focus=` when nothing resolved");
+
+  // The two exact steps still come first and answer as before.
+  const exact = json(graph(root, "map", "--focus", "requireAuth", "--json"));
+  assert.deepEqual(exact.focus, ["src/auth.js"]);
+  assert.deepEqual(exact.focus_words, []);
+});
+
 // ── 3. the budget cuts a PREFIX ─────────────────────────────────────────────
 
 test("map --budget — a smaller budget gives a SHORTER map, never a different one", () => {

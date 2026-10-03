@@ -50,7 +50,7 @@ dispatches the trace writer ONCE at run end to append them (`SPAWN`/`RETURN`
 come from the `orc-trace.js` hook as they occur):
 
 ```
-[120726 09:14:02.110] writer   DISPATCH orc-claude-writer :: refresh expect=opus-5/low
+[120726 09:14:02.110] writer   DISPATCH orc-claude-writer :: refresh expect=opus-5-5/low
 [120726 09:14:02.230] hook     SPAWN orc-claude-writer-opus-5-low
 [120726 09:15:47.900] hook     RETURN
 [120726 09:15:48.010] writer   VERIFY writer actual=claude-opus-5-5/low ✅ MATCH

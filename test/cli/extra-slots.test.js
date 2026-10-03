@@ -360,3 +360,44 @@ test("GOLDEN: EXTRA_SLOTS matches the markdown slot table, in BOTH directions", 
       assert.ok(row[1].includes(agent), `${slot}: the markdown does not name ${agent}`);
   }
 });
+
+// v2.1.2 F64 — `claude_opus5` was derived by hand, and the fast executor's twin
+// drifted to `-med` while the canonical table said `-low`. The table decides.
+test("slots: every `claude_opus5` equals its row in `_shared/opus5-only.md`", () => {
+  const cliSrc = fs.readFileSync(path.join(__dirname, "..", "..", "bin", "cli.js"), "utf8");
+  const md = fs.readFileSync(
+    path.join(__dirname, "..", "..", "templates", "skills", "_shared", "opus5-only.md"),
+    "utf8"
+  );
+  const table = (md.match(/\*\*Fixed roles\*\*([\s\S]*?)\n\n(?!\|)/) || ["", ""])[1];
+  const twin = new Map(
+    [...table.matchAll(/^\| [^|]+ \| `(orc-[a-z0-9-]+)`[^|]*\| `(orc-[a-z0-9-]+)` \|$/gm)].map((m) => [m[1], m[2]])
+  );
+  assert.equal(twin.get("orc-executor-sonnet-5-med"), "orc-executor-opus-5-low", "the fast executor row is parsed");
+
+  const constBlock = (cliSrc.match(/const EXTRA_SLOTS = \[([\s\S]*?)\n\];/) || ["", ""])[1];
+  let compared = 0;
+  for (const slot of SLOTS) {
+    const row = new RegExp('slot: "' + slot + '"[^}]*?claude: .([^\\]]*).,[ \\n]*claude_opus5: (null|.[^\\]]*.)').exec(constBlock);
+    assert.ok(row, slot + " has no claude_opus5 field");
+    if (row[2] === "null") continue;
+    const opus5 = row[2].match(/orc-[a-z0-9-]+/g);
+    // A default agent with a row in the canonical table is replaced by THAT twin.
+    const want = [...new Set(row[1].match(/orc-[a-z0-9-]+/g).filter((a) => twin.has(a)).map((a) => twin.get(a)))];
+    assert.ok(want.length, slot + " has an opus5 twin and no row in opus5-only.md");
+    assert.deepEqual(opus5, want, slot + ": claude_opus5 differs from opus5-only.md");
+    compared++;
+  }
+  assert.ok(compared >= 3, "quick, fast and the light wiki scanner are compared");
+
+  // The behaviour half: the CLI's answer is the documented, cheaper effort.
+  const p = project();
+  setCfg(p, "opus5_only: true\n");
+  const lane = json(run(p, ["lane", "config", "orc-fast", "--json"]));
+  assert.equal(lane.roles["fast-executor"].agent, "orc-executor-opus-5-low");
+  assert.equal(lane.roles["fast-executor"].forced_by, "opus5_only");
+  const res = json(run(p, ["extra", "resolve", "--slot", "fast-executor", "--json"]));
+  assert.equal(res.claude.agent, "orc-executor-opus-5-low");
+  assert.equal(res.claude.table, "opus5_only");
+  rmrf(p.root);
+});

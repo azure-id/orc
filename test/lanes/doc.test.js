@@ -1704,6 +1704,188 @@ test("doc next: partial mode BLOCKS after each wave, and names the human decisio
   }
 });
 
+/* --------------------------------------------------------------------------
+   v2.1.2 (F07) — the CHECKER's return finally has a recorder.
+
+   `checked` and `findings` were read in five places and written in none, so
+   `orc doc next` named the paid `plan-check` forever and D8/D9 were unreachable
+   through it. These drive a document PAST D7, which no test did before.
+-------------------------------------------------------------------------- */
+
+// Rewrite one section file with a different body — what an edit wave leaves.
+function editPart(root, slug, id, heading, text) {
+  fs.writeFileSync(path.join(root, "orc", "orc-doc", slug, "sections", id + ".md"), `## ${heading}\n\n${text}\n`);
+}
+
+// One full D8 round on one flagged part: edit, confirm, compile.
+function editRound(root, slug, o, n) {
+  editPart(root, slug, o.id, o.heading, `Edit round ${n} of ${o.heading}, written as one unwrapped line.`);
+  assert.strictEqual(cli(["doc", "parts", slug, "--confirm", o.id, "--json", "--dir", root]).status, 0);
+  assert.strictEqual(cli(["doc", "compile", slug, "--dir", root]).status, 0);
+}
+
+test("doc parts --checked: a clean check marks the part `checked`, and `next` moves past plan-check", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "checkedall", "prd").data.slug;
+    shipReady(root, slug);
+    let n = json(cli(["doc", "next", slug, "--json", "--dir", root]));
+    assert.strictEqual(n.action, "plan-check", "every part is written and none was ever checked");
+
+    const ids = json(cli(["doc", "show", slug, "--json", "--dir", root])).outline.map((o) => o.id);
+    const c = cli(["doc", "parts", slug, "--checked", ids.join(","), "--json", "--dir", root]);
+    assert.strictEqual(c.status, 0);
+    const out = json(c);
+    assert.deepStrictEqual(out.checked, ids, "the recorded ids come back, resolved");
+    assert.ok(out.parts.every((p) => p.state === "checked" && p.findings === 0));
+
+    // The loop is gone: nothing is left to check, so the lane reaches the hand-back.
+    const r = cli(["doc", "next", slug, "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1, "D9 is a human decision");
+    assert.strictEqual(json(r).phase, "D9");
+    assert.match(json(r).blocked_by, /Shipping is YOUR decision/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc parts --checked: an unconfirmed or user-edited part is REFUSED by name and nothing is written", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "checkrefuse", "prd").data.slug;
+    const show = writeParts(root, slug);
+    const [a, b, c] = show.outline;
+    const state = path.join(root, "orc", "orc-doc", slug, "doc.json");
+
+    // Nothing confirmed yet: every part is `unconfirmed`.
+    let r = cli(["doc", "parts", slug, "--checked", a.id, "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(json(r).reason, "not-confirmed");
+    assert.deepStrictEqual(json(r).refused, [{ id: a.id, state: "unconfirmed" }]);
+
+    confirmAll(root, slug);
+    editPart(root, slug, b.id, b.heading, "A human changed this line by hand.");
+    const before = fs.readFileSync(state, "utf8");
+
+    // One good id and one bad id in the same call: NOTHING is written.
+    r = cli(["doc", "parts", slug, "--checked", a.id, "--findings", b.id + "=2", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(json(r).reason, "not-confirmed");
+    assert.deepStrictEqual(json(r).refused, [{ id: b.id, state: "user-edited" }]);
+    assert.match(json(r).hint, new RegExp(b.id), "the part is named");
+    assert.strictEqual(fs.readFileSync(state, "utf8"), before, "doc.json did not move by a byte");
+
+    // An unknown id, and a count that is not a count, are refused the same way.
+    r = cli(["doc", "parts", slug, "--checked", "99-nope", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(json(r).reason, "no-such-section");
+    r = cli(["doc", "parts", slug, "--findings", c.id + "=0", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(json(r).reason, "bad-findings");
+    assert.strictEqual(fs.readFileSync(state, "utf8"), before);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc parts --findings: a flagged part routes `next` to plan-edit, and `--confirm` after the edit sends only that part back to the check", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "flagged", "prd").data.slug;
+    shipReady(root, slug);
+    const outline = json(cli(["doc", "show", slug, "--json", "--dir", root])).outline;
+    const bad = outline[1];
+    const clean = outline.filter((o) => o.id !== bad.id).map((o) => o.id);
+
+    const c = cli(["doc", "parts", slug, "--checked", clean.join(","), "--findings", bad.id + "=2", "--json", "--dir", root]);
+    assert.strictEqual(c.status, 0);
+    assert.deepStrictEqual(json(c).flagged, [{ id: bad.id, findings: 2 }]);
+
+    let n = json(cli(["doc", "next", slug, "--json", "--dir", root]));
+    assert.strictEqual(n.phase, "D8");
+    assert.strictEqual(n.action, "plan-edit");
+    assert.strictEqual(n.paid, true);
+    assert.ok(n.command.includes(`--role edit --only ${bad.id}`), "the edit is scoped to the flagged part");
+    const plan = json(cli(["doc", "plan", slug, "--role", "edit", "--only", bad.id, "--json", "--dir", root]));
+    assert.deepStrictEqual(plan.waves.flatMap((w) => w.agents.flatMap((x) => x.sections)), [bad.id]);
+
+    // The edit wave, then its stop sequence. The findings described the OLD body.
+    editRound(root, slug, bad, 1);
+    const row = json(cli(["doc", "parts", slug, "--json", "--dir", root])).parts.find((p) => p.id === bad.id);
+    assert.strictEqual(row.state, "written");
+    assert.strictEqual(row.findings, 0);
+    assert.strictEqual(row.edit_rounds, 1);
+
+    n = json(cli(["doc", "next", slug, "--json", "--dir", root]));
+    assert.strictEqual(n.action, "plan-check");
+    const check = json(cli(["doc", "plan", slug, "--role", "check", "--json", "--dir", root]));
+    assert.deepStrictEqual(check.waves.flatMap((w) => w.agents.flatMap((x) => x.sections)), [bad.id], "only the edited part is re-read");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc next: after 2 edit rounds a flagged part BLOCKS and names the human decision", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "capped", "prd").data.slug;
+    shipReady(root, slug);
+    const outline = json(cli(["doc", "show", slug, "--json", "--dir", root])).outline;
+    const bad = outline[0];
+    cli(["doc", "parts", slug, "--checked", outline.slice(1).map((o) => o.id).join(","), "--json", "--dir", root]);
+
+    for (const round of [1, 2]) {
+      cli(["doc", "parts", slug, "--findings", bad.id + "=1", "--json", "--dir", root]);
+      assert.strictEqual(json(cli(["doc", "next", slug, "--json", "--dir", root])).action, "plan-edit", "round " + round + " is still an edit");
+      editRound(root, slug, bad, round);
+    }
+
+    // The third FINDINGS return is not a third round. It is a question.
+    cli(["doc", "parts", slug, "--findings", bad.id + "=1", "--json", "--dir", root]);
+    const r = cli(["doc", "next", slug, "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    const d = json(r);
+    assert.strictEqual(d.phase, "D8");
+    assert.strictEqual(d.command, null);
+    assert.match(d.blocked_by, /2 edit rounds/);
+    assert.ok(d.blocked_by.includes(bad.heading), "the section is named");
+    assert.ok(d.alternatives.includes(`orc doc parts ${slug} --checked ${bad.id}`), "accepting it is one command");
+
+    // Accepted by the human → the lane reaches the hand-back.
+    assert.strictEqual(cli(["doc", "parts", slug, "--checked", bad.id, "--json", "--dir", root]).status, 0);
+    assert.strictEqual(json(cli(["doc", "next", slug, "--json", "--dir", root])).phase, "D9");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc plan --role check: a checked part whose hash has not moved is not re-checked", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "skipcheck", "prd").data.slug;
+    shipReady(root, slug);
+    const outline = json(cli(["doc", "show", slug, "--json", "--dir", root])).outline;
+    const sections = (p) => p.waves.flatMap((w) => w.agents.flatMap((x) => x.sections));
+    const planCheck = () => cli(["doc", "plan", slug, "--role", "check", "--json", "--dir", root]);
+    assert.strictEqual(sections(json(planCheck())).length, outline.length, "nothing was checked yet");
+
+    cli(["doc", "parts", slug, "--checked", outline.slice(1).map((o) => o.id).join(","), "--json", "--dir", root]);
+    assert.deepStrictEqual(sections(json(planCheck())), [outline[0].id], "the hash turns a re-check into a diff");
+
+    cli(["doc", "parts", slug, "--checked", outline[0].id, "--json", "--dir", root]);
+    const none = planCheck();
+    assert.strictEqual(none.status, 1, "an empty plan is an ANSWER, exit 1");
+    assert.deepStrictEqual(json(none).waves, []);
+
+    // `checked` stays only while the hash holds: one moved part comes back.
+    editPart(root, slug, outline[2].id, outline[2].heading, "The body moved after the check.");
+    cli(["doc", "parts", slug, "--confirm", outline[2].id, "--json", "--dir", root]);
+    assert.deepStrictEqual(sections(json(planCheck())), [outline[2].id]);
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("doc: assemble / extract / splice still exit as they did, on a v1 document", () => {
   const { root } = freshInstall();
   try {

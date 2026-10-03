@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.1.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.1.2-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v2.1.1** · updated 02-10-2026 · [full changelog](CHANGELOG.md)
+**Latest: v2.1.2** · updated 03-10-2026 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -266,7 +266,7 @@ ORC have terminal hook to see: Context Window %, 5 Hour usage %, Weekly usage % 
 | **`/orc-grill`** | You have one idea and it is still vague. It asks rounds of questions, **looks facts up itself** instead of making you recite your own codebase, and never answers its own question. Ends when *you* say the idea matches what you meant. | [see it](mock-run/orc-grill.md) |
 | **`/orc-analyze`** | A document or a request → a scope-bounded, code-grounded spec. Every claim carries `file:line` evidence or becomes a question. Deep mode adds parallel scouts. | [see it](templates/skills/orc-analyze/examples/analyze-mock.md) |
 | **`/orc-plan`** | A request or a spec → a real task plan: grounded files, dependencies, facets, and a test disposition per task. | [see it](mock-run/orc-plan.md) |
-| **`/orc-doc`** | Writes the long document — a PRD, a TSD, a cross-team agreement, a status report or a runbook — as portable Markdown that imports cleanly into Notion, Obsidian, Docs, Coda, Craft and GitHub. **ORC never reads the document body**: each section is its own file under `sections/`, each writer owns exactly one of them, each checker reads one bounded part, and `document.md` is a build artifact rebuilt for free. Every wave is a stop you can walk away from, and it resumes months later without you explaining anything twice. | [see it](mock-run/orc-doc.md) |
+| **`/orc-doc`** | Writes the long document — a PRD, a TSD, a cross-team agreement, a status report or a runbook — as portable Markdown that imports cleanly into Notion, Obsidian, Docs, Coda, Craft and GitHub. **ORC never reads the document body**: each section is its own file under `sections/`, each writer owns exactly one of them, each checker reads only the bounded part files of one slice, and `document.md` is a build artifact rebuilt for free. Every wave is a stop you can walk away from, and it resumes months later without you explaining anything twice. | [see it](mock-run/orc-doc.md) |
 | **`/orc-route`** | You have a plan — which lane should build it? It names one lane, the runners-up with what each costs you, and any lane that is impossible with the condition blocking it. **It refuses to route a sentence**, because that would be guessing. | [see it](mock-run/orc-route.md) |
 | **`/orc-explain`** | "Wait, what?" It says the last message again: the point first, then the background it assumed, then every ORC-only word defined in your project's terms. | [see it](mock-run/orc-explain.md) |
 | **`/orc-poly`** | One change across two or more repos, without drift. Peer source is read-only; it freezes the shared boundary into a contract and writes one plan per repo. It never builds. | [see it](templates/skills/orc-poly/examples/poly-run-mock.md) |
@@ -419,8 +419,8 @@ orc graph gain                        # what the map put in, and an estimate of 
   prints only the OUTSIDE view of a file an agent is about to read in full.
   `--format tree` names each column once instead of on every row.
 - **`orc graph map` answers "which files matter here"** before you know a file
-  name, inside a budget. `--focus` re-ranks the whole repository around the files
-  or names your request already mentioned. **Rank is a hint about where to look
+  name, inside a budget. `--focus` re-ranks the whole repository around the files,
+  names or plain words your request already mentioned. **Rank is a hint about where to look
   first**, never proof that a file matters to a change.
 - **It shows where code is. It does not replace reading it.** Agents still read
   the line range before they act. A card header says `coverage partial 327-466`
@@ -741,26 +741,32 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v2.1.1 — the quick and fast lanes move to Sonnet 5 _(2026-10-02)_
+### v2.1.2 — a typed /orc meets the effort guard, and the budget uses each model's price _(2026-10-03)_
 
-- **`/orc-quick` offers Sonnet 5 medium and Opus 5.5 low.** For code:
-  `orc-executor-sonnet-5-med` or `orc-executor-opus-5-low`. For a question:
-  `orc-recon-sonnet-5-med` or `orc-recon-opus-5-low`.
-- **`/orc-fast` uses `orc-executor-sonnet-5-med`** (it used Sonnet 4.6 high). Run it
-  from a Sonnet 5 or Opus main session.
-- **`/orc` examples and the "cheap subagent" rule name Sonnet 5.** Sonnet 4.6 stays
-  only for the graph noter, the scout, `orc diy` choices and opt-in names.
-- **The recon agent has a new name:** `orc-recon-sonnet-4-6-med` →
-  `orc-recon-sonnet-5-med`.
-- **`orc extra`:** the `quick-executor` slot uses `orc-executor-sonnet-5-med`. The
-  `extra_fallback_agent` options show `orc-executor-sonnet-5-high` (not Sonnet 4.6).
+- **The effort guard runs for a typed `/orc` and `/orc-diy`.** A second event,
+  `UserPromptExpansion`, stops a session below the necessary effort at $0. The gate
+  fails open where the ORC status line does not run (possibly the desktop app Code
+  tab, not checked yet). An older Claude Code build is not verified.
+- **`orc budget` prices each row at its pinned model** (it used the Opus 4.8 rate for
+  all). The USD figures are lower. Tokens and quota do not change.
+- **New: `orc wait start` and `orc wait end`** record a wait and write the `WAIT`
+  trace line. **New: `orc doc parts --checked` and `--findings`** record a check, so
+  `orc doc next` does not name the paid check again.
+- **`orc graph map --focus <word>` accepts a plain word.**
+- **Fixes:** `/orc-fix` does not read a stale `.current` as a host run. `orc boundary
+  status` reads block lists. `orc pact`, `orc aftermath status` and `orc pr stack
+  status` give correct results. The trace accepts `DOC`, `WAIT` and `GRAPH-COVERAGE`.
+- **Changed exit codes:** `orc budget forecast` with no plan exits 3 (was 1). A
+  block-list REFUSE card exits 2 (was 3). A READY stack plan from v2.1.1 can show
+  NOT READY.
 
-**What you have to do:** `orc update --prune`. If a script names
-`orc-recon-sonnet-4-6-med`, change it to `orc-recon-sonnet-5-med`.
+**What you have to do:** run `orc update` once. It adds the `UserPromptExpansion`
+entry to `settings.json`.
 
 <details>
-<summary><strong>Earlier releases</strong> — 128 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 129 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.1.1** — the quick and fast lanes move to Sonnet 5 · _2026-10-02_
 - **v2.1.0** — the review counts, the score table moves up, and old logs can go · _2026-10-02_
 - **v2.0.4** — design the status line to the last cell · _2026-09-30_
 - **v2.0.3** — the status line you designed is the status line you see · _2026-09-30_

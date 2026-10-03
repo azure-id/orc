@@ -24,8 +24,8 @@ version of a reference you haven't loaded this run. Detect the stack from the re
 
 Confirm you are **Opus 4.8 high**, or **Opus 5.5 / Fable 5 at medium+** (both clear
 the guard from medium up; Opus 5.5 also unlocks the [90,100] executor band). Effort
-is hard-blocked by the `orc-effort-guard.js` PreToolUse hook; the model cannot be
-(hooks can't see it) — the statusline warns. On a weaker tier **STOP immediately**
+is hard-blocked by `orc-effort-guard.js` (a Skill call: the live effort; a typed `/orc`:
+the status line's reading, never a guess); the model cannot be — the statusline warns. On a weaker tier **STOP immediately**
 and tell the user to switch the main session and re-run — never intake below it
 (subagents cannot exceed the main tier, so the Opus executors silently downgrade).
 
@@ -100,8 +100,8 @@ session on Opus or the Opus pins silently fall back (the original "wrong model" 
 
 ## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-- **Calls:** `orc lane calls orc --json` names every call and its exit codes.
-  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Calls:** `orc lane calls orc --json` names shared calls and exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Own calls are here; make no other.
 - **Config:** `orc lane config orc --json`. Obey `effective`, print every line
   in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
   Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).

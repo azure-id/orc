@@ -244,6 +244,7 @@ function listSkillNames() {
 function nodeCmd(absPath) {
   return `node "${absPath.replace(/\\/g, "/")}"`;
 }
+const TYPED_GATE_MATCHER = "orc|orc-diy"; // the skills the effort guard gates, typed (F13)
 
 // Install the ORC guard scripts and MERGE their wiring into settings.json.
 // Non-destructive: never clobbers an existing statusLine, never duplicates the
@@ -292,6 +293,7 @@ function installGuards(claudeDir) {
       );
       console.log("     Add these manually so ORC is guarded:");
       console.log(`       PreToolUse (matcher \"Skill\"): ${guardCmd}`);
+      console.log(`       UserPromptExpansion (matcher "${TYPED_GATE_MATCHER}"): ${guardCmd}`);
       console.log(`       statusLine: ${statusCmd}`);
       return;
     }
@@ -317,6 +319,28 @@ function installGuards(claudeDir) {
     console.log("  add   settings.json → PreToolUse effort guard (hard-block)");
   } else {
     console.log("  upd   settings.json → PreToolUse effort guard path");
+  }
+
+  // 1b) The typed-command gate (v2.1.2, F13) — the SAME file on a second
+  //     event. A typed /orc or /orc-diy loads the skill with no Skill tool
+  //     call, so the entry above never sees it. The matcher is an exact list,
+  //     so the hook starts for these two commands and for nothing else.
+  settings.hooks.UserPromptExpansion = settings.hooks.UserPromptExpansion || [];
+  let typedGated = false;
+  for (const entry of settings.hooks.UserPromptExpansion) {
+    for (const h of entry.hooks || []) {
+      if (typeof h.command === "string" && h.command.includes("orc-effort-guard")) {
+        h.command = guardCmd; // keep the path current
+        entry.matcher = TYPED_GATE_MATCHER; // repair a hand-edited matcher
+        typedGated = true;
+      }
+    }
+  }
+  if (!typedGated) {
+    settings.hooks.UserPromptExpansion.push({ matcher: TYPED_GATE_MATCHER, hooks: [{ type: "command", command: guardCmd }] });
+    console.log("  add   settings.json → UserPromptExpansion effort gate (typed /orc, /orc-diy)");
+  } else {
+    console.log("  upd   settings.json → UserPromptExpansion effort gate path");
   }
 
   // 2) statusLine model warning — set ONLY if the user has none (never clobber).
@@ -3556,7 +3580,7 @@ const LANE_CALLS = {
   "trace-write": {
     cmd: "orc trace write --packet - [--json]",
     what: "write ONE phase packet (stdin, plain YAML or JSON) into the run's trace pair",
-    exits: { 0: "written", 1: "usage or unreadable input", 2: "invalid packet — unknown verb, bad ts, parse error; nothing written", 3: "trace-file state — no `.current` on a later packet, or a rename target in the way; nothing written" },
+    exits: { 0: "written (`lines_written` 0 when every ASK was refused — read `ask_rejected`)", 1: "usage or unreadable input", 2: "invalid packet — unknown verb, bad ts, parse error; nothing written", 3: "trace-file state or any other write error; nothing written" },
     states: null,
     cost: "free",
     when: "at every phase close, in the same tool block as the next phase's first dispatch",
@@ -3580,8 +3604,9 @@ const LANE_CALLS = {
   "wiki-status": {
     cmd: "orc wiki status [--json]",
     what: "does a wiki EXIST, and how fresh is it",
-    exits: { 0: "answered in every state — read `tier`" },
-    states: ["none", "FRESH", "AGING", "STALE"],
+    // v2.1.2 F03 — `state` and `tier` are TWO fields; the old list mixed them.
+    exits: { 0: "answered in every state — read `state`; when it is `registered`, read `tier` (FRESH · AGING · STALE · unknown)" },
+    states: ["none", "unregistered", "corrupt", "drifted", "registered"],
     cost: "free",
     when: "once, at preflight, before any decision that needs project knowledge",
     on_absent: "`none` means absent; say so in ONE user line and continue — a missing wiki is never a blocker",
@@ -3590,7 +3615,9 @@ const LANE_CALLS = {
     // v1.9.0: /orc-mini joins. It always consulted the wiki; it now selects PAGE
     // PATHS for its slices instead of reading page bodies into its own context,
     // and the tier this command computes is what that selection rests on.
-    lanes: ["orc", "orc-boundary", "orc-brainstorm", "orc-fast", "orc-grill", "orc-mini", "orc-poly", "orc-quick", "orc-route", "orc-wiki"],
+    // v2.1.2 F03: /orc-learn and the /orc-diy wiki gate join — both computed the
+    // tier by hand, which this row's own `never` forbids.
+    lanes: ["orc", "orc-boundary", "orc-brainstorm", "orc-diy", "orc-fast", "orc-grill", "orc-learn", "orc-mini", "orc-poly", "orc-quick", "orc-route", "orc-wiki"],
   },
   "pattern-status": {
     cmd: "orc pattern status <lang>",
@@ -3642,7 +3669,7 @@ const LANE_CALLS = {
   "review-policy": {
     cmd: "orc review policy [--json]",
     what: "does the project's CLAUDE.md / AGENTS.md name its own review — the file, the line, the quote and the name",
-    exits: { 0: "answered in every state — read `policy` (orc | project)" },
+    exits: { 0: "answered in every state — read `policy` (orc | project)", 1: "usage" },
     states: ["orc", "project"],
     cost: "free",
     when: "at preflight, through the `review-policy` probe of `orc lane config`",
@@ -3786,7 +3813,7 @@ const LANE_CALLS = {
     cmd: "orc graph notes pending --files <a,b> [--at wave|end] --if-enabled [--json]",
     what: "which changed functions have no note for their current body — the input to one notes batch",
     exits: { 0: "rows to note — dispatch the noter", 1: "no graph index, or no --files", 3: "off — `code_graph` or `code_graph_notes` is off", 5: "none pending, fewer than `code_graph_notes_min`, or deferred to the other `--at` site — dispatch nothing" },
-    states: ["pending", "below-min", "none", "deferred", "off"],
+    states: ["pending", "below-min", "none", "deferred", "off", "usage"],
     cost: "free",
     when: "after the update that follows a wave, a green smoke gate or a code-writing request — only while notes are on",
     on_absent: "exit 5 is an ANSWER — the symbols wait for a later batch and nothing is lost",
@@ -3801,19 +3828,19 @@ const LANE_CALLS = {
   "gotcha-list": {
     cmd: "orc gotcha list [--archived] [--json]",
     what: "the live repair-memory entries, or the archived tail",
-    exits: { 0: "answered" },
+    exits: { 0: "entries listed", 1: "the ledger is empty — an ANSWER" },
     states: null,
     cost: "free",
     when: "on demand, when the user asks what this project has already gotten wrong",
-    on_absent: "an empty list is an ANSWER",
+    on_absent: "exit 1 is an ANSWER — inject nothing",
     canonical: "_shared/gotchas.md",
     never: "never write the ledger from a lane — a gotcha is recorded only on a red → green repair",
     lanes: ["orc-boundary", "orc-brainstorm", "orc-grill"],
   },
   "extra-resolve": {
-    cmd: "orc extra resolve <score> [--json]",
+    cmd: "orc extra resolve <score> | --slot <slot> [--json]",
     what: "does this SCORE route to a non-Claude worker, and what is the Claude answer it displaced",
-    exits: { 0: "extra", 1: "claude" },
+    exits: { 0: "extra", 1: "claude — or a bad score (read `reason`)", 2: "unknown slot, or both a score and a slot" },
     states: null,
     cost: "free",
     when: "per scored task, before dispatch",
@@ -3823,9 +3850,9 @@ const LANE_CALLS = {
     lanes: ["orc", "orc-diy", "orc-doc", "orc-fast", "orc-quick", "orc-test", "orc-wiki"],
   },
   "extra-role": {
-    cmd: "orc extra role list|set|clear [--json]",
+    cmd: "orc extra role list|show|set|rm [--json]",
     what: "which fixed POSITION is held by a non-Claude worker",
-    exits: { 0: "answered" },
+    exits: { 0: "answered — list: at least one slot routes", 1: "list: no slot routes (an ANSWER) · show/set/rm: refused, read `reason`", 2: "unknown slot" },
     states: null,
     cost: "free",
     when: "before dispatching a role that has no score",
@@ -3835,9 +3862,10 @@ const LANE_CALLS = {
     lanes: ["orc-diy", "orc-doc", "orc-fast", "orc-quick", "orc-wiki"],
   },
   "extra-dispatch": {
-    cmd: "orc extra dispatch --slice <f> (--score N | --slot S) [--json]",
+    // The score or the slot is a FIELD of the slice, never a flag.
+    cmd: "orc extra dispatch --task <slice.json> [--json]",
     what: "send ONE task to a non-Claude worker and get a validated return",
-    exits: { 0: "dispatched (read `outcome`)", 1: "refused — read `reason`" },
+    exits: { 0: "done", 1: "failed — read `reason`; run `orc extra reconcile <task>` first", 2: "bad slice or usage — nothing was sent", 3: "not routed, or held by the concurrency cap — dispatch the pinned Claude agent BY NAME", 4: "partial — reconcile before anything else" },
     states: null,
     cost: "paid-per-task",
     when: "per task, only after `extra resolve` or `extra role` said extra",
@@ -3861,7 +3889,7 @@ const LANE_CALLS = {
   "extra-stats": {
     cmd: "orc extra stats [--since <d>] [--json]",
     what: "what the foreign dispatches actually cost, per profile",
-    exits: { 0: "answered" },
+    exits: { 0: "answered", 1: "zero dispatches in the window — an ANSWER" },
     states: null,
     cost: "free",
     when: "on demand, and at the end of a run that dispatched foreign",
@@ -3873,7 +3901,7 @@ const LANE_CALLS = {
   "extra-rates": {
     cmd: "orc extra rates [--json]",
     what: "the dated price table for foreign models, and what is missing from it",
-    exits: { 0: "answered" },
+    exits: { 0: "every model is priced", 1: "a model has no rate — it reads as an EM DASH, never zero" },
     states: null,
     cost: "free",
     when: "before quoting any dollar figure for a foreign dispatch",
@@ -3900,7 +3928,7 @@ const LANE_CALLS = {
     exits: { 0: "compiled", 1: "refused" },
     states: null,
     cost: "free",
-    when: "only when the user asks, or after `diy status` reports STALE",
+    when: "only on `/orc-diy compile` — the user's explicit ask. A STALE status is REPORTED with this as the fix; the lane never runs it",
     on_absent: "a refusal names its reason; never stitch a flow in-session",
     canonical: null,
     never: "never edit FLOW-COMPILED.md or flow.lock.json by hand, and never patch a flow conversationally",
@@ -3909,7 +3937,7 @@ const LANE_CALLS = {
   "wiki-sync": {
     cmd: "orc wiki sync [--check]",
     what: "re-derive wiki/INDEX.md and wiki-meta.json from the doc headers",
-    exits: { 0: "in sync", 1: "--check found drift" },
+    exits: { 0: "in sync", 1: "no wiki docs, or (--check) drift or a crosslink alarm" },
     states: null,
     cost: "free",
     when: "after every scan-task, at every pause, and at Phase 3",
@@ -3921,8 +3949,8 @@ const LANE_CALLS = {
   "wiki-impact": {
     cmd: "orc wiki impact [--json]",
     what: "does the wiki need a DELTA refresh or a FULL one",
-    exits: { 0: "fresh", 1: "delta", 2: "full recommended", 3: "structural" },
-    states: null,
+    exits: { 0: "CLEAN — the wiki still covers HEAD", 1: "cannot compute — no wiki, not registered, no scan_commit, or git failed (read `reason`)", 2: "DELTA — refresh only the touched docs", 3: "FULL recommended — read `reasons` (affected %, STRUCTURAL, aging); advisory, the user decides" },
+    states: ["CLEAN", "DELTA", "FULL", "unavailable"],
     cost: "free",
     when: "before any refresh, to choose its shape",
     on_absent: "delta is the DEFAULT; a full refresh is recommended, never silent",
@@ -3933,7 +3961,7 @@ const LANE_CALLS = {
   "wiki-debt": {
     cmd: "orc wiki debt [--json]",
     what: "what the wiki is missing, as a report",
-    exits: { 0: "answered" },
+    exits: { 0: "no debt", 1: "debt pending — read `rows`", 3: "no wiki, or not registered" },
     states: null,
     cost: "free",
     when: "on demand",
@@ -3945,7 +3973,7 @@ const LANE_CALLS = {
   "wiki-usage": {
     cmd: "orc wiki usage [--json]",
     what: "which wiki docs are actually being read",
-    exits: { 0: "answered" },
+    exits: { 0: "answered", 1: "no trace recorded a consult yet — `used: null`, never zero" },
     states: null,
     cost: "free",
     when: "when planning a refresh or a retirement",
@@ -3969,7 +3997,7 @@ const LANE_CALLS = {
   "challenge-status": {
     cmd: "orc challenge status <slug> [--json]",
     what: "where a challenge cycle stands right now",
-    exits: { 0: "answered" },
+    exits: { 0: "passed, or nothing blocking", 1: "blocking findings, or STALE-PASS", 2: "a P0, or the ledger was TAMPERED", 3: "no such cycle, or unreadable" },
     states: null,
     cost: "free",
     when: "at entry, and after any record",
@@ -3979,9 +4007,9 @@ const LANE_CALLS = {
     lanes: ["orc-analyze", "orc-challenge"],
   },
   "challenge-init": {
-    cmd: "orc challenge init <slug> --goal … --audience … --done-means … --council …",
+    cmd: "orc challenge init <slug> --artifact <path> (--template <path> | --no-template) --goal … --audience … --done-means … --council …",
     what: "freeze the goal, the audience, the finish line and the council roster",
-    exits: { 0: "created", 1: "refused — a required answer is missing, BY NAME" },
+    exits: { 0: "created", 2: "refused — a required answer is missing, BY NAME" },
     states: null,
     cost: "free",
     when: "once per artifact, before any judging",
@@ -3993,7 +4021,7 @@ const LANE_CALLS = {
   "challenge-report": {
     cmd: "orc challenge report <slug> [--json]",
     what: "the findings and the fix brief for a cycle",
-    exits: { 0: "answered" },
+    exits: { 0: "answered", 3: "no such cycle" },
     states: null,
     cost: "free",
     when: "after a verdict is recorded",
@@ -4005,7 +4033,7 @@ const LANE_CALLS = {
   "pact-status": {
     cmd: "orc pact status [--json]",
     what: "which promises this project makes, and which are in doubt",
-    exits: { 0: "answered" },
+    exits: { 0: "every promise HOLDING (UNCHECKABLE never raises the code)", 1: "a promise DRIFTED", 2: "a promise is BROKEN", 3: "no ledger yet — a first run (an ANSWER)" },
     states: ["HOLDING", "DRIFTED", "UNCHECKABLE", "BROKEN"],
     cost: "free",
     when: "at preflight when the run will touch an anchored area",
@@ -4015,9 +4043,9 @@ const LANE_CALLS = {
     lanes: ["orc", "orc-aftermath", "orc-pact"],
   },
   "boundary-status": {
-    cmd: "orc boundary status [--area <a>] [--json]",
+    cmd: "orc boundary status [<area path>] [--json]",
     what: "may ORC attempt this area itself",
-    exits: { 0: "answered" },
+    exits: { 0: "every carded area EXECUTE", 1: "an area ESCALATES", 2: "an area REFUSES", 3: "no card, a malformed card, or every card stale — UNKNOWN, never safe" },
     states: ["EXECUTE", "ESCALATE", "REFUSE"],
     cost: "free",
     when: "at preflight, per area the run will touch",
@@ -4029,8 +4057,8 @@ const LANE_CALLS = {
   "aftermath-status": {
     cmd: "orc aftermath status [--json]",
     what: "did what we shipped hold up",
-    exits: { 0: "answered" },
-    states: null,
+    exits: { 0: "nothing came back", 1: "CHURN on a graded run", 2: "a run was REVERTED", 3: "not a git work tree, or too shallow to grade (an ANSWER)" },
+    states: ["HELD", "CHURN", "REVERTED", "TOO_RECENT", "SHALLOW"],
     cost: "free",
     when: "at preflight, ONLY when there is a real churn signal in the area about to be touched",
     on_absent: "a run under 7 days old is TOO_RECENT and KEEPS ITS SLOT — an answer, not a gap",
@@ -4039,21 +4067,27 @@ const LANE_CALLS = {
     lanes: ["orc", "orc-aftermath"],
   },
   "budget-forecast": {
-    cmd: "orc budget forecast --plan <f> [--json]",
+    // v2.1.2 F16 — the plan is a POSITIONAL, and exit 1 is an ANSWER here.
+    cmd: "orc budget forecast <plan-file> [--json] [--naive] [--as tokens|usd|quota|context|all]",
     what: "what will this PLAN cost, as a range with a sample count",
-    exits: { 0: "answered", 1: "refused — no history to forecast from" },
+    exits: {
+      0: "answered — every band has budget_min_samples or more",
+      1: "answered — a LOW-CONFIDENCE band (fewer samples than budget_min_samples): the top of the range is soft",
+      2: "answered — a task forecasts above 90% of its model's context window",
+      3: "refused — no plan file, no `- id:` task blocks, or no history to forecast from",
+    },
     states: null,
     cost: "free",
     when: "after planning, before the first wave",
-    on_absent: "no history → it REFUSES; `--naive` is the price-table floor, and a refusal is still shown once",
+    on_absent: "no history → it REFUSES with exit 3; `--naive` is the price-table floor, and a refusal is still shown once",
     canonical: null,
     never: "never quote dollars without a dated price table, a quota without a known plan, or a figure without its sample count",
     lanes: ["orc-budget", "orc-route"],
   },
   "budget-actual": {
-    cmd: "orc budget actual [--since <d>] [--json]",
+    cmd: "orc budget actual <run-slug> [--json]",
     what: "what a run actually cost",
-    exits: { 0: "answered" },
+    exits: { 0: "answered", 3: "no run matches the slug — read `known`" },
     states: null,
     cost: "free",
     when: "after a run, or on demand",
@@ -4066,7 +4100,7 @@ const LANE_CALLS = {
     cmd: "orc run list [--json]",
     what: "which runs are unfinished, and where each one stands",
     exits: { 0: "answered" },
-    states: ["waiting", "closed"],
+    states: ["waiting", "closed", "done", "empty"],
     cost: "free",
     when: "at entry, when resuming",
     on_absent: "a listing may only claim what the disk proves — a missing `state-of-play.md` never means incomplete",
@@ -4089,11 +4123,11 @@ const LANE_CALLS = {
   "export-import": {
     cmd: "orc export import [--json]",
     what: "read an existing AGENTS.md or .cursorrules and say what is already wrong",
-    exits: { 0: "answered" },
+    exits: { 0: "answered", 3: "nothing to import — an ANSWER" },
     states: null,
     cost: "free",
     when: "on demand, in a repo that never ran ORC",
-    on_absent: "nothing to import is an ANSWER",
+    on_absent: "exit 3 is an ANSWER — say so in one line",
     canonical: null,
     never: "never apply an import without the user's yes",
     lanes: ["orc-export", "orc-pact"],
@@ -4671,19 +4705,21 @@ const LANE_TRACE = {
   // `spine_verbs` (v2.0.0 T1): the verbs a lane's own SPINE emits outside
   // any declared phase row — orc's ultra gates, and orc-mini, whose pipeline is
   // still in-spine. They join `trace_grammar` like a phase's `trace_verbs`.
-  orc: { tier: "Build lanes", token: "orc", spine_verbs: ["ADVISE", "JUDGE"] },
+  // v2.1.2 F04/F68: a graph read a lane may make hands it that read's verb —
+  // mini and fast run their graph steps in-spine, and `coverage` had no verb.
+  orc: { tier: "Build lanes", token: "orc", spine_verbs: ["ADVISE", "JUDGE", "GRAPH-COVERAGE"] },
   "orc-mini": {
     tier: "Build lanes",
     token: "mini",
-    spine_verbs: ["PHASE", "GATE", "OUTCOME", "DRIFT", "TDD-RED", "TDD-GREEN", "FINDING", "FINDING-OUTCOME", "REVIEW-WHICH", "GRAPH-CONSULT", "GRAPH-UPDATE", "GRAPH-COMPLEXITY", "GRAPH-NOTES"],
+    spine_verbs: ["PHASE", "GATE", "OUTCOME", "DRIFT", "TDD-RED", "TDD-GREEN", "FINDING", "FINDING-OUTCOME", "REVIEW-WHICH", "GRAPH-CONSULT", "GRAPH-MAP", "GRAPH-UPDATE", "GRAPH-COMPLEXITY", "GRAPH-CHANGES", "GRAPH-NOTES", "GRAPH-GAIN"],
   },
-  "orc-fast": { tier: "Build lanes", token: "fast" },
+  "orc-fast": { tier: "Build lanes", token: "fast", spine_verbs: ["GRAPH-UPDATE", "GRAPH-NOTES"] },
   "orc-wiki": { tier: "Multi-dispatch", token: "wiki" },
   "orc-pr-driver": { tier: "Multi-dispatch", token: "prdriver" },
   "orc-diy": { tier: "Composed", token: "diy" },
   "orc-quick": { tier: "Iterative", token: "quick" },
   "orc-challenge": { tier: "Iterative", token: "challenge" },
-  "orc-doc": { tier: "Iterative", token: "doc" },
+  "orc-doc": { tier: "Iterative", token: "doc", spine_verbs: ["DOC"] },
   "orc-test": { tier: "Iterative", token: "test" },
   "orc-claude": { tier: "Single-dispatch", token: "claude" },
   "orc-analyze": { tier: "Single-dispatch", token: "analyze" },
@@ -4728,6 +4764,7 @@ const TRACE_VERBS = {
   "GRAPH-CHANGES": { grammar: "GRAPH-CHANGES <found|none> :: symbols=<n> high=<n> medium=<n> low=<n> gen=<n>", emitter: "orc → writer", meaning: "one line at review, the `trace` field of `orc graph changes --json`, verbatim", owner: "_shared/phases/trace-verbs.md" },
   "GRAPH-COMPLEXITY": { grammar: "GRAPH-COMPLEXITY <mini-ok|recommend-orc> :: files=<n> callers=<n> caller_files=<n> maybe=<n> tests=<n> risk=<n> cochange=<n> gen=<n>", emitter: "orc → writer", meaning: "one line per /orc-mini run, the `trace` field of the `--complexity` impact call, verbatim", owner: "_shared/phases/trace-verbs.md" },
   "GRAPH-COCHANGE": { grammar: "GRAPH-COCHANGE <found|none> :: rows=<n> commits=<n>", emitter: "orc → writer", meaning: "one line per planning batch, for the file that produced the widest answer", owner: "_shared/phases/trace-verbs.md" },
+  "GRAPH-COVERAGE": { grammar: "GRAPH-COVERAGE <clean|gaps> :: paths=<n> gaps=<n> gen=<n>", emitter: "orc → writer", meaning: "the `trace` field of `orc graph coverage --json` — which files a card's silence can be trusted on", owner: "_shared/phases/trace-verbs.md" },
   "GRAPH-HINT": { grammar: "GRAPH-HINT injected=<n> subagent_start=<n> read_notes=<n> updates=<n>", emitter: "orc → writer", meaning: "ONE line per phase close, the graph hook's counters; omitted when the counter file does not exist", owner: "_shared/phases/trace-verbs.md" },
   "GRAPH-GAIN": { grammar: "GRAPH-GAIN paid=<n> low=<n> high=<n> calls=<n>", emitter: "orc → writer", meaning: "ONE line per run at ship; `paid` is exact, `low`/`high` are an estimate never collapsed into one number", owner: "_shared/phases/trace-verbs.md" },
   "GRAPH-NOTES": { grammar: "GRAPH-NOTES <applied|below-min|none|deferred|off|skipped> :: <detail>", emitter: "orc → writer", meaning: "one notes batch; `applied` copies the noter's one-line return verbatim", owner: "_shared/phases/trace-verbs.md" },
@@ -4746,7 +4783,8 @@ const TRACE_VERBS = {
   OUTCOME: { grammar: "OUTCOME task=<id> score=<n> band=<range> model=<m> retries=<n> requeues=<n> needs_context=<n> unmet=<n>", emitter: "orc → writer", meaning: "task closed — links the scoring band to what it actually took", owner: "_shared/phases/execution.md" },
   FINDING: { grammar: "FINDING p0=<n> p1=<n> p2=<n> p3=<n>[ pre=<n> suppressed=<n> folded=<n>]", emitter: "reviewer→orc → writer", meaning: "review outcome (P0–P3 severity ladder); the tail counts the after-filter's buckets", owner: "_shared/phases/review.md" },
   "REVIEW-WHICH": { grammar: "REVIEW-WHICH chose=<orc|project|skip> name=<the review the rule names> by=<user|ledger|learned> :: <file:line of the rule>", emitter: "orc → writer", meaning: "the answer to §0 \"which review\" when the project names its own review — written ALWAYS, also under habits off; the FINISH nudge reads it", owner: "_shared/phases/trace-verbs.md" },
-  FIX: { grammar: "FIX source=<sonar|ci|defect|pr|review|other> introduced_by=<orc|ai|human|unknown> by=<user|evidence> obs=<id8>[ missed_by=<run>] :: <path:lines> <rule or finding>", emitter: "cli", meaning: "one fix recorded by `orc fix record` (/orc-fix) into the HOST run's trace — the CLI writes it, never a packet", owner: "orc-fix/SKILL.md" },
+  FIX: { grammar: "FIX source=<sonar|ci|defect|pr|review> introduced_by=<orc|ai|human|unknown> by=<user|evidence> obs=<id8>[ missed_by=<run>] :: <path:lines> <rule or finding>", emitter: "cli", meaning: "one fix recorded by `orc fix record` (/orc-fix) into the HOST run's trace — the CLI writes it, never a packet — `source` is the FILED kind: a class `other` is filed as `defect`", owner: "orc-fix/SKILL.md" },
+  WAIT: { grammar: "WAIT mode=<safe|soft|hard> requested=<n>m start=<HH:MM> end=<HH:MM> hops=<planned>/<max> trigger=<user|gate> · WAIT end :: done=<k>/<planned> reason=<elapsed|recovered|cancelled|max-hops> · WAIT block :: reason=\"<why>\" by=user · WAIT unblock", emitter: "cli", meaning: "a wait started, ended, blocked or unblocked — `orc wait` writes it into the open trace, never a packet", owner: "_shared/wait.md" },
   "FINDING-OUTCOME": { grammar: "FINDING-OUTCOME addressed=<n> disputed=<n> wontfix=<n> open=<n> pre=<n> suppressed=<n> :: <cat>:<addressed>/<total>,…", emitter: "orc → writer", meaning: "ONE line at review close (a clean review too) — what became of each finding; `orc gotcha quality` counts it as a review", owner: "_shared/phases/trace-verbs.md" },
   VERDICT: { grammar: "VERDICT pass|fail :: <detail>", emitter: "verifier→orc → writer", meaning: "verification outcome", owner: "_shared/phases/verify.md" },
   DRIFT: { grammar: "DRIFT loop=<n> :: <user description, compressed>", emitter: "orc → writer", meaning: "mock-example drift-recovery loop opened (hard cap 2 loops)", owner: "_shared/drift-recovery.md" },
@@ -4758,6 +4796,7 @@ const TRACE_VERBS = {
   PACT: { grammar: "PACT <state> :: <ids> · PACT inject task=<id> :: <PACT-id> · PACT recheck pass|fail :: <ids>", emitter: "orc → writer", meaning: "invariant-ledger state at the Phase-1 probe, a promise injected into a task, the Phase-6 recheck", owner: "orc-pact/references/gate.md" },
   BOUNDARY: { grammar: "BOUNDARY <EXECUTE|ESCALATE|REFUSE|unknown> task=<id> :: <area> · BOUNDARY lift task=<id> :: <area>", emitter: "orc → writer", meaning: "per-task boundary verdict; an uncarded area is `unknown`, never REFUSE", owner: "orc-boundary/references/gate.md" },
   CHALLENGE: { grammar: "CHALLENGE iter=<n> findings=P0:<n>/P1:<n>/P2:<n> coverage=<n>% verdict=PASS|FAIL · CHALLENGE accept|rebut :: <id> · CHALLENGE regoal|retemplate :: v<n>", emitter: "orc → writer", meaning: "one line per completed /orc-challenge iteration — `orc challenge record`'s `trace_line`, verbatim", owner: "orc-challenge/SKILL.md" },
+  DOC: { grammar: "DOC cycle=<n> sections=<k>/<m>[ wave=<k>/<n>]", emitter: "orc → writer", meaning: "one line per completed /orc-doc cycle — a completed WAVE is a completed cycle", owner: "orc-doc/SKILL.md" },
   EXTRA: { grammar: "EXTRA <profile>/<model> engine=<api|claude-shim|cli> task=<id> band=[lo,hi) tok=in/cw/cr/out outcome=<done|partial|failed|fallback> dur=<m>m<s>s · EXTRA fallback task=<id> :: <reason> → <agent> · EXTRA substitution task=<id> :: requested=<m> reported=<m> · EXTRA reroute task=<id> :: <providers> · EXTRA resume task=<id> attempt=<n> :: from=<reason> attribution=<verdict> target=<extra:profile|agent> files_preexisting=<n> · EXTRA orphan task=<id> :: attempt=<n> lease-expired files_changed=<n> state=<state> · EXTRA demote run=<slug> :: profile=<p> reason=<consecutive-stall|stale-live-attempt|manual> n=<k> → <ladder>", emitter: "orc → writer", meaning: "one line per FOREIGN dispatch — `orc extra dispatch`'s `trace_line`, verbatim", owner: "_shared/extra-dispatch.md" },
   FINISH: { grammar: "FINISH :: <detail>", emitter: "orc → writer", meaning: "run ended — mandatory, even on an abort", owner: "_shared/phases/trace.md" },
 };
@@ -4811,7 +4850,7 @@ const LANE_PHASES = {
     "orc-test",
   ],
   "stop-resume": ["orc", "orc-wiki", "orc-diy", "orc-test"],
-  intake: ["orc", "orc-mini", "orc-diy", "orc-challenge"],
+  intake: ["orc", "orc-mini", "orc-diy"],
   "plan-handoff": ["orc", "orc-route"],
   "wave-grouping": ["orc", "orc-diy"],
   "analyst-gates": ["orc", "orc-analyze", "orc-mini"],
@@ -5051,7 +5090,7 @@ const LANE_OWN_PHASES = {
     // pointer names a heading byte-for-byte, and a payload test asserts each
     // one still exists in the spine.
     { ord: 0, id: "q0", file: "orc-quick/SKILL.md", heading: "## Q0 — Preflight (ONE time per session, silent, nothing can stop the run)", read: "section", trace_verbs: ["GATE", "GRAPH-CONSULT"] },
-    { ord: 1, id: "q1", file: "orc-quick/SKILL.md", heading: "## Q1 — LOOK (silent — no questions here)", read: "section", trace_verbs: ["GATE", "WIKI-CONSULT", "GRAPH-CONSULT", "GRAPH-MAP"] },
+    { ord: 1, id: "q1", file: "orc-quick/SKILL.md", heading: "## Q1 — LOOK (silent — no questions here)", read: "section", trace_verbs: ["GATE", "WIKI-CONSULT", "GRAPH-CONSULT", "GRAPH-MAP", "GRAPH-COVERAGE"] },
     { ord: 2, id: "q2", file: "orc-quick/SKILL.md", heading: "## Q2 — ASK (ONE user turn: questions + the gate together)", read: "section", trace_verbs: [] },
     { ord: 3, id: "q3", file: "orc-quick/SKILL.md", heading: "## Q3 — DO (dispatch → build/test → write the doc → offer)", read: "section", trace_verbs: ["DISPATCH", "VERIFY", "REPRO", "GRAPH-CHANGES", "GRAPH-UPDATE", "GRAPH-NOTES", "GRAPH-GAIN", "OUTCOME", "FINDING", "FINDING-OUTCOME", "REVIEW-WHICH", "FINISH"] },
   ],
@@ -7213,30 +7252,60 @@ const unquote = (s) => String(s == null ? "" : s).trim().replace(/^["']|["']$/g,
 const plural = (n, word, many) => `${n} ${n === 1 ? word : many || word + "s"}`;
 
 // Minimal frontmatter reader — the exact subset schemas/wiki-doc.md uses:
-// scalars, inline arrays (`covers: [a, b]`), and one nested map level
-// (`covered_files:` + indented `path: hash`). No YAML dep, by house rule.
+// scalars, inline arrays (`covers: [a, b]`), one nested map level
+// (`covered_files:` + indented `path: hash`), and — v2.1.2 (F02) — YAML block
+// lists (`checklist:` then `- item` lines, indented or not), the shape the
+// boundary card reference shows. No YAML dep, by house rule.
+function stripComment(val) {
+  // ` # …` ends a value only OUTSIDE quotes.
+  let q = null;
+  for (let i = 0; i < val.length; i++) {
+    const ch = val[i];
+    if (q) { if (ch === q) q = null; continue; }
+    if (ch === '"' || ch === "'") { q = ch; continue; }
+    if (ch === "#" && i > 0 && /\s/.test(val[i - 1])) return val.slice(0, i).trim();
+  }
+  return val.trim();
+}
+function splitInline(body) {
+  // `a, "b, c", 'd'` → ["a", "b, c", "d"] — a comma inside quotes is text.
+  const out = [];
+  let cur = "";
+  let q = null;
+  for (const ch of body) {
+    if (q) { if (ch === q) q = null; cur += ch; continue; }
+    if (ch === '"' || ch === "'") { q = ch; cur += ch; continue; }
+    if (ch === ",") { out.push(cur); cur = ""; continue; }
+    cur += ch;
+  }
+  out.push(cur);
+  return out.map((s) => unquote(s)).filter(Boolean);
+}
 function parseDocHeader(text) {
-  const m = text.replace(/^﻿/, "").match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const m = text.replace(/^\uFEFF/, "").match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return null;
   const h = {};
-  let mapKey = null;
+  let openKey = null; // a key with an empty value: a map or a list follows
   for (const raw of m[1].split(/\r?\n/)) {
     if (!raw.trim() || raw.trim().startsWith("#")) continue;
-    if (/^\s+\S/.test(raw) && mapKey) {
-      const kv = raw.trim().replace(/\s+#.*$/, "").match(/^(.+?):\s*(.*)$/);
-      if (kv) h[mapKey][unquote(kv[1])] = unquote(kv[2]);
+    if (openKey && /^\s*-(\s|$)/.test(raw)) {
+      if (!Array.isArray(h[openKey])) h[openKey] = []; // the first `- ` makes it a list
+      const v = unquote(stripComment(raw.replace(/^\s*-\s*/, "")));
+      if (v) h[openKey].push(v);
+      continue;
+    }
+    if (/^\s+\S/.test(raw) && openKey && !Array.isArray(h[openKey])) {
+      const kv = stripComment(raw.trim()).match(/^(.+?):\s*(.*)$/);
+      if (kv) h[openKey][unquote(kv[1])] = unquote(kv[2]);
       continue;
     }
     const kv = raw.match(/^([A-Za-z0-9_]+):\s*(.*)$/);
     if (!kv) continue;
-    mapKey = null;
+    openKey = null;
     const key = kv[1];
-    const val = kv[2].replace(/\s+#.*$/, "").trim();
-    if (val === "") { h[key] = {}; mapKey = key; continue; }
-    if (val.startsWith("[")) {
-      h[key] = val.replace(/^\[|\]$/g, "").split(",").map((s) => unquote(s)).filter(Boolean);
-      continue;
-    }
+    const val = stripComment(kv[2]);
+    if (val === "") { h[key] = {}; openKey = key; continue; }
+    if (val.startsWith("[")) { h[key] = splitInline(val.replace(/^\[|\]$/g, "")); continue; }
     h[key] = unquote(val);
   }
   return h;
@@ -10202,7 +10271,8 @@ function graphCmd() {
     // The caveat is INSIDE the card (`graph-query.js`), so the `--json` reader
     // gets it too. Appending it here would have shown it only to a human.
     const line = r.card;
-    const trace = `GRAPH-MAP ${focus.length ? "focused" : "repo"} :: files=${r.shown}/${r.total_files}${focus.length ? ` focus=${r.focus.join(",")}` : ""} gen=${r.generation}`;
+    // v2.1.2 (F05): `focused` means the focus RESOLVED to files, never that a flag was passed.
+    const trace = `GRAPH-MAP ${r.focus.length ? "focused" : "repo"} :: files=${r.shown}/${r.total_files}${r.focus.length ? ` focus=${r.focus.slice(0, 8).join(",")}${r.focus.length > 8 ? `,+${r.focus.length - 8}` : ""}` : ""} gen=${r.generation}`;
     const gainRow = r.exit === 0 ? gainRowFor("map", Q, model, focus, r, Date.now() - t0, false) : null;
     return finish(r, line, trace, false, gainRow);
   }
@@ -10810,6 +10880,34 @@ function stackTemplate(claudeDir, slugArg) {
   );
 }
 
+// v2.1.2 F19 — what counts as a placeholder an author still has to fill.
+// NOT one: anything inside an HTML comment (the skeleton's own instructions say
+// `fill every <...> in`) or a fenced code block (a picked PR template lives
+// there, and the driver fills it per layer); a generic type (`Promise<Order>` —
+// the `<` follows a word character); a closing or self-closing tag; the inline
+// HTML a Markdown author writes on purpose. A one-character hole (`<n>`) IS
+// one, and so is a paragraph that is one placeholder from its first character
+// to its last (the skeleton's `## Decisions` body).
+const STACK_INLINE_TAGS = new Set(["a", "b", "br", "code", "del", "details", "div", "em", "hr", "i", "img", "kbd", "li", "ol", "p", "pre", "s", "span", "strong", "sub", "summary", "sup", "table", "td", "th", "tr", "u", "ul"]);
+function stackHoles(text) {
+  const src = String(text)
+    .replace(/\r\n/g, "\n")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[ \t]*$/gm, " ");
+  const holes = [];
+  for (const m of src.matchAll(/<([^<>\n]{1,120})>/g)) {
+    const inner = m[1];
+    if (m.index > 0 && /\w/.test(src[m.index - 1])) continue;
+    if (inner.startsWith("/") || inner.endsWith("/")) continue;
+    const tag = /^([a-z][a-z0-9]*)(?:\s[^<>]*)?$/.exec(inner);
+    if (tag && STACK_INLINE_TAGS.has(tag[1])) continue;
+    holes.push(m[0]);
+  }
+  for (const m of src.matchAll(/^<[^<>]*\n[^<>]*>[ \t]*$/gm))
+    holes.push(m[0].replace(/\s+/g, " ").slice(0, 60) + (m[0].length > 60 ? "…>" : ""));
+  return holes;
+}
+
 // Exit code IS the contract (same convention as `orc pattern status` /
 // `orc diy status`): 0 = READY, 1 = absent | unfilled. A driver branches on it
 // without parsing prose.
@@ -10821,7 +10919,7 @@ function stackProbe(claudeDir, slug) {
   if (!fs.existsSync(p.plan)) return { slug, ready: false, plan_path: p.plan, exists: false, problems: ["absent"] };
   const text = fs.readFileSync(p.plan, "utf8");
   const problems = [];
-  const holes = [...text.matchAll(/<[^<>\n]{2,60}>/g)].map((m) => m[0]);
+  const holes = stackHoles(text);
   if (holes.length)
     problems.push(`${plural(holes.length, "unfilled placeholder")} (e.g. ${[...new Set(holes)].slice(0, 5).join(" ")})`);
   const ticket = /^-\s*ticket:\s*(.+)$/m.exec(text);
@@ -10876,30 +10974,18 @@ function stackStatus(claudeDir, slugArg) {
     );
     process.exit(1);
   }
-  const text = fs.readFileSync(p.plan, "utf8");
-  const problems = [];
-  // Unfilled placeholders — the whole reason a hand-filled plan needs a probe.
-  const holes = [...text.matchAll(/<[^<>\n]{2,60}>/g)].map((m) => m[0]);
-  if (holes.length) {
-    const uniq = [...new Set(holes)].slice(0, 5);
-    problems.push(`${plural(holes.length, "unfilled placeholder")} (e.g. ${uniq.join(" ")})`);
-  }
-  const ticket = /^-\s*ticket:\s*(.+)$/m.exec(text);
-  if (!ticket || !ticket[1].trim()) problems.push("no ticket");
-  // Layer sections: `## Layer <n> — <title>` (the schema's own heading shape).
-  const layers = [...text.matchAll(/^##\s+Layer\s+\d+\b/gm)].length;
-  if (layers < 2) problems.push(`${layers} layer section(s) — a stack needs 2+`);
-  if (!/^##\s+Decisions\s*$/m.test(text)) problems.push("no `## Decisions` section");
-  if (problems.length) {
+  // v2.1.2 F19 — ONE engine: the human path renders the probe the JSON path emits.
+  const probe = stackProbe(claudeDir, slug);
+  if (probe.problems.length) {
     console.log(
       `✗ NOT READY — ${STACK_DIR}/${slug}/${STACK_PLAN_FILE}\n` +
-        problems.map((x) => "  - " + x).join("\n") +
+        probe.problems.map((x) => "  - " + x).join("\n") +
         "\n  Fill it in, or run `/orc-pr-setup` to have the layers planned for you."
     );
     process.exit(1);
   }
   console.log(
-    `✓ READY — ${STACK_DIR}/${slug}/${STACK_PLAN_FILE} (${plural(layers, "layer")}, ticket ${ticket[1].trim()})\n` +
+    `✓ READY — ${STACK_DIR}/${slug}/${STACK_PLAN_FILE} (${plural(probe.layers, "layer")}, ticket ${probe.ticket})\n` +
       "  Run `/orc-pr-driver` to build + submit the stack."
   );
 }
@@ -11950,6 +12036,33 @@ function resume() {
 //   exit 2  unknown    — cannot prove either way
 const INFLIGHT_STALE_MS = 6 * 60 * 60 * 1000;
 
+// v2.1.2 (F14, F20) — THE OPEN RUN, the one idea orc-trace.js, orc-read-gate.js
+// and orc-session-hook.js already share: `.current` names a trace, and the newer
+// of the trace's and the pointer's own mtime is younger than 6 hours. A pointer
+// older than that belongs to a run that ended without deleting it. `lane` is null
+// for the trace hook's own bootstrap name `run-<DDMMYY>-<HHMMSS>.txt`: no lane
+// registered that run. → { name, run, path, exists, lane, slug } | null
+function openRunPointer(claudeDir) {
+  const dir = resolveLogDir(claudeDir);
+  let name = null;
+  try {
+    name = fs.readFileSync(path.join(dir, ".current"), "utf8").trim() || null;
+  } catch (_) {}
+  if (!name) return null;
+  const file = path.join(dir, name);
+  const mt = (p) => {
+    try {
+      return fs.statSync(p).mtimeMs;
+    } catch (_) {
+      return 0;
+    }
+  };
+  const last = Math.max(mt(file), mt(path.join(dir, ".current")));
+  if (!last || Date.now() - last >= INFLIGHT_STALE_MS) return null;
+  const m = TRACE_NAME.exec(name);
+  return { name, run: name.replace(/\.txt$/, ""), path: file, exists: fs.existsSync(file), lane: m ? m[1] : null, slug: m ? m[2] : null };
+}
+
 function runInflightCmd(claudeDir) {
   const dir = resolveLogDir(claudeDir);
   const out = {
@@ -12624,11 +12737,31 @@ const MODEL_FAMILIES = ["opus", "sonnet", "haiku", "fable"];
 const EFFORT_WORDS = new Set(["low", "med", "medium", "high", "xhigh", "max"]);
 
 // `orc-executor-opus-4-8-high` → `claude-opus-4-8`. An agent's model lives in its
-// NAME by house rule (a model change is always a rename), so this needs no table.
+// NAME by house rule (a model change is always a rename) — EXCEPT a point
+// release inside one family, which kept the name on purpose (§4z.33 Opus 5.5,
+// §4z.39.1 Sonnet 5.5). v2.1.2 (F25): a SHIPPED agent answers with the `model:`
+// its own file pins, so `orc-executor-opus-5-low` is `claude-opus-5-5`. Any
+// other name falls back to the name rule.
+let PINNED_MODELS = null;
+function pinnedModels() {
+  if (PINNED_MODELS) return PINNED_MODELS;
+  PINNED_MODELS = {};
+  try {
+    const dir = path.join(TEMPLATES, "agents");
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.endsWith(".md")) continue;
+      const m = /^model:\s*(\S+)\s*$/m.exec(fs.readFileSync(path.join(dir, f), "utf8"));
+      if (m) PINNED_MODELS[f.slice(0, -3)] = m[1];
+    }
+  } catch (_) {}
+  return PINNED_MODELS;
+}
 function modelOf(name) {
   if (!name) return null;
   const s = String(name);
   if (s.startsWith("claude-")) return s;
+  const pinned = pinnedModels()[s];
+  if (pinned) return pinned;
   const parts = s.split("-");
   const i = parts.findIndex((p) => MODEL_FAMILIES.includes(p));
   if (i === -1) return null;
@@ -12851,6 +12984,11 @@ function listTraces(claudeDir) {
 // with the same MODEL whose timestamp is nearest and not after it by more than
 // the group's own duration. A group nothing can claim counts into `unattributed`
 // — which is ALWAYS printed, never silently dropped.
+//
+// v2.1.2 F62 — a point release inside one family joins its family's DISPATCH
+// line: `expect=opus-5/low` (the agent's NAME token) claims a `claude-opus-5-5`
+// block. The names kept the family token on purpose (§4z.33, §4z.39.1).
+const sameModel = (got, want) => got === want || String(got).startsWith(want + "-");
 function joinRun(trace, groups) {
   const out = { rows: [], unattributed: [] };
   if (!trace || trace.start === null) return out;
@@ -12861,7 +12999,7 @@ function joinRun(trace, groups) {
     let best = null;
     for (const g of inWindow) {
       if (g.claimed) continue;
-      if (want && g.model && modelOf(g.model) !== want) continue;
+      if (want && g.model && !sameModel(modelOf(g.model), want)) continue;
       const dist = d.at === null ? 0 : Math.abs(g.start - d.at);
       if (!best || dist < best.dist) best = { g, dist };
     }
@@ -13176,16 +13314,37 @@ function laneForecast(lane, tasks, rates, cfg, claudeDir) {
     }
   }
 
+  // v2.1.2 F25 — every row is priced at the model THAT ROW runs on: a band at
+  // its agent's pinned model, a foreign band from its provider's own dated rate,
+  // a fixed role at its own model. One row with tokens and no rate makes the
+  // lane's dollars null — never an Opus figure for work Opus will not do.
+  const table = readPricingCache;
+  const usd = { p50: 0, p90: 0 };
+  let priceable = !!table;
+  const addUsd = (v50, v90, model, extra) => {
+    if (!v50) return;
+    const rate = extra ? foreignRate(table, extra.provider, extra.model) : rateFor(table, model);
+    if (!rate) {
+      priceable = false;
+      return;
+    }
+    const at = (v) => (v.input * rate.input + v.cache_write * rate.cache_write + v.cache_read * rate.cache_read + v.output * rate.output) / 1e6;
+    usd.p50 += at(v50);
+    usd.p90 += at(v90 || v50);
+  };
+
   for (const [band, g] of grouped) {
     const src = (rates && rates.bands && rates.bands[band]) || (g.agent && rates && rates.roles && rates.roles[g.agent]) || null;
     const samples = src ? src.samples : 0;
     if (!src || samples < minSamples) low++;
     const per50 = src ? src.p50 : null;
     const per90 = src ? src.p90 : null;
-    rows.push({ band, agent: g.agent, via: g.via || "claude", extra: g.extra || null, count: g.n, tasks: g.tasks, samples, p50: per50 ? mulVec(per50, g.n) : null, p90: per90 ? mulVec(per90, g.n) : null });
+    const model = g.extra ? null : modelOf(g.agent);
+    rows.push({ band, agent: g.agent, model, via: g.via || "claude", extra: g.extra || null, count: g.n, tasks: g.tasks, samples, p50: per50 ? mulVec(per50, g.n) : null, p90: per90 ? mulVec(per90, g.n) : null });
     if (per50) {
       Object.assign(p50, sumVec(p50, mulVec(per50, g.n)));
       Object.assign(p90, sumVec(p90, mulVec(per90 || per50, g.n)));
+      addUsd(mulVec(per50, g.n), mulVec(per90 || per50, g.n), model, g.extra);
     }
     // Context risk: the p90 PEAK prompt for this band against the model's
     // window. Forecast before the wave, not after compaction.
@@ -13202,15 +13361,16 @@ function laneForecast(lane, tasks, rates, cfg, claudeDir) {
     const src = rates && rates.roles && rates.roles[role];
     if (!src) {
       lowRoles++;
-      fixed.push({ role, samples: 0, p50: null });
+      fixed.push({ role, model: modelOf(role), samples: 0, p50: null });
       continue;
     }
-    fixed.push({ role, samples: src.samples, p50: src.p50, p90: src.p90 });
+    fixed.push({ role, model: modelOf(role), samples: src.samples, p50: src.p50, p90: src.p90 });
     Object.assign(p50, sumVec(p50, src.p50));
     Object.assign(p90, sumVec(p90, src.p90));
+    addUsd(src.p50, src.p90, modelOf(role), null);
   }
 
-  return { lane, cmd: LANE_CMD[lane], rows, fixed, p50, p90, low_confidence_bands: low, low_confidence_roles: lowRoles, context_risk: contextRisk };
+  return { lane, cmd: LANE_CMD[lane], rows, fixed, p50, p90, usd: priceable ? usd : { p50: null, p90: null }, low_confidence_bands: low, low_confidence_roles: lowRoles, context_risk: contextRisk };
 }
 
 const mulVec = (v, n) => {
@@ -13252,8 +13412,12 @@ function budgetForecast(claudeDir, planPath) {
   const asView = typeof flag("--as") === "string" ? String(flag("--as")) : String(cfg.budget_units || "auto");
 
   if (!planPath) {
-    console.error("usage: orc budget forecast <plan-file> [--json] [--as tokens|usd|quota|context|all]");
-    process.exit(1);
+    // v2.1.2 F16 — exit 1 is a low-confidence ANSWER on this route, so a missing
+    // plan is the "no plan" refusal (3), and --json still gets its one object.
+    const usage = "usage: orc budget forecast <plan-file> [--json] [--naive] [--as tokens|usd|quota|context|all]";
+    if (asJson) emitJson({ ok: false, reason: "no-plan", path: null, hint: usage }, 3);
+    console.error(usage);
+    process.exit(3);
   }
   const root = repoRootOf(claudeDir);
   const abs = path.isAbsolute(planPath)
@@ -13287,8 +13451,9 @@ function budgetForecast(claudeDir, planPath) {
   const waves = Math.max(1, new Set(tasks.map((t) => t.depends_on.length)).size);
   const lanes = FORECAST_LANES.map((l) => laneForecast(l, tasks, rates, cfg, claudeDir));
   const primary = lanes.find((l) => l.lane === "orc");
-  const money50 = priceVector(claudeDir, primary.p50, "claude-opus-4-8");
-  const money90 = priceVector(claudeDir, primary.p90, "claude-opus-4-8");
+  // v2.1.2 F25 — the dollars are the SUM of the rows, each at its own model.
+  const money50 = { usd: primary.usd.p50, weighted: weightedTokens(primary.p50), raw: rawTokens(primary.p50) };
+  const money90 = { usd: primary.usd.p90, weighted: weightedTokens(primary.p90), raw: rawTokens(primary.p90) };
   const quota = quotaView(table, cfg, money50.weighted);
   const risk = primary.context_risk;
   const code = risk.length ? 2 : primary.low_confidence_bands ? 1 : 0;
@@ -13320,7 +13485,7 @@ function budgetForecast(claudeDir, planPath) {
           cmd: l.cmd,
           raw: rawTokens(l.p50),
           weighted: weightedTokens(l.p50),
-          usd: priceVector(claudeDir, l.p50, "claude-opus-4-8").usd,
+          usd: l.usd.p50,
           low_confidence_bands: l.low_confidence_bands,
           low_confidence_roles: l.low_confidence_roles,
         })),
@@ -13355,7 +13520,7 @@ function budgetForecast(claudeDir, planPath) {
     const stale = table && table._stale ? `  ⚠ price table ${table._age_days === null ? "undated" : table._age_days + " days old"} (> ${PRICE_STALE_DAYS})` : table ? `  price table ${table.as_of} (${table._age_days} days old ✓)` : "";
     console.log(
       `\nUSD          ` +
-        (money50.usd === null ? "unavailable: no rate for this model in the price table" : `$${money50.usd.toFixed(2)} → $${money90.usd.toFixed(2)}${stale}`)
+        (money50.usd === null ? "unavailable: a band or role has no rate in the price table" : `$${money50.usd.toFixed(2)} → $${money90.usd.toFixed(2)}${stale}`)
     );
   }
   if (show("quota"))
@@ -13390,7 +13555,7 @@ function budgetForecast(claudeDir, planPath) {
   console.log("\n  lane          raw p50    weighted    usd p50");
   console.log("  " + "─".repeat(46));
   for (const l of lanes) {
-    const u = priceVector(claudeDir, l.p50, "claude-opus-4-8").usd;
+    const u = l.usd.p50;
     console.log(
       `  ${(l.cmd || l.lane).padEnd(13)} ${(rawTokens(l.p50) ? kTok(rawTokens(l.p50)) : "—").padStart(8)} ${(rawTokens(l.p50) ? kTok(weightedTokens(l.p50)) : "—").padStart(11)} ${(u === null || !rawTokens(l.p50) ? "—" : "$" + u.toFixed(2)).padStart(10)}` +
         (l.low_confidence_bands + l.low_confidence_roles ? "  floor" : "") +
@@ -13437,7 +13602,18 @@ function budgetActual(claudeDir, slugArg) {
     };
   });
   const unatt = j.unattributed.reduce((a, g) => sumVec(a, g.vec), { ...ZERO_VEC });
-  const money = priceVector(claudeDir, actual, "claude-opus-4-8");
+  // v2.1.2 F25 — each joined dispatch at the model its transcript block names.
+  let usdActual = 0;
+  for (const row of j.rows) {
+    if (!row.group) continue;
+    const u = priceVector(claudeDir, row.group.vec, row.group.model).usd;
+    if (u === null) {
+      usdActual = null;
+      break;
+    }
+    usdActual += u;
+  }
+  const money = { usd: usdActual, weighted: weightedTokens(actual), raw: rawTokens(actual) };
   const cacheShare = rawTokens(actual) ? actual.cache_read / rawTokens(actual) : 0;
 
   if (asJson)
@@ -13613,19 +13789,29 @@ function pactStateOf(root, e) {
   if (lc && lc.status === "fail") return { state: "BROKEN", why: `check failed at ${String(lc.commit || "").slice(0, 8)}${lc.at ? " (" + lc.at + ")" : ""}` };
   if (kind === "manual" || !e.check || !e.check.ref)
     return { state: "UNCHECKABLE", why: "no cheap check exists — this promise is held by review, not by a runner" };
-  const anchorFiles = (e.anchors || []).map((a) => String(a).split(":")[0]).filter(Boolean);
+  const anchorFiles = [...new Set((e.anchors || []).map((a) => String(a).split(":")[0]).filter(Boolean))];
   if (!e.verified_commit) return { state: "DRIFTED", why: "never verified at a commit" };
   const argv = ["rev-list", "--count", `${e.verified_commit}..HEAD`];
   if (anchorFiles.length) argv.push("--", ...anchorFiles.slice(0, 100));
   const n = gitIn(root, argv);
   if (n === null || !/^\d+$/.test(n)) return { state: "UNCHECKABLE", why: `verified_commit ${String(e.verified_commit).slice(0, 8)} is not resolvable here` };
   const d = Number(n);
-  if (d > 0)
+  if (d > 0) {
+    // v2.1.2 F18 — name the files the commits TOUCHED, not every anchor. Two
+    // anchors in one file are one file.
+    const sha = String(e.verified_commit).slice(0, 8);
+    if (!anchorFiles.length)
+      return { state: "DRIFTED", why: `${plural(d, "commit")} since ${sha} — no anchors, so every commit counts`, distance: d, touched_files: [] };
+    const log = gitIn(root, ["log", "--format=", "--name-only", `${e.verified_commit}..HEAD`, "--", ...anchorFiles.slice(0, 100)]) || "";
+    const touched = [...new Set(log.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))];
+    const list = touched.slice(0, 3).join(", ") + (touched.length > 3 ? ", …" : "");
     return {
       state: "DRIFTED",
-      why: `${plural(d, "commit")} since ${String(e.verified_commit).slice(0, 8)} touched ${plural(anchorFiles.length, "anchored file")}`,
+      why: `${plural(d, "commit")} since ${sha} touched ${touched.length} of ${plural(anchorFiles.length, "anchored file")}${list ? ` (${list})` : ""}`,
       distance: d,
+      touched_files: touched,
     };
+  }
   return { state: "HOLDING", why: `verified at ${String(e.verified_commit).slice(0, 8)}; no commit since has touched its anchors`, distance: 0 };
 }
 
@@ -13651,6 +13837,7 @@ function pactRows(claudeDir) {
       state: st.state,
       why: st.why,
       distance: st.distance === undefined ? null : st.distance,
+      touched_files: st.touched_files || null,
     };
   });
   const live = rows.filter((r) => !r.retired);
@@ -13914,6 +14101,10 @@ function readBoundaryCards(claudeDir) {
       if (out !== null && /^\d+$/.test(out)) distance = Number(out);
     }
     const malformed = [];
+    // v2.1.2 (F02): a list field that came back as a map is unreadable, never empty.
+    for (const k of ["anchored_files", "checklist", "reasons"])
+      if (h[k] && typeof h[k] === "object" && !Array.isArray(h[k]) && Object.keys(h[k]).length)
+        malformed.push(`${k} is not a list — write \`- item\` lines or [a, b]`);
     if (!BOUNDARY_VERDICTS.includes(verdict)) malformed.push(`verdict must be one of ${BOUNDARY_VERDICTS.join(" | ")}`);
     if (verdict === "REFUSE" && !checklist.length)
       malformed.push("a REFUSE with no checklist is malformed — a boundary must name what would make it a yes");
@@ -14350,7 +14541,12 @@ function aftermathStatus(claudeDir) {
     process.exit(3);
   }
   const cut = Date.now() - windowDays * 86400000;
-  const inWindow = runs.filter((r) => r.mtime >= cut && r.slug);
+  // v2.1.2 F20 — never grade the run that is still OPEN. /orc-aftermath writes
+  // `.current` and touches its own trace at A0, so every report carried a
+  // TOO_RECENT row about itself, and `history too shallow` (exit 3) could
+  // never be reached from inside the lane.
+  const open = openRunPointer(claudeDir);
+  const inWindow = runs.filter((r) => r.mtime >= cut && r.slug && !(open && r.name === open.name));
   if (!inWindow.length) {
     if (asJson) emitJson({ ok: false, reason: "shallow", window_days: windowDays, log_dir: dir, runs: [] }, 3);
     console.log(`no runs in the last ${windowDays} days under ${dir} — history too shallow to grade.`);
@@ -17316,6 +17512,8 @@ const DOC_VALUE_FLAGS = [
   "--type", "--template", "--title", "--language", "--target", "--length",
   "--role", "--section", "--set", "--dir", "--budget", "--limit",
   "--only", "--confirm",
+  // v2.1.2 — the checker's recorder
+  "--checked", "--findings",
   // v0.49.2
   "--priority", "--text", "--set-file", "--reason", "--as", "--where", "--note", "--kind",
 ];
@@ -17802,6 +18000,9 @@ function docPartsView(claudeDir, slug) {
       hash,
       state: docPartState(rec, exists, hash),
       findings: rec.findings || 0,
+      // v2.1.2 — how many edit rounds a FLAGGED section has already had. The
+      // D8 cap of 2 is read from here, never from a model's memory.
+      edit_rounds: rec.edit_rounds || 0,
       cycle: rec.cycle || null,
       subsections: (o.subsections || []).map((s) => {
         const part = src.parts.find((x) => x.sub === s.id);
@@ -19491,7 +19692,7 @@ function docPlanShape(claudeDir, slugArg, roleOverride) {
   } else if (role === "check") {
     // The hash is what turns a re-check from a full pass into a diff: a section
     // whose hash has not moved since it was checked does not need re-reading.
-    // In v2 a checker gets one bounded PART FILE, so there is no line arithmetic
+    // In v2 a checker gets only the bounded PART FILES of one slice, so there is no line arithmetic
     // anywhere in the loop.
     items = v2
       ? pv.rows
@@ -20174,7 +20375,20 @@ function docPartsCmd(claudeDir, slugArg) {
       const prev = d.sections[row.id] || {};
       const parts = {};
       for (const pt of src.parts) if (pt.sub) parts[pt.sub] = pt.hash;
-      d.sections[row.id] = { ...prev, source_hash: row.hash, state: "written", cycle: d.cycle || 0, findings: prev.findings || 0, parts };
+      // v2.1.2 — a hash that MOVED is a new body: the findings recorded against
+      // the old one no longer describe it, so they are cleared and the section
+      // goes back to the check. If it carried findings, that was an edit round.
+      const moved = prev.source_hash !== row.hash;
+      const rounds = (prev.edit_rounds || 0) + (moved && prev.findings > 0 ? 1 : 0);
+      d.sections[row.id] = {
+        ...prev,
+        source_hash: row.hash,
+        state: "written",
+        cycle: d.cycle || 0,
+        findings: moved ? 0 : prev.findings || 0,
+        ...(rounds ? { edit_rounds: rounds } : {}),
+        parts,
+      };
       confirmed.push(row.id);
     }
     if (unknown.length || empty.length || drifted.length) {
@@ -20194,6 +20408,65 @@ function docPartsCmd(claudeDir, slugArg) {
     docWrite(claudeDir, slug, d);
   }
 
+  // v2.1.2 — the CHECKER's recorder. `--confirm` was built for writer returns
+  // only, so `checked` and `findings` were read in five places and written in
+  // none: `orc doc next` named the paid `plan-check` forever.
+  //   --checked <ids>        clean, or advisory (P2/P3) findings only
+  //   --findings <id>=<n>,…  n = the P0+P1 count, n >= 1
+  // Same refusal shape as `--confirm`: one bad id and NOTHING is written. Only a
+  // part whose recorded hash still matches the file can carry a check result —
+  // a verdict on a body nobody validated is a verdict on nothing.
+  const idList = (raw) =>
+    String(raw || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  const wantChecked = idList(docOpt("--checked"));
+  const wantFlagged = idList(docOpt("--findings"));
+  const checked = [];
+  const flagged = [];
+  if (wantChecked.length || wantFlagged.length) {
+    const view = docPartsView(claudeDir, slug);
+    const d = view.d;
+    const unknown = [];
+    const bad = [];
+    const refused = [];
+    const take = (want, n) => {
+      const row = view.rows.find((r) => r.id === want || r.id.startsWith(want));
+      if (!row) return void unknown.push(want);
+      if (row.state !== "written" && row.state !== "checked") return void refused.push({ id: row.id, state: row.state });
+      if (checked.includes(row.id) || flagged.some((f) => f.id === row.id)) return void bad.push(want);
+      if (n) flagged.push({ id: row.id, findings: n });
+      else checked.push(row.id);
+    };
+    for (const want of wantChecked) take(want, 0);
+    for (const pair of wantFlagged) {
+      const m = /^(.+)=(\d+)$/.exec(pair);
+      if (!m || Number(m[2]) < 1) bad.push(pair);
+      else take(m[1].trim(), Number(m[2]));
+    }
+    if (unknown.length || bad.length || refused.length) {
+      const hint =
+        (unknown.length ? `no such section: ${unknown.join(", ")}. ` : "") +
+        (bad.length
+          ? `not a check result: ${bad.join(", ")} — --findings takes <id>=<n> with n >= 1, and a section is named once. `
+          : "") +
+        (refused.length
+          ? `no validated return on record for: ` +
+            refused.map((x) => `${x.id} (${x.state})`).join(", ") +
+            ` — a check result is recorded only against a confirmed hash. Run \`orc doc parts ${slug} --confirm <ids>\` first. `
+          : "") +
+        "Nothing was written.";
+      const reason = unknown.length ? "no-such-section" : bad.length ? "bad-findings" : "not-confirmed";
+      if (asJson) emitJson({ ok: false, reason, slug, unknown, bad, refused, checked: [], flagged: [], hint }, 1);
+      console.error("❌ " + hint);
+      process.exit(1);
+    }
+    for (const id of checked) d.sections[id] = { ...(d.sections[id] || {}), state: "checked", findings: 0, checked_cycle: d.cycle || 0 };
+    for (const f of flagged) d.sections[f.id] = { ...(d.sections[f.id] || {}), state: "written", findings: f.findings };
+    docWrite(claudeDir, slug, d);
+  }
+
   const view = docPartsView(claudeDir, slug);
   const d = view.d;
   const wave = docWaveState(d, view.rows);
@@ -20207,8 +20480,10 @@ function docPartsCmd(claudeDir, slugArg) {
     dir: path.relative(view.paths.root, view.paths.sections).split(path.sep).join("/"),
     front: view.front,
     confirmed: confirm.length ? confirm : [],
-    parts: view.rows.map(({ id, heading, required, files, nested, exists, lines, hash, state, subsections, ordinal_ok, findings }) => ({
-      id, heading, required, files, nested, exists, lines, hash, state, subsections, ordinal_ok, findings,
+    checked,
+    flagged,
+    parts: view.rows.map(({ id, heading, required, files, nested, exists, lines, hash, state, subsections, ordinal_ok, findings, edit_rounds }) => ({
+      id, heading, required, files, nested, exists, lines, hash, state, subsections, ordinal_ok, findings, edit_rounds,
     })),
     total: view.rows.length,
     written: view.rows.filter((r) => r.state === "written" || r.state === "checked").length,
@@ -21878,7 +22153,26 @@ function docNextAction(claudeDir, slug) {
   // THE FREE CHECK ALWAYS RUNS BEFORE THE PAID ONE. `orc doc lint` costs zero
   // tokens and its findings ride in the checker's slice, so no model is ever
   // paid to count sentences.
-  const writtenSince = (v2 ? pv.rows : view.sections).filter((s) => s.state === "written").length;
+  //
+  // v2.1.2 — a section the checker FLAGGED goes to the edit, not back to the
+  // check. And the cap of 2 rounds is a human decision, not a third round.
+  const flagged = pv.rows.filter((r) => r.state === "written" && r.findings > 0);
+  const capped = flagged.filter((r) => r.edit_rounds >= 2);
+  if (capped.length)
+    return BLOCK(
+      "D8",
+      `${capped[0].heading}: 2 edit rounds, and the checker still reports ${capped[0].findings} blocking finding(s). Accept it, or say what should change.`,
+      [`orc doc parts ${slug} --checked ${capped[0].id}`, `orc doc log ${slug} --kind gap --text "<what stays open>"`]
+    );
+  if (flagged.length)
+    return A(
+      "D8",
+      "plan-edit",
+      `orc doc plan ${slug} --role edit --only ${flagged.map((r) => r.id).join(",")} --json`,
+      `${plural(flagged.length, "section")} ${flagged.length === 1 ? "carries" : "carry"} blocking checker findings`,
+      true
+    );
+  const writtenSince = (v2 ? pv.rows : view.sections).filter((s) => s.state === "written" && !s.findings).length;
   if (lint && lint.errors)
     return A("D7", "lint", `orc doc lint ${slug} --json`, `${plural(lint.errors, "lint error")} — the free check runs before the paid one`, false, [
       `orc doc map ${slug} --json`,
@@ -22550,7 +22844,8 @@ function doc() {
           "       orc doc status <slug> [--json]               0 nothing to do / 1 something to do / 2 unknown slug\n" +
           "       orc doc show <slug> [--json]                 full state: sections, cycles, extracts\n" +
           "       orc doc map <slug> [--json]                  the DERIVED section map (fresh line numbers)\n" +
-          "       orc doc parts <slug> [--confirm <ids>]       the SECTION FILES (works before any compile)\n" +
+          "       orc doc parts <slug> [--confirm <ids>] [--checked <ids>] [--findings <id>=<n>,…]\n" +
+          "                                                    the SECTION FILES (works before any compile)\n" +
           "       orc doc compile <slug> [--partial]           sections/ -> document.md. FREE, on demand\n" +
           "       orc doc split <slug> [--section <id> --by-heading]  document -> sections/, or a section -> parts\n" +
           "       orc doc migrate <slug> [--clean]             v1 -> v2, lazy and non-destructive\n" +
@@ -26692,7 +26987,7 @@ const EXTRA_SLOTS = [
     slot: "fast-executor",
     lane: "/orc-fast",
     claude: ["orc-executor-sonnet-5-med"],
-    claude_opus5: ["orc-executor-opus-5-med"],
+    claude_opus5: ["orc-executor-opus-5-low"],
     asks: false,
     announce: "the F0 preflight `extra:` line, before wave 1",
     why: "one executor, one slice, a build+test smoke gate behind it — the checks that catch a bad implementation here are engine-blind.",
@@ -26713,7 +27008,7 @@ const EXTRA_SLOTS = [
     claude_opus5: null,
     asks: false,
     announce: "before the wave",
-    why: "the checker reads one bounded part and reports; it rewrites nothing, so a finding it makes is a finding you read.",
+    why: "the checker reads only the bounded part files of one slice and reports; it rewrites nothing, so a finding it makes is a finding you read.",
   },
   // v1.5.0 - `/orc-test`'s DESIGNER, and only the designer. The interpreter
   // deliberately gets NO slot: its slice is CAPTURED RESPONSE BODIES FROM THE
@@ -35178,6 +35473,14 @@ function doctor() {
       (arr || []).some((e) => (e.hooks || []).some((h) => typeof h.command === "string" && h.command.includes(needle)));
     if (hasCmd(hooks.PreToolUse, "orc-effort-guard")) ok("effort guard wired (PreToolUse)");
     else warn("effort-guard-unwired", "effort guard NOT wired — /orc won't be effort-gated; run `orc update`", { fixable: true });
+    const typedEntry = (hooks.UserPromptExpansion || []).find((e) =>
+      (e.hooks || []).some((h) => typeof h.command === "string" && h.command.includes("orc-effort-guard"))
+    );
+    if (!typedEntry)
+      warn("typed-gate-unwired", "a typed /orc or /orc-diy is NOT effort-gated (no UserPromptExpansion entry) — run `orc update`", { fixable: true, fix_command: "orc update" });
+    else if (typedEntry.matcher !== TYPED_GATE_MATCHER)
+      warn("typed-gate-matcher", `typed-command gate matcher is "${typedEntry.matcher || ""}" — needs "${TYPED_GATE_MATCHER}"; run \`orc update\``, { fixable: true, fix_command: "orc update" });
+    else ok(`typed /orc + /orc-diy gate wired (UserPromptExpansion ${TYPED_GATE_MATCHER})`);
     const traceEntry = (hooks.PreToolUse || []).find((e) =>
       (e.hooks || []).some((h) => typeof h.command === "string" && h.command.includes("orc-trace"))
     );
@@ -35194,7 +35497,7 @@ function doctor() {
     else warn("trace-return-unwired", "trace RETURN hook NOT wired (SubagentStop) — run `orc update`", { fixable: true });
     if (settings.statusLine && typeof settings.statusLine.command === "string") {
       if (settings.statusLine.command.includes("orc-statusline")) ok("statusline is ORC's model warning");
-      else ok("statusline present (yours — ORC left it untouched)");
+      else ok("statusline present (yours — ORC left it untouched) · a typed /orc reads its effort from ORC's line, so it is not effort-gated here");
     } else
       warn("statusline-missing", "no statusLine — the non-Opus/high model warning won't show; run `orc update`", {
         fixable: true,
@@ -41685,6 +41988,10 @@ Usage:
       … --confirm <id,id>                 record a VALIDATED RETURN's hash. Until then a file on
                                           disk is \`unconfirmed\`: a wave killed by a usage limit
                                           leaves exactly that, and it is re-written, never shipped
+      … --checked <id,id>                 record a CLEAN CHECK (advisory findings only). The part
+                                          stays \`checked\` only while its hash holds
+      … --findings <id>=<n>,…             record the BLOCKING (P0+P1) count per part. \`orc doc next\`
+                                          then names the edit; after 2 rounds it asks you instead
     orc doc compile <slug> [--partial]    sections/ → document.md. ZERO model tokens, on demand.
                                           --partial writes what exists and NAMES what is missing;
                                           nothing is ever stubbed into the deliverable
@@ -41846,6 +42153,9 @@ Usage:
                                           and where its safe point is
     orc wait plan <spec> [--json]         turn 30 · 90m · 2h · until 18:41 · reset into hops
       [--hop <min>] [--max-hops <n>]      (exit 0 planned / 1 unparsable / 2 no usage reading)
+    orc wait start <spec> --mode <m>      record the wait that starts now and write its WAIT line
+                                          (no run in flight = recorded: false, exit 0)  [--json]
+    orc wait end --reason <why>           close it: elapsed | recovered | cancelled | max-hops  [--json]
   orc onboarding [<topic>]                guided walkthrough (menu on a TTY; prints all when piped)
                                           topics: overview, install, first-run, lanes,
                                           config, knowledge, upgrade, troubleshooting
@@ -42028,22 +42338,17 @@ function waitHops(totalMinutes, hopMinutes, maxHops) {
   return { hops, uncovered_minutes: left, truncated: left > 0 };
 }
 
-function waitPlanCmd(claudeDir) {
-  const asJson = wantsJson();
-  const pos = positionals().slice(2);
-  const spec = pos.join(" ");
-  const now = Date.now();
+// v2.1.2 F10 — the parse and the hop arithmetic, ONCE. `wait plan` renders this
+// and `wait start` records it; two copies of the arithmetic would be two ideas
+// of when a wait ends. A refusal comes back as { ok:false, exit, reason, hint }
+// and the caller prints it.
+function waitPlanCompute(claudeDir, spec, now) {
   const cfg = resolvedConfig(claudeDir);
   const hopMin = Number(flag("--hop")) || Number(cfg.wait_hop_minutes) || WAIT_HOP_DEFAULT_MIN;
   const maxHops = Number(flag("--max-hops")) || Number(cfg.wait_max_hops) || WAIT_MAX_HOPS_DEFAULT;
 
   const parsed = waitParseSpec(spec, now);
-  if (!parsed.ok) {
-    if (asJson) emitJson({ ok: false, reason: parsed.reason, spec, hint: parsed.hint }, 1);
-    console.error(ui.mark.err(`I cannot read "${spec}" as a wait.`));
-    console.error("  " + parsed.hint);
-    process.exit(1);
-  }
+  if (!parsed.ok) return { ok: false, exit: 1, reason: parsed.reason, spec, hint: parsed.hint };
 
   let minutes = parsed.minutes;
   let source = parsed.kind;
@@ -42056,15 +42361,14 @@ function waitPlanCmd(claudeDir) {
       const why = reading
         ? "the reading has no usable reset time"
         : "there is no reading in the last 30 minutes";
-      if (asJson)
-        emitJson(
-          { ok: false, reason: "no-reading", spec, hint: `${why}. Type a time instead. Example: orc wait plan 45` },
-          2
-        );
-      console.error(ui.mark.err("I cannot read the reset time."));
-      console.error("  " + why + ".");
-      console.error("  Type a time instead. Example: " + ui.color.cyan("orc wait plan 45"));
-      process.exit(2);
+      return {
+        ok: false,
+        exit: 2,
+        reason: "no-reading",
+        spec,
+        why,
+        hint: `${why}. Type a time instead. Example: orc wait plan 45`,
+      };
     }
     minutes = Math.max(1, Math.round((at - now) / 60000));
     source = "reset";
@@ -42072,7 +42376,7 @@ function waitPlanCmd(claudeDir) {
 
   const h = waitHops(minutes, hopMin, maxHops);
   const endsAt = new Date(now + minutes * 60000);
-  const out = {
+  return {
     ok: true,
     spec,
     source,
@@ -42090,16 +42394,38 @@ function waitPlanCmd(claudeDir) {
     modes: WAIT_MODES,
     note: "A detached command does the waiting. No model runs, and no tokens are spent.",
   };
+}
+
+// The two refusals of the plan, in the human voice. Shared by `plan` and `start`
+// so the same mistake reads the same way in both.
+function waitPlanRefuse(plan, asJson) {
+  if (asJson) emitJson({ ok: false, reason: plan.reason, spec: plan.spec, hint: plan.hint }, plan.exit);
+  if (plan.exit === 2) {
+    console.error(ui.mark.bad("I cannot read the reset time."));
+    console.error("  " + plan.why + ".");
+    console.error("  Type a time instead. Example: " + ui.color.cyan("orc wait plan 45"));
+  } else {
+    console.error(ui.mark.bad(`I cannot read "${plan.spec}" as a wait.`));
+    console.error("  " + plan.hint);
+  }
+  process.exit(plan.exit);
+}
+
+function waitPlanCmd(claudeDir) {
+  const asJson = wantsJson();
+  const spec = positionals().slice(2).join(" ");
+  const out = waitPlanCompute(claudeDir, spec, Date.now());
+  if (!out.ok) waitPlanRefuse(out, asJson);
   if (asJson) emitJson(out, 0);
 
   console.log(ui.header("ORC · wait — the plan"));
   console.log("");
-  console.log(`  ${ui.color.cyan("length")}    ${minutes} min  (from ${source})`);
-  console.log(`  ${ui.color.cyan("ends at")}   ${endsAt.toTimeString().slice(0, 5)}`);
-  console.log(`  ${ui.color.cyan("hops")}      ${h.hops.join(" + ")}  (${h.hops.length} of ${maxHops} max)`);
-  if (h.truncated)
+  console.log(`  ${ui.color.cyan("length")}    ${out.minutes} min  (from ${out.source})`);
+  console.log(`  ${ui.color.cyan("ends at")}   ${new Date(out.ends_at).toTimeString().slice(0, 5)}`);
+  console.log(`  ${ui.color.cyan("hops")}      ${out.hops.join(" + ")}  (${out.hop_count} of ${out.max_hops} max)`);
+  if (out.truncated)
     console.log(
-      ui.mark.warn(`  ${h.uncovered_minutes} min are NOT covered — wait_max_hops is ${maxHops}.`)
+      ui.mark.warn(`  ${out.uncovered_minutes} min are NOT covered — wait_max_hops is ${out.max_hops}.`)
     );
   if (out.crosses_cache_ttl)
     console.log(
@@ -42691,7 +43017,7 @@ function waitBlockCmd(claudeDir, unblock) {
       ? `no run named "${slug}" under ${resolveRunDir(claudeDir)}`
       : "no run is in flight, and no slug was given";
     if (asJson) emitJson({ ok: false, reason: "no-run", slug: slug || null, hint }, 2);
-    console.error(ui.mark.err("I cannot find the run this is about."));
+    console.error(ui.mark.bad("I cannot find the run this is about."));
     console.error("  " + hint + ".");
     process.exit(2);
   }
@@ -42708,7 +43034,9 @@ function waitBlockCmd(claudeDir, unblock) {
       block_reason: null,
       unblocked_at: new Date().toISOString(),
     });
-    const trace = waitTraceLine(claudeDir, "WAIT", "unblock");
+    // v2.1.2 F11 — the sub-form is part of the VERB (`WAIT block :: …`), the
+    // shape TRACE_VERBS declares.
+    const trace = waitTraceLine(claudeDir, "WAIT unblock", null);
     if (asJson) emitJson({ ok: true, slug: run.slug, blocked: false, trace_line: trace }, 0);
     console.log(ui.mark.ok(`${run.slug}: the gate is live again.`));
     return;
@@ -42728,7 +43056,7 @@ function waitBlockCmd(claudeDir, unblock) {
         },
         1
       );
-    console.error(ui.mark.err("A block needs a reason."));
+    console.error(ui.mark.bad("A block needs a reason."));
     console.error('  orc wait block ' + run.slug + ' --reason "window resets in 5m, task needs 10"');
     process.exit(1);
   }
@@ -42738,7 +43066,7 @@ function waitBlockCmd(claudeDir, unblock) {
     block_reason: reason,
     unblocked_at: null,
   });
-  const trace = waitTraceLine(claudeDir, "WAIT", `block reason="${reason}" by=user`);
+  const trace = waitTraceLine(claudeDir, "WAIT block", `reason="${reason}" by=user`);
   if (asJson)
     emitJson(
       { ok: true, slug: run.slug, blocked: true, blocked_at: st.blocked_at, reason, trace_line: trace },
@@ -42754,6 +43082,163 @@ function waitBlockCmd(claudeDir, unblock) {
   );
 }
 
+// v2.1.2 F10 — a wait's activity is COMPUTED from its start and the clock, never
+// stored. A session that died mid-wait writes no `wait_ended_at`, so a stored
+// flag would read `waiting` for ever; one hop of grace after `ends_at` is the
+// last moment a live wait can still be hopping.
+function waitActive(st, now) {
+  const s = st || {};
+  const t = typeof now === "number" ? now : Date.now();
+  const started = !!s.wait_started_at;
+  const ended = !!s.wait_ended_at;
+  const grace = (Number(s.hop_minutes) || WAIT_HOP_DEFAULT_MIN) * 60000;
+  const endsAt = Date.parse(s.ends_at);
+  const active = started && !ended && Number.isFinite(endsAt) && t <= endsAt + grace;
+  const hops = Array.isArray(s.hops) ? s.hops : [];
+  const planned = Number(s.hops_planned) || hops.length;
+  let done = 0;
+  if (ended) done = Number(s.hops_done) || 0;
+  else if (started) {
+    // A hop is done when the clock has passed its cumulative boundary.
+    const elapsed = (t - Date.parse(s.wait_started_at)) / 60000;
+    let sum = 0;
+    for (const h of hops) {
+      sum += Number(h) || 0;
+      if (sum <= elapsed) done++;
+    }
+    done = Math.min(done, planned);
+  }
+  return { started, ended, active, stale: started && !ended && !active, hops_done: done, hops_planned: planned };
+}
+
+const WAIT_TRIGGERS = ["user", "gate"];
+const WAIT_END_REASONS = ["elapsed", "recovered", "cancelled", "max-hops"];
+
+// `orc wait start <spec> --mode <m>` — the STARTED half of wait.json, and the
+// `WAIT mode=…` line. With no run in flight a wait is simply a wait: the answer
+// is `recorded: false`, exit 0, and NOTHING is written.
+function waitStartCmd(claudeDir) {
+  const asJson = wantsJson();
+  const mode = flag("--mode");
+  const trigger = flag("--trigger") === undefined ? "user" : flag("--trigger");
+  const runFlag = typeof flag("--run") === "string" ? flag("--run") : null;
+  // positionals() does not know these three flags, so their VALUES arrive as
+  // positionals — and "30 hard" is not a spec. Take each one out once.
+  const pos = positionals().slice(2);
+  for (const v of [mode, trigger, runFlag]) {
+    const i = typeof v === "string" ? pos.indexOf(v) : -1;
+    if (i !== -1 && args.includes(v)) pos.splice(i, 1);
+  }
+  const now = Date.now();
+  const plan = waitPlanCompute(claudeDir, pos.join(" "), now);
+  if (!plan.ok) waitPlanRefuse(plan, asJson);
+
+  if (!WAIT_MODES.includes(mode)) {
+    const hint = `a wait is recorded with its mode. Pass --mode <${WAIT_MODES.join("|")}>.`;
+    if (asJson) emitJson({ ok: false, reason: "no-mode", spec: plan.spec, hint }, 1);
+    console.error(ui.mark.bad("A wait needs a mode."));
+    console.error("  " + hint);
+    process.exit(1);
+  }
+  if (!WAIT_TRIGGERS.includes(trigger)) {
+    const hint = `--trigger is ${WAIT_TRIGGERS.join(" or ")}.`;
+    if (asJson) emitJson({ ok: false, reason: "bad-trigger", spec: plan.spec, hint }, 1);
+    console.error(ui.mark.bad("I cannot read that trigger."));
+    console.error("  " + hint);
+    process.exit(1);
+  }
+
+  const run = waitResolveRun(claudeDir, runFlag);
+  if (!run) {
+    if (asJson) emitJson({ ...plan, ok: true, recorded: false, reason: "no-run", mode, trigger }, 0);
+    console.log(ui.color.gray("No run is in flight, so nothing is recorded. The wait is still a wait."));
+    return;
+  }
+  if (waitActive(readWaitState(claudeDir, run.slug), now).active) {
+    const hint = "this run already has a wait. `orc wait end` or `orc wait cancel` closes it.";
+    if (asJson) emitJson({ ok: false, reason: "already-waiting", slug: run.slug, hint }, 1);
+    console.error(ui.mark.warn(`${run.slug} already has a wait running.`));
+    console.error("  " + hint);
+    process.exit(1);
+  }
+
+  writeWaitState(claudeDir, run.slug, {
+    wait_started_at: new Date(now).toISOString(),
+    mode,
+    trigger,
+    minutes: plan.minutes,
+    hop_minutes: plan.hop_minutes,
+    hops: plan.hops,
+    hops_planned: plan.hop_count,
+    max_hops: plan.max_hops,
+    ends_at: plan.ends_at,
+    hops_done: 0,
+    wait_ended_at: null,
+    end_reason: null,
+    cancel_requested_at: null,
+  });
+  const hhmm = (iso) => new Date(iso).toTimeString().slice(0, 5);
+  const trace = waitTraceLine(
+    claudeDir,
+    `WAIT mode=${mode} requested=${plan.minutes}m start=${hhmm(now)} end=${hhmm(plan.ends_at)} ` +
+      `hops=${plan.hop_count}/${plan.max_hops} trigger=${trigger}`,
+    null
+  );
+  if (asJson)
+    emitJson({ ...plan, ok: true, recorded: true, slug: run.slug, mode, trigger, trace_line: trace }, 0);
+  console.log(
+    ui.mark.ok(`${run.slug}: the wait is recorded — ${mode}, ${plan.minutes} min, ends ${hhmm(plan.ends_at)}.`)
+  );
+}
+
+// `orc wait end [<slug>] --reason <r>` — closes the wait `start` recorded. The
+// hop count is taken from the clock at this moment, then FROZEN in the file.
+function waitEndCmd(claudeDir) {
+  const asJson = wantsJson();
+  const reason = typeof flag("--reason") === "string" ? String(flag("--reason")).trim() : "";
+  const run = waitResolveRun(claudeDir, positionals()[2]);
+  if (!run) {
+    if (asJson) emitJson({ ok: false, reason: "no-run", hint: "no run is in flight" }, 1);
+    console.error(ui.mark.warn("No run is in flight, so there is no wait to end."));
+    process.exit(1);
+  }
+  const now = Date.now();
+  const act = waitActive(readWaitState(claudeDir, run.slug), now);
+  if (!act.active) {
+    if (asJson) emitJson({ ok: false, reason: "no-wait", slug: run.slug }, 1);
+    console.error(ui.mark.warn(`${run.slug} has no wait running.`));
+    process.exit(1);
+  }
+  if (!WAIT_END_REASONS.includes(reason)) {
+    const hint = `say why the wait ended. Pass --reason <${WAIT_END_REASONS.join("|")}>.`;
+    if (asJson) emitJson({ ok: false, reason: "no-reason", slug: run.slug, hint }, 1);
+    console.error(ui.mark.bad("The end of a wait needs a reason."));
+    console.error("  " + hint);
+    process.exit(1);
+  }
+  const st = writeWaitState(claudeDir, run.slug, {
+    wait_ended_at: new Date(now).toISOString(),
+    end_reason: reason,
+    hops_done: act.hops_done,
+  });
+  const trace = waitTraceLine(claudeDir, "WAIT end", `done=${act.hops_done}/${act.hops_planned} reason=${reason}`);
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        slug: run.slug,
+        ended: true,
+        end_reason: reason,
+        hops_done: act.hops_done,
+        hops_planned: act.hops_planned,
+        wait_ended_at: st.wait_ended_at,
+        trace_line: trace,
+      },
+      0
+    );
+  console.log(ui.mark.ok(`${run.slug}: the wait ended — ${reason}, hop ${act.hops_done} of ${act.hops_planned}.`));
+}
+
 function waitCancelCmd(claudeDir) {
   const asJson = wantsJson();
   const run = waitResolveRun(claudeDir, positionals()[2]);
@@ -42763,7 +43248,7 @@ function waitCancelCmd(claudeDir) {
     process.exit(1);
   }
   const cur = readWaitState(claudeDir, run.slug);
-  if (!cur || !cur.wait_started_at || cur.wait_ended_at) {
+  if (!waitActive(cur).active) {
     if (asJson) emitJson({ ok: false, reason: "no-wait", slug: run.slug }, 1);
     console.error(ui.mark.warn(`${run.slug} has no wait running.`));
     process.exit(1);
@@ -42786,15 +43271,19 @@ function waitStatusCmd(claudeDir) {
   }
   const st = readWaitState(claudeDir, run.slug) || {};
   const blocked = !!st.blocked_at;
-  const waiting = !!st.wait_started_at && !st.wait_ended_at;
+  // v2.1.2 F10 — computed from the start and the clock. A wait whose session
+  // died reads `stale`, never `waiting`.
+  const act = waitActive(st);
+  const waiting = act.active;
   const ageMin = blocked ? Math.round((Date.now() - Date.parse(st.blocked_at)) / 60000) : null;
   const out = {
     ok: true,
     run: run.slug,
     waiting,
+    stale: act.stale,
     mode: st.mode || null,
     hop: st.hop || null,
-    hops_done: st.hops_done || 0,
+    hops_done: act.hops_done,
     hops_planned: st.hops_planned || null,
     ends_at: st.ends_at || null,
     cancel_requested: !!st.cancel_requested_at,
@@ -42813,7 +43302,7 @@ function waitStatusCmd(claudeDir) {
     `  ${ui.color.cyan("wait")}      ` +
       (waiting
         ? `${st.mode || "?"} · hop ${out.hops_done} of ${out.hops_planned || "?"} · ends ${out.ends_at || "?"}`
-        : ui.color.gray("none"))
+        : ui.color.gray(act.stale ? "none — a wait was started and never closed (stale)" : "none"))
   );
   console.log(
     `  ${ui.color.cyan("block")}     ` +
@@ -42839,9 +43328,15 @@ function waitCmd() {
       return waitBlockCmd(claudeDir, true);
     case "cancel":
       return waitCancelCmd(claudeDir);
+    case "start":
+      return waitStartCmd(claudeDir);
+    case "end":
+      return waitEndCmd(claudeDir);
     default:
       console.error(`usage: orc wait lanes [--json]
        orc wait plan <30|90m|2h|until 18:41|reset> [--hop <min>] [--max-hops <n>] [--json]
+       orc wait start <spec> --mode <safe|soft|hard> [--trigger user|gate] [--run <slug>] [--json]
+       orc wait end [<slug>] --reason <elapsed|recovered|cancelled|max-hops> [--json]
        orc wait status [<slug>] [--json]
        orc wait block <slug> --reason "<why>" [--json]
        orc wait unblock [<slug>] [--json]
@@ -46947,7 +47442,7 @@ function lintScanFile(abs, rel, opts) {
       const low = prose.toLowerCase();
       if (on("OSW-10"))
         for (const w of LINT_LEXICON)
-          if (new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\// ── the `--json` crash envelope (v0.49.2) ───────────────────────────────────")}\\b`, "i").test(low)) {
+          if (new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(low)) {
             add("OSW-10", n, w, "use the plain word");
             break; // one finding per line — a list of six is a list nobody reads
           }
@@ -47249,7 +47744,7 @@ function jsonCrash(err) {
     // v2.1.0 W6 — the deterministic half of `/orc-fix`. It READS `.current`
     // (the host run) and never writes it: the lane opens no run of its own.
     case "fix":
-      require("./fix.js").fixCmd(Object.assign(gotchaDeps(), { resolveLogDir, TRACE_NAME, inflightStaleMs: INFLIGHT_STALE_MS }));
+      require("./fix.js").fixCmd(Object.assign(gotchaDeps(), { resolveLogDir, TRACE_NAME, inflightStaleMs: INFLIGHT_STALE_MS, openRunPointer }));
       break;
     case "graph":
       graphCmd();

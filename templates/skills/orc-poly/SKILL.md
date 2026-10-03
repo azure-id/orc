@@ -109,8 +109,8 @@ stops the chat and never falls back to another lane.
   (FRESH/AGING/STALE; the CLI computes it — never by hand).
 - **PEER wiki:** the same call with `--dir <peer>`; then read its
   `wiki/INDEX.md` at the peer path. `state: none` there → treat as no wiki.
-- `WIKI-CONSULT tier=<FRESH|AGING|STALE|none> :: <repo>` on every read (emit
-  even for `none`). `GATE knowledge <repo>=<wiki|ask>` per repo.
+- `WIKI-CONSULT <fresh|aging|stale|absent> :: repo=<repo>` on every read (emit
+  even for `absent`). `GATE knowledge <repo>=<wiki|ask>` per repo.
 
 **Both/all repos have a usable wiki** → read the relevant feature/reference
 pages, and read the **crosslink boundary tags** each repo publishes under its
@@ -206,8 +206,8 @@ builds.
 
 ## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-- **Calls:** `orc lane calls orc-poly --json` names every call and its exit codes.
-  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Calls:** `orc lane calls orc-poly --json` names shared calls and exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Own calls are here; make no other.
 - **Config:** `orc lane config orc-poly --json`. Obey `effective`. Never merge
   `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`). Nothing
   here is contested, gated or a stop: no preflight line, no gate to honour.

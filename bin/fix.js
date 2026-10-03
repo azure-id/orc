@@ -8,6 +8,8 @@
 // `/orc-fix` is a RIDER lane, like `/orc-wait` and `/orc-explain`: it opens no
 // run of its own. So this module NEVER writes `.current` — it only READS it to
 // find the host run, and appends ONE `FIX` line to that run's trace (DE-14).
+// A host is an OPEN run (6 h) that a lane registered; the hook's bootstrap
+// pointer is not one (v2.1.2, F14).
 //
 // The class has two axes (04 §5.2): `source` (what found it) and
 // `introduced_by` (who wrote the bad lines). Both are kept: a Sonar issue can
@@ -57,17 +59,17 @@ function git(cwd, args) {
 
 // The run in flight, READ from `.current` (never written here), and whether a
 // dispatch is still open — the same sidecar `orc run inflight` reads.
+// v2.1.2 (F14): the pointer goes through `deps.openRunPointer`, the hooks' one
+// idea of an open run (6 hours). A HOST is an open run a LANE registered. The
+// trace hook's bootstrap name (written when /orc-fix's own may-fix executor is
+// dispatched) names no lane, so no lane is there to make the fix. Its open
+// dispatches still block a record.
 function hostRun(deps, claudeDir) {
-  const dir = deps.resolveLogDir(claudeDir);
-  let cur = null;
-  try {
-    cur = fs.readFileSync(path.join(dir, ".current"), "utf8").trim();
-  } catch (_) {}
-  if (!cur) return { host: null, inflight: "clear", pending: 0 };
-  const tracePath = path.join(dir, cur);
-  if (!fs.existsSync(tracePath)) return { host: null, inflight: "clear", pending: 0 };
-  const m = deps.TRACE_NAME.exec(cur);
-  const host = { trace: cur, run: cur.replace(/\.txt$/, ""), lane: m ? m[1] : null, slug: m ? m[2] : null, path: tracePath };
+  const ptr = deps.openRunPointer(claudeDir);
+  if (!ptr || !ptr.exists) return { host: null, open: null, inflight: "clear", pending: 0 };
+  const tracePath = ptr.path;
+  const ref = { trace: ptr.name, run: ptr.run, lane: ptr.lane, slug: ptr.slug, path: tracePath };
+  const host = ptr.lane ? ref : null;
   let pend = null;
   try {
     const raw = JSON.parse(fs.readFileSync(tracePath + ".pending.json", "utf8"));
@@ -75,16 +77,16 @@ function hostRun(deps, claudeDir) {
   } catch (_) {}
   const now = Date.now();
   if (pend) {
-    const open = pend.filter((r) => !(typeof r.ts === "number" && now - r.ts > deps.inflightStaleMs)).length;
-    return { host, inflight: open ? "in-flight" : "clear", pending: open };
+    const n = pend.filter((r) => !(typeof r.ts === "number" && now - r.ts > deps.inflightStaleMs)).length;
+    return { host, open: ref, inflight: n ? "in-flight" : "clear", pending: n };
   }
   // No sidecar: trust the trace's own SPAWN/RETURN balance.
   let balance = 0;
   try {
     const text = fs.readFileSync(tracePath, "utf8");
-    balance = (text.match(/\] hook\s+SPAWN /g) || []).length - (text.match(/\] hook\s+RETURN /g) || []).length + (text.match(/\] hook\s+RETURN ~agent :: unattributed/g) || []).length;
+    balance = (text.match(/] hooks+SPAWN /g) || []).length - (text.match(/] hooks+RETURN /g) || []).length + (text.match(/] hooks+RETURN ~agent :: unattributed/g) || []).length;
   } catch (_) {}
-  return { host, inflight: balance > 0 ? "in-flight" : "clear", pending: Math.max(0, balance) };
+  return { host, open: ref, inflight: balance > 0 ? "in-flight" : "clear", pending: Math.max(0, balance) };
 }
 
 // `git blame` on the named lines → the commit that wrote most of them.
@@ -278,6 +280,7 @@ function classify(deps, claudeDir, text) {
     commit,
     evidence,
     host: run.host ? { trace: run.host.trace, run: run.host.run, lane: run.host.lane, slug: run.host.slug } : null,
+    open_run: run.open ? run.open.run : null,
     inflight: run.inflight,
     pending: run.pending,
     // DE-12 (c): a run is open → record only, the host lane makes the fix.
@@ -385,7 +388,7 @@ function fixCmd(deps) {
     if (!text) return fail(2, "usage", "fix classify: --text \"<what the user said>\" is required\n" + USAGE);
     const c = classify(deps, claudeDir, text);
     const code = c.inflight === "in-flight" ? 1 : 0;
-    if (code) c.message = `a dispatch is in flight in ${c.host.run} (${c.pending} open) — /orc-fix waits for its return`;
+    if (code) c.message = `a dispatch is in flight in ${c.open_run} (${c.pending} open) — /orc-fix waits for its return`;
     return out(c, code, () => {
       if (code) console.log(`⏸ ${c.message}`);
       console.log(`proposed: source ${c.source} · introduced by ${c.introduced_by}${c.run ? ` (${c.run})` : ""}`);
@@ -399,7 +402,7 @@ function fixCmd(deps) {
     if (inp.err) return fail(2, "malformed", `fix record: the input ${inp.err}`, { field: "body" });
     const run = hostRun(deps, claudeDir);
     if (run.inflight === "in-flight")
-      return fail(1, "in-flight", `fix record: a dispatch is in flight in ${run.host.run} (${run.pending} open) — nothing was written. Record after its return.`, { host: run.host.run, pending: run.pending });
+      return fail(1, "in-flight", `fix record: a dispatch is in flight in ${run.open.run} (${run.pending} open) — nothing was written. Record after its return.`, { host: run.host ? run.host.run : null, open_run: run.open.run, pending: run.pending });
     const b = Object.assign({}, inp.value);
     if (!b.fix_run && run.host) b.fix_run = run.host.run;
     const t = toObservation(b, now);
@@ -425,7 +428,7 @@ function fixCmd(deps) {
     // takes the record down with it.
     let traceLine = null;
     if (run.host) {
-      const head = `FIX source=${b.source} introduced_by=${rec.introduced_by} by=${rec.class_by || "evidence"} obs=${rec.obs.slice(0, 8)}${rec.miss ? ` missed_by=${rec.missed_by}` : ""}`;
+      const head = `FIX source=${rec.source} introduced_by=${rec.introduced_by} by=${rec.class_by || "evidence"} obs=${rec.obs.slice(0, 8)}${rec.miss ? ` missed_by=${rec.missed_by}` : ""}`;
       const line = `[${stamp(new Date(now))}] ${"cli".padEnd(8)} ${head} :: ${where}${what ? " " + oneLine(what).slice(0, 80) : ""}`;
       try {
         fs.appendFileSync(run.host.path, line + "\n");
@@ -433,7 +436,7 @@ function fixCmd(deps) {
       } catch (_) {}
     }
     const who = rec.introduced_by === "orc" ? `ORC${rec.run ? ` (${rec.run})` : ""}` : rec.introduced_by === "ai" ? "AI-written code" : rec.introduced_by;
-    const lineOut = `recorded ${id} · ${b.source}${what ? " " + oneLine(what).slice(0, 60) : ""} · introduced by ${who}${rec.miss ? ` · missed by review ${rec.missed_by}` : ""} · the next review sees it`;
+    const lineOut = `recorded ${id} · ${rec.source}${what ? " " + oneLine(what).slice(0, 60) : ""} · introduced by ${who}${rec.miss ? ` · missed by review ${rec.missed_by}` : ""} · the next review sees it`;
     return out(
       { ok: true, id, obs: rec.obs, observation: rec, miss: !!rec.miss, missed_by: rec.missed_by || null, host: run.host ? run.host.run : null, trace_line: traceLine, promoted: changes.promoted, bumped: changes.bumped, line: lineOut },
       0,

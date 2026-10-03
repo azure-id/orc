@@ -38,6 +38,9 @@ escalate_to: "the payments owner"   # REQUIRED when verdict is ESCALATE
  file is dangerous costs more than it saves.>
 ```
 
+Lists may be block (`- item`) or inline (`[a, b]`). `orc boundary status` reads
+both (v2.1.2). An item that holds a comma or a `#` goes in quotes.
+
 ## Field rules
 
 **`area`** — verbatim, never sanitised. The filename is sanitised; the identity is

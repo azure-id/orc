@@ -178,7 +178,9 @@ orc graph map --focus src/orders/service.js,createOrder --if-enabled --json --br
 tells you which files to choose. Running `map` after `impact` is running it
 after the decision it exists to inform.
 
-`--focus` takes files OR symbol names — whatever the request already mentioned.
+`--focus` takes files, symbol names, or plain words — whatever the request
+already mentioned (a word reaches the files whose path or symbol names hold it;
+a word in too many files is reported and not used).
 A name contributes every file that defines it, which is how a request that says
 "fix `createOrder`" reaches the file nobody spelled out. The focus re-ranks the
 WHOLE repository around those files; it never filters it, so a file the focus
@@ -363,7 +365,9 @@ lane that merges them is reporting a number nobody can check:
   beside it — a delta smaller than that spread is noise, not a result.
 - A coverage note is PAID ONLY. It tells you what a card cannot show; it
   replaces no read and is never counted as a saving.
-- A card the return marked `graph_used: none` is not a saving either.
+- A card the return marked `graph_used: none` is not a saving. The meter cannot
+  see a return, so `avoided` still counts it — read `graph_used` beside the
+  line.
 
 ## 9. Lane policy
 

@@ -151,7 +151,7 @@ too.
 | `quick-executor` | `/orc-quick` | `orc-executor-sonnet-5-med` · `orc-executor-opus-5-low` | **asked**, at the dispatch gate | the user picks the agent for every entry anyway, so a foreign worker is one more option on a menu they already read |
 | `fast-executor` | `/orc-fast` | `orc-executor-sonnet-5-med` | announced, F0 preflight | one executor, one slice, a build+test smoke gate behind it — the checks that catch a bad implementation here are engine-blind |
 | `doc-writer` | `/orc-doc` | `orc-doc-writer-opus-5-med` | announced, before the wave, naming the sections | a writer owns ONE part file and invents no fact; its output is read by a checker and by you before it ships |
-| `doc-checker` | `/orc-doc` | `orc-doc-checker-opus-5-low` | announced, before the wave | the checker reads one bounded part and reports; it rewrites nothing |
+| `doc-checker` | `/orc-doc` | `orc-doc-checker-opus-5-low` | announced, before the wave | the checker reads only the bounded part files of one slice and reports; it rewrites nothing |
 | `test-designer` | `/orc-test` | `orc-test-designer-opus-5-high` | announced, the T1 `extra:` line, before any case runs | the designer writes a FILE the CLI reads back through a validating command, and a row that fails validation is refused BY NAME — so its output is checked before anything is sent |
 | `wiki-scanner-deep` | `/orc-wiki` | `orc-wiki-scanner-opus-5-low` | announced, per scan-batch, beside the resolved tier | a scanner returns an evidence-anchored doc body; every claim in it is anchored to a file you can open |
 | `wiki-scanner-light` | `/orc-wiki` | `orc-wiki-scanner-sonnet-5-high` | announced, per scan-batch, beside the resolved tier | the LIGHT tier is already a small no-new-surface delta on an existing doc |

@@ -107,8 +107,8 @@ A phase ending with `zero new trace lines is a protocol violation`.
 
 ## Wiki gate
 
-Compute the wiki freshness tier exactly as the full lane does (follow the
-read-side procedure in `.claude/skills/orc-wiki/references/staleness.md`).
+Read the wiki freshness tier from `orc wiki status --json` (`state`, then
+`tier`) — the CLI is its only executor; never compute it yourself.
 Fresh → use silently; aging → one-line notice, continue; stale → warn the
 user that wiki hints may be outdated, continue. Never block on it.
 

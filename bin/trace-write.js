@@ -397,8 +397,9 @@ function validatePacket(pk, traceVerbs) {
     const d = Object.prototype.hasOwnProperty.call(traceVerbs, word) ? traceVerbs[word] : null;
     if (!d) return errs.push(`${at}: unknown verb ${word} — not in the CLOSED set (trace-verbs.md)`);
     if (d.emitter === "hook") return errs.push(`${at}: ${word} is written by the hook, never by a packet`);
-    // v2.1.0 W6 — `FIX` is written by `orc fix record` itself.
-    if (d.emitter === "cli") return errs.push(`${at}: ${word} is written by the CLI (\`orc fix record\`), never by a packet`);
+    // v2.1.0 W6 — `FIX` is written by `orc fix record` itself; v2.1.2 F11 —
+    // `WAIT` by `orc wait`. The verb's owner file says which command.
+    if (d.emitter === "cli") return errs.push(`${at}: ${word} is written by the CLI itself (see ${d.owner}), never by a packet`);
     const ts = e.ts == null ? "" : String(e.ts).trim();
     if (!TS_RE.test(ts)) errs.push(`${at} (${word}): ts "${ts}" is not DDMMYY HH:MM:SS.mmm — the event's REAL time, never "now"`);
     const actor = e.actor == null || e.actor === "" ? "orc" : String(e.actor).trim();

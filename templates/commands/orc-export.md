@@ -22,6 +22,10 @@ patterns, then the feature and reference wiki docs.
   every source, so **`orc export --check` proves it is current** — exit 1 names which
   source changed, and which are no longer sources at all. Run it in CI next to
   `orc wiki sync --check` and the export can never quietly rot.
+- **`orc export` OVERWRITES `AGENTS.md`.** A hand-written file has no
+  derived header, and `--check` reports it as STALE (exit 1). So
+  ALWAYS run `orc export --check --json` first. When `exists: true` and the file
+  has no header, ask the user before the write.
 - **Sources are copied through, never re-summarised.** A summary of an
   evidence-anchored doc is a doc with the evidence removed.
 - **Never exports** secrets, anything `.env`-shaped, run folders or logs. This is a
@@ -32,8 +36,9 @@ patterns, then the feature and reference wiki docs.
 `.cursorrules` or copilot instructions in a repo that may never have run ORC, and
 gives you two things:
 
-- **What is already wrong**: every file path that context names which does not exist,
-  every command the manifest does not have. Free, and a very good first impression —
+- **What is already wrong**: every file path it names that does not exist
+  (`wrong[]`); commands it names go to `seed_invariants[]` for the model to check
+  against `package.json` scripts. Free, and a very good first impression —
   those lines have been lying to somebody's agent for months.
 - **Seeds**: candidate pact entries and wiki topics, one at a time, for you to keep or
   drop.

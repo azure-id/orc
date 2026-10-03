@@ -87,7 +87,9 @@ build · tests · lint · manual checks (commands + results)
 
 On a pick, offer once to save it as `.github/pull_request_template.md` (a repo
 change — never write it unasked). Declined → the template is used for this stack
-only and lives in the plan.
+only and lives in the plan: `picked:<name>` records the NAME only; a template the
+user pasted goes VERBATIM in one fenced block under `## PR template`, so the
+probe never reads its `<…>` slots.
 
 ## Per-layer fill rules (stacked PRs)
 

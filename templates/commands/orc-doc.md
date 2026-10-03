@@ -14,7 +14,7 @@ later in a brand-new session.
 That is half the architecture. A 900-line TSD is about 30k tokens; read it three
 times and the session is over. So nothing that holds context ever holds the
 document: the CLI derives a section map (heading, line range, hash), each writer
-owns **exactly one file**, each checker reads **one bounded part**, and the
+owns **exactly one file**, each checker reads **only the bounded part files of one slice**, and the
 orchestrator holds the map and the returns. A 10,000-line document costs the
 orchestrator about 750 lines of context instead of 20,000.
 

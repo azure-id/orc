@@ -99,7 +99,9 @@ $ orc doc map prd-checkout-refund-130826 --json
   has not moved does not need re-checking). *The hash is what turns a re-check
   from a full pass into a diff.*
 - **`state`** ∈ `planned | written | checked | user-edited | open | unconfirmed`.
-  COMPUTED from the disk every time — never stored as a claim.
+  COMPUTED from the disk every time — never stored as a claim. `checked` is
+  recorded by `orc doc parts --checked` from a validated checker return and
+  stays only while the hash holds.
 - **Renames are repaired, not lost.** A heading whose text changed but whose
   position and neighbours match is the same section with a new `id`; `doc.json`
   is updated and the history follows it. A heading that appears with no such
@@ -111,7 +113,7 @@ system is ever stale.** That is what makes range-based reading safe.
 ### `unconfirmed` — the state a usage limit leaves behind
 
 A part is `written` only when its hash was recorded from a **validated return**
-(`orc doc parts <slug> --confirm <ids>`, run at the wave's stop sequence). **A
+(`orc doc parts <slug> --confirm <ids>`, run at the wave's stop sequence and after each D8 edit round). **A
 file present with no recorded hash is `unconfirmed`:** a writer killed mid-flight
 leaves a truncated file, and detection is already paid for. `orc doc parts`
 reports it, `orc doc next` offers to re-write it, and `compile` includes it only
@@ -366,7 +368,7 @@ already reported by lint: [{line: 13, rule: "long-sentence", …}]
 rules:     references/generation-rules.md   (5b · 5c · 5d, and the template lock)
 ```
 
-**One bounded part file per checker, so there is no line arithmetic anywhere in
+**Bounded part files per checker slice, so there is no line arithmetic anywhere in
 the check loop**, and no two checkers ever share a file. A checker never opens a
 second file and is never given the whole document. Findings the lint already
 reported are never re-reported — paying a model to repeat a free check is the
@@ -524,4 +526,4 @@ section straight from its own file.
 **The orchestrator never runs `orc doc read`.** It is a command for the HUMAN,
 the same way `orc challenge report` is. Hard rule 0 is not softened by a command
 that happens to print prose: reading the document is still delegated, always, to
-a checker that receives one bounded part file and nothing else.
+a checker that receives the part files of its slice and nothing else.

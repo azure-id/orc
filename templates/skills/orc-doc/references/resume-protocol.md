@@ -211,7 +211,8 @@ has broken this contract. Same honesty rule as `/orc-pact`'s
 **UNCHECKABLE**: not knowing is an answer, and faking it teaches people to
 distrust the rows that are real.
 
-**Call `orc doc log` at D1 with the user's words verbatim.** A resumed session
+**Call `orc doc log` right after `orc doc init` (D5) with the user's D1 words
+verbatim.** The slug does not exist before D5. A resumed session
 reads the journal to answer *"what have I been asking for?"*, and a paraphrase
 there is the same failure as a paraphrase in `context.md` — it is where a
 resumed session quietly starts writing a different document.

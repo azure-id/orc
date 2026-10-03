@@ -1323,3 +1323,125 @@ test("W5 gate: the review slice field set is identical in every pointer file", (
   ])
     assert.ok(/review-slice\.md/.test(read(ptr)), ptr + " does not point at _shared/review-slice.md");
 });
+
+// --- v2.1.2 text fixes -------------------------------------------------------
+const walkMd = (dir, acc = []) => {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walkMd(p, acc);
+    else if (e.name.endsWith(".md")) acc.push(path.relative(T, p).split(path.sep).join("/"));
+  }
+  return acc;
+};
+
+// F12 — a skill quoted `orc_wiki_pattern_findings: on` while the validator takes
+// `true`/`false`. The enum choices are read from the config rows in bin/cli.js
+// (the same list `orc config list --json` prints as `control.choices`).
+test("a skill never spells a config value the CLI validator refuses", () => {
+  const cli = fs.readFileSync(path.join(__dirname, "..", "bin", "cli.js"), "utf8");
+  const choices = {};
+  for (const m of cli.matchAll(/key: "([a-z0-9_]+)".*?validate: vEnum\(([^)]*)\)/g))
+    choices[m[1]] = [...m[2].matchAll(/"([^"]*)"/g)].map((x) => x[1]);
+  assert.ok(Object.keys(choices).length >= 40, "found only " + Object.keys(choices).length + " enum config keys");
+  assert.deepStrictEqual(choices.orc_wiki_pattern_findings, ["true", "false"]);
+  // `tdd: exempt — <reason>` is a PLAN-TASK field with the same name as the
+  // config key `tdd`; it is not a config value.
+  const NOT_CONFIG = new Set(["tdd: exempt"]);
+  const bad = [];
+  let seen = 0;
+  for (const rel of walkMd(path.join(T, "skills"))) {
+    for (const m of read(rel).matchAll(/`([a-z0-9_]+): ([A-Za-z0-9_.-]+)[^`\n]*`/g)) {
+      if (!choices[m[1]] || NOT_CONFIG.has(m[1] + ": " + m[2])) continue;
+      seen++;
+      if (!choices[m[1]].includes(m[2])) bad.push(rel + ": `" + m[1] + ": " + m[2] + "` (allowed: " + choices[m[1]].join("|") + ")");
+    }
+  }
+  assert.ok(seen >= 10, "the scan matched only " + seen + " quoted config values");
+  assert.deepStrictEqual(bad, []);
+});
+
+// F09 — the 2.1.1 rename left the old executor name in the Extra paragraph.
+test("the /orc-fast spine names only the executor it dispatches", () => {
+  for (const rel of walkMd(path.join(T, "skills", "orc-fast")))
+    assert.ok(!read(rel).includes("orc-executor-sonnet-4-6-high"), rel + " names orc-executor-sonnet-4-6-high");
+  assert.ok(read("skills/orc-fast/SKILL.md").includes("NAMES the agent it displaces — `orc-executor-sonnet-5-med`"));
+});
+
+// F66 — the registry grammar is `WIKI-CONSULT <tier> :: docs=<list|none>`.
+test("every lane writes the registry's WIKI-CONSULT head", () => {
+  for (const rel of walkMd(path.join(T, "skills")))
+    assert.ok(!read(rel).includes("WIKI-CONSULT tier="), rel + " writes the undeclared `WIKI-CONSULT tier=` head");
+  assert.ok(read("skills/orc-learn/SKILL.md").includes("`WIKI-CONSULT <fresh|aging|stale|absent> :: docs=<topic doc|none>`"));
+  assert.ok(read("skills/orc-poly/SKILL.md").includes("`WIKI-CONSULT <fresh|aging|stale|absent> :: repo=<repo>`"));
+});
+
+// F24 — ORC never stops the server `orc test env up` started; T9 must say so.
+test("orc-test T9 names a process that ORC left running, and never offers to stop it", () => {
+  const md = read("skills/orc-test/SKILL.md");
+  const t9 = /^- \*\*T9 — Report\.\*\*[\s\S]*?(?=\n\n|\n- \*\*T\d)/m.exec(md);
+  assert.ok(t9, "no T9 bullet in the orc-test spine");
+  assert.ok(t9[0].includes("`process.alive: true`"), "T9 does not read process.alive");
+  assert.ok(/ORC\s+never stops it/.test(t9[0]), "T9 does not say that ORC never stops the server");
+  assert.ok(/never an offer to stop it/.test(t9[0]), "T9 must not offer to stop the server");
+  assert.ok(!/orc test env down/.test(md), "there is no `orc test env down` command");
+  assert.ok(md.split("\n").length - 1 <= 228, "the orc-test spine is over its 228-line budget");
+});
+
+// F26 — orc-challenge owns a DIFFERENT intake.md (the goal contract).
+test("orc-challenge points at its OWN intake, never the build intake", () => {
+  for (const rel of [
+    "skills/orc-challenge/SKILL.md",
+    "skills/orc-challenge/README.md",
+    "skills/orc-challenge/examples/council-full-roster.md",
+  ]) {
+    const md = read(rel);
+    assert.ok(md.includes("`references/intake.md`"), rel + " does not point at references/intake.md");
+    assert.ok(!md.includes("_shared/phases/intake.md"), rel + " points at the build intake");
+  }
+  assert.ok(fs.existsSync(path.join(T, "skills/orc-challenge/references/intake.md")));
+});
+
+// F03 — the call catalogue holds SHARED calls; a lane's own calls are in its skill.
+test("lane contract: the catalogue holds SHARED calls, and every Calls pointer says so", () => {
+  const FORM1 = "context-combiner orc orc-analyze orc-analyze-mini orc-diy orc-fast orc-mini orc-pattern orc-poly orc-pr-driver orc-pr-setup orc-quick orc-route orc-test orc-verify".split(" ");
+  const FORM2 = "orc-aftermath orc-boundary orc-brainstorm orc-budget orc-challenge orc-claude orc-doc orc-explain orc-export orc-grill orc-handoff orc-learn orc-pact orc-retro orc-wiki".split(" ");
+  const lf = (rel) => read(rel).replace(/\r\n/g, "\n");
+  const contract = lf("skills/_shared/lane-contract.md");
+  assert.ok(!contract.includes("names every\nCLI call the lane makes"), "the contract still says the catalogue is complete");
+  assert.ok(contract.includes("SHARED CLI call (a call that two or more lanes make)"));
+  assert.ok(contract.includes("A call that only this lane makes is not in the catalogue."));
+  for (const lane of FORM1) {
+    const md = lf("skills/" + lane + "/SKILL.md");
+    assert.ok(md.includes("names shared calls"), lane + " does not say `names shared calls`");
+    assert.ok(!md.includes("Make no other call."), lane + " still says `Make no other call.`");
+  }
+  for (const lane of FORM2) {
+    const md = lf("skills/" + lane + "/SKILL.md");
+    assert.ok(md.includes("SHARED CLI call"), lane + " does not say `SHARED CLI call`");
+    assert.ok(!md.includes("A call the answer does not name"), lane + " still refuses its own calls");
+  }
+});
+
+// F03 — the CLI is the only executor of the wiki tier.
+test("orc-learn and the diy wiki gate read the tier from the CLI", () => {
+  for (const rel of ["skills/orc-learn/SKILL.md", "skills/orc-diy/references/blocks/wiki.md"]) {
+    const md = read(rel);
+    assert.ok(!md.includes("compute the freshness tier"), rel + " computes the tier itself");
+    assert.ok(!md.includes("Compute the wiki freshness tier"), rel + " computes the tier itself");
+    assert.ok(md.includes("orc wiki status"), rel + " does not name `orc wiki status`");
+  }
+});
+
+// F21 + F65 — a pull in the middle of a split moves the stack base off the
+// commit the snapshot was cut from, and a layer then reverts upstream work.
+test("orc-run-split: the split never pulls, and STOPS when the trunk is not an ancestor of the snapshot", () => {
+  const dir = path.join(T, "skills", "orc-pr-driver");
+  const files = fs.readdirSync(dir, { recursive: true }).filter((f) => String(f).endsWith(".md"));
+  assert.ok(files.length >= 2, "the scan must find the files it guards");
+  for (const f of files)
+    assert.ok(!fs.readFileSync(path.join(dir, String(f)), "utf8").includes("git pull"), f + " pulls");
+  const split = read("skills/orc-pr-driver/references/orc-run-split.md");
+  assert.ok(split.includes("git merge-base --is-ancestor <trunk> $SNAPSHOT"));
+  assert.ok(split.includes("**Do not pull here.**"));
+  assert.ok(read("skills/orc-pr-driver/SKILL.md").includes("must be an ancestor of the snapshot"));
+});

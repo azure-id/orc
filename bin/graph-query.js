@@ -1756,9 +1756,62 @@ function mapRow(model, rel, fan, pre) {
 // A focus token is a FILE when the graph holds that path, and a NAME otherwise.
 // A name contributes every file that DEFINES it — which is how "focus on
 // `createOrder`" reaches the file a request never spelled out.
+//
+// v2.1.2 (F05): a token that is neither is read as plain WORDS. Two lane spines
+// pass "<3–6 words from the request>", and before this step every such map was
+// the plain repository ranking with a trace that still said `focused`. A word
+// reaches the files whose PATH or whose symbol NAMES hold it.
+const FOCUS_STOP = new Set(
+  "the and for with from into that this when where what which how why not all any add fix get set new use make src lib index test tests spec file files code".split(" ")
+);
+
+// Light on purpose: `rates` → `rate`, `taxes` → `tax`, `orders` → `order`,
+// `address` stays. A real stemmer would join words a request keeps apart.
+function focusStem(w) {
+  if (w.length > 3 && w.endsWith("ies")) return w.slice(0, -3) + "y";
+  if (/(s|x|z|ch|sh)es$/.test(w)) return w.slice(0, -2);
+  if (w.length >= 4 && w.endsWith("s") && !w.endsWith("ss")) return w.slice(0, -1);
+  return w;
+}
+
+// camelCase, `_`, `-`, `.`, `/` and whitespace all end a word.
+function focusWords(text) {
+  return String(text)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((w) => focusStem(w.toLowerCase()));
+}
+
+// ONE index per call, built only when a token needs it: word → the files whose
+// path (directories + basename without its extension) or symbol names hold it.
+function focusWordIndex(model) {
+  const index = new Map();
+  for (const rel of model.fileSet) {
+    const words = new Set(focusWords(rel.replace(/\.[^./]+$/, "")));
+    for (const s of (model.byFile[rel] && model.byFile[rel].symbols) || []) {
+      if (s.kind === "module") continue;
+      for (const w of focusWords(s.name || s.qname || "")) words.add(w);
+    }
+    for (const w of words) {
+      if (!index.has(w)) index.set(w, []);
+      index.get(w).push(rel);
+    }
+  }
+  return index;
+}
+
 function focusFiles(model, tokens) {
   const files = [];
   const missing = [];
+  const common = [];
+  const words = [];
+  const seen = new Set();
+  let index = null;
+  // A hint must not become the whole repository: a word in more files than
+  // this is REPORTED and not used.
+  const cap = Math.max(8, Math.ceil(0.1 * model.fileSet.size));
   for (const t of tokens) {
     const rel = norm(t).replace(/:\d+$/, "");
     if (model.fileSet.has(rel)) {
@@ -1766,10 +1819,32 @@ function focusFiles(model, tokens) {
       continue;
     }
     const defs = model.byName.get(String(t).split(".").pop()) || [];
-    if (defs.length) for (const s of defs) files.push(s.file);
+    if (defs.length) {
+      for (const s of defs) files.push(s.file);
+      continue;
+    }
+    index = index || focusWordIndex(model);
+    const none = [];
+    let held = false;
+    for (const w of focusWords(t)) {
+      if (w.length < 3 || FOCUS_STOP.has(w) || seen.has(w)) continue;
+      seen.add(w);
+      const hit = index.get(w) || [];
+      const used = hit.length > 0 && hit.length <= cap;
+      words.push({ word: w, files: hit.length, used });
+      if (!hit.length) none.push(w);
+      else {
+        held = true;
+        if (used) files.push(...hit);
+        else common.push(w);
+      }
+    }
+    // A token with no word in the graph is reported WHOLE, as it was typed —
+    // the answer a caller got before the word step, unchanged.
+    if (held) missing.push(...none);
     else missing.push(t);
   }
-  return { files: [...new Set(files)], missing };
+  return { files: [...new Set(files)], missing, common, words };
 }
 
 function graphMap(claudeDir, model, opts) {
@@ -1778,7 +1853,7 @@ function graphMap(claudeDir, model, opts) {
   const { files, edges, base, cached } = M.edgesFor(claudeDir, model);
   const idOf = new Map(files.map((f, i) => [f, i]));
   const tokens = (opts.focus || []).filter(Boolean);
-  const foc = tokens.length ? focusFiles(model, tokens) : { files: [], missing: [] };
+  const foc = tokens.length ? focusFiles(model, tokens) : { files: [], missing: [], common: [], words: [] };
 
   let rank;
   if (foc.files.length) {
@@ -1829,6 +1904,15 @@ function graphMap(claudeDir, model, opts) {
     items.push({ pri: 0, section: "header", text: `graph map (gen ${model.meta.generation}) — ${files.length} file(s) by rank${focusNote}`, data: null });
     if (pre) items.push({ pri: 0, section: "header", text: `  dir ${pre}`, data: null });
     if (foc.missing.length) items.push({ pri: 0, section: "focus", text: `  focus not in the graph: ${foc.missing.join(", ")}`, data: { item: "focus-missing" } });
+    // F05: what each plain word reached, so a reader can tell a focused map
+    // from one whose words all missed.
+    if (foc.words.length)
+      items.push({
+        pri: 0,
+        section: "focus",
+        text: `  focus words: ${foc.words.map((w) => (w.files && !w.used ? `${w.word} (too common)` : `${w.word} ${w.files}`)).join(" · ")}`,
+        data: { item: "focus-words" },
+      });
     for (let i = 0; i < k; i++) items.push({ pri: 1, section: "files", text: rows[i].text, data: rows[i].data });
     // pri 0: never cut, and CHARGED to the budget like everything else. It is
     // the map's whole equivalent of "the graph is a LOCATOR" — a card that
@@ -1864,6 +1948,8 @@ function graphMap(claudeDir, model, opts) {
     state: "found",
     focus: foc.files,
     focus_missing: foc.missing,
+    focus_common: foc.common,
+    focus_words: foc.words,
     cached_map: !!cached,
     total_files: files.length,
     edges: edges.length,

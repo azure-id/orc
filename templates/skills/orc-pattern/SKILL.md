@@ -54,7 +54,7 @@ Reconciliation is therefore cheap: you only ever override the *soft* half.
 
 1. **Lazy** — the `/orc` dispatch step, on a cache miss (governed by config
    `pattern_findings: ask | on | off`, default `ask`; see `../orc/config.md`).
-2. **Eager** — invoked by `orc-wiki` when `orc_wiki_pattern_findings: on`: codify
+2. **Eager** — invoked by `orc-wiki` when `orc_wiki_pattern_findings: true`: codify
    ALL detected languages as a byproduct of the wiki's full scan (rides under the
    wiki's existing scan-consent — no separate ask).
 3. **Manual** — `/orc-pattern` (all detected langs, or a named one),
@@ -121,8 +121,8 @@ persists nothing. See `../orc/config.md`.
 
 ## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-- **Calls:** `orc lane calls orc-pattern --json` names every call and its exit codes.
-  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Calls:** `orc lane calls orc-pattern --json` names shared calls and exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Own calls are here; make no other.
 - **Config:** `orc lane config orc-pattern --json`. Obey `effective`, print every line
   in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
   Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).

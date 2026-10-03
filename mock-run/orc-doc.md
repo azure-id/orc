@@ -234,6 +234,10 @@ $ orc doc plan prd-checkout-refund-130826 --role check
 Because each checker gets its own file, there is no line counting anywhere in
 this step. And no two checkers ever open the same file.
 
+ORC then records each checker result with
+`orc doc parts prd-checkout-refund-130826 --checked <clean ids> --findings <id>=<n>`,
+so `orc doc next` goes on to the edit or to the hand-back.
+
 ---
 
 ## 7. What you get, and what it says at the end

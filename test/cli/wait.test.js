@@ -375,11 +375,11 @@ test("wait block: the trace line is written BY THE CLI, into the open trace", ()
     const out = jsonOf(cli(["wait", "block", "demo-run", "--reason", "quota", "--dir", root, "--json"]));
     assert.ok(out.trace_line, "a block that leaves no line cannot be counted");
     const text = fs.readFileSync(path.join(logs, trace), "utf8");
-    assert.match(text, /\] cli\s+WAIT :: block reason="quota" by=user/);
+    assert.match(text, /\] cli\s+WAIT block :: reason="quota" by=user/);
 
     const u = jsonOf(cli(["wait", "unblock", "demo-run", "--dir", root, "--json"]));
     assert.ok(u.trace_line);
-    assert.match(fs.readFileSync(path.join(logs, trace), "utf8"), /WAIT :: unblock/);
+    assert.match(fs.readFileSync(path.join(logs, trace), "utf8"), /\] cli\s+WAIT unblock$/m);
   } finally {
     rmrf(root);
   }
@@ -632,6 +632,250 @@ test("W4: a payload with no rate_limits writes no bridge and still renders", () 
     assert.ok(res.stdout.length > 0, "the statusline must always render a line");
     assert.doesNotMatch(res.stdout, /undefined/);
     assert.equal(fs.existsSync(path.join(root, ".claude", "orc", "usage.json")), false);
+  } finally {
+    rmrf(root);
+  }
+});
+
+// ── v2.1.2 F17 — the human refusals ────────────────────────────────────────
+// Every wait test above passes --json, so the human branch never ran: four
+// refusals called a glyph the terminal kit never had and died with a TypeError.
+
+test("wait: the human refusals print a mark and the hint — never a TypeError", () => {
+  const empty = tmpdir();
+  const { root } = runProject();
+  try {
+    const plan = cli(["wait", "plan", "banana"]);
+    assert.equal(plan.status, 1);
+    assert.match(plan.stderr, /cannot read "banana"/);
+    assert.match(plan.stderr, /90m/);
+
+    const reset = cli(["wait", "plan", "reset", "--dir", empty]);
+    assert.equal(reset.status, 2);
+    assert.match(reset.stderr, /no reading in the last 30 minutes/);
+
+    const noRun = cli(["wait", "block", "--dir", empty]);
+    assert.equal(noRun.status, 2);
+    assert.match(noRun.stderr, /cannot find the run/);
+
+    const noReason = cli(["wait", "block", "demo-run", "--dir", root]);
+    assert.equal(noReason.status, 1);
+    assert.match(noReason.stderr, /--reason/);
+
+    for (const r of [plan, reset, noRun, noReason]) assert.ok(!/TypeError/.test(r.stderr), r.stderr);
+  } finally {
+    rmrf(empty);
+    rmrf(root);
+  }
+});
+
+test("every ui.* helper the CLI calls exists in bin/ui.js", () => {
+  const kit = require("../../bin/ui.js");
+  const src = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  let seen = 0;
+  for (const m of src.matchAll(/(?<![\w.])(?:ui|U)\.(mark|color|glyph)\.(\w+)/g)) {
+    seen++;
+    assert.ok(kit[m[1]] && m[2] in kit[m[1]], `ui.${m[1]}.${m[2]} is not in bin/ui.js`);
+  }
+  for (const m of src.matchAll(/(?<![\w.])(?:ui|U)\.(\w+)\(/g)) {
+    seen++;
+    assert.ok(m[1] in kit, `ui.${m[1]}() is not in bin/ui.js`);
+  }
+  assert.ok(seen > 50, "the scan must find the calls it guards");
+});
+
+// ── v2.1.2 F10 + F11 — the STARTED half ────────────────────────────────────
+// `wait.json` had a reader for a started wait and no writer, so `status` could
+// never say `waiting` and `cancel` always refused. `start` and `end` are the
+// writer; whether a wait is live is COMPUTED from its start and the clock.
+
+function tracedProject() {
+  const { root, dir } = runProject();
+  const logs = path.join(root, ".claude", "orc", "logs");
+  fs.mkdirSync(logs, { recursive: true });
+  const trace = path.join(logs, "run-orc-demo-run-310826-101500.txt");
+  fs.writeFileSync(trace, "");
+  fs.writeFileSync(path.join(logs, ".current"), path.basename(trace));
+  return { root, dir, trace };
+}
+
+test("wait start: a run in flight gets wait.json and ONE `WAIT mode=` line, and status reads waiting", () => {
+  const { root, dir, trace } = tracedProject();
+  try {
+    // No slug: the trace pointer names the run.
+    const res = cli(["wait", "start", "30", "--mode", "hard", "--dir", root, "--json"]);
+    assert.equal(res.status, 0);
+    const out = jsonOf(res);
+    assert.equal(out.recorded, true);
+    assert.equal(out.slug, "demo-run");
+    assert.equal(out.minutes, 30, "the mode's value must not leak into the spec");
+    assert.deepEqual(out.hops, [30]);
+
+    const st = JSON.parse(fs.readFileSync(path.join(dir, "wait.json"), "utf8"));
+    assert.equal(st.mode, "hard");
+    assert.equal(st.trigger, "user");
+    assert.equal(st.hops_planned, 1);
+    assert.equal(st.wait_ended_at, null);
+
+    const lines = fs.readFileSync(trace, "utf8").split("\n").filter((l) => /WAIT/.test(l));
+    assert.equal(lines.length, 1);
+    assert.match(
+      lines[0],
+      /\] cli\s+WAIT mode=hard requested=30m start=\d\d:\d\d end=\d\d:\d\d hops=1\/5 trigger=user$/
+    );
+    assert.equal(out.trace_line, lines[0].trimEnd());
+
+    const s = jsonOf(cli(["wait", "status", "demo-run", "--dir", root, "--json"]));
+    assert.equal(s.waiting, true);
+    assert.equal(s.stale, false);
+    assert.equal(s.mode, "hard");
+    assert.equal(s.hops_done, 0);
+    assert.equal(s.hops_planned, 1);
+
+    // One wait at a time: a second start is refused and writes no second line.
+    const again = cli(["wait", "start", "10", "--mode", "safe", "--dir", root, "--json"]);
+    assert.equal(again.status, 1);
+    assert.equal(jsonOf(again).reason, "already-waiting");
+    assert.equal(fs.readFileSync(trace, "utf8").split("\n").filter((l) => /WAIT/.test(l)).length, 1);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wait start: no run in flight records nothing and still exits 0 (`recorded: false`)", () => {
+  const root = tmpdir();
+  try {
+    const res = cli(["wait", "start", "1", "--mode", "hard", "--dir", root, "--json"]);
+    assert.equal(res.status, 0);
+    const out = jsonOf(res);
+    assert.equal(out.ok, true);
+    assert.equal(out.recorded, false);
+    assert.equal(out.reason, "no-run");
+    assert.deepEqual(out.hops, [1], "the plan is still the answer");
+    assert.equal(fs.existsSync(path.join(root, ".claude", "orc", "run")), false, "a wait with no run writes no file");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wait start: --mode is required, and an unparsable spec exits 1 — nothing written", () => {
+  const { root, dir } = runProject();
+  try {
+    const noMode = cli(["wait", "start", "30", "--run", "demo-run", "--dir", root, "--json"]);
+    assert.equal(noMode.status, 1);
+    assert.equal(jsonOf(noMode).reason, "no-mode");
+
+    const badMode = cli(["wait", "start", "30", "--mode", "gentle", "--run", "demo-run", "--dir", root, "--json"]);
+    assert.equal(badMode.status, 1);
+
+    const bad = cli(["wait", "start", "banana", "--mode", "hard", "--run", "demo-run", "--dir", root, "--json"]);
+    assert.equal(bad.status, 1);
+    assert.equal(jsonOf(bad).reason, "unparsable");
+    assert.match(jsonOf(bad).hint, /until 18:41/);
+
+    // The same exit 2 as `wait plan`: the spec was fine, the reading is absent.
+    const reset = cli(["wait", "start", "reset", "--mode", "hard", "--run", "demo-run", "--dir", root, "--json"]);
+    assert.equal(reset.status, 2);
+    assert.equal(jsonOf(reset).reason, "no-reading");
+
+    assert.equal(fs.existsSync(path.join(dir, "wait.json")), false);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wait cancel: a started wait accepts the cancel, and status says `cancel_requested`", () => {
+  const { root } = runProject();
+  try {
+    const start = cli(["wait", "start", "2h", "--mode", "soft", "--run", "demo-run", "--dir", root, "--json"]);
+    assert.equal(start.status, 0);
+    // No trace is open here: the wait is recorded all the same.
+    assert.equal(jsonOf(start).recorded, true);
+    assert.equal(jsonOf(start).trace_line, null);
+
+    const c = cli(["wait", "cancel", "demo-run", "--dir", root, "--json"]);
+    assert.equal(c.status, 0);
+    assert.equal(jsonOf(c).cancelled, true);
+    const s = jsonOf(cli(["wait", "status", "demo-run", "--dir", root, "--json"]));
+    assert.equal(s.waiting, true);
+    assert.equal(s.cancel_requested, true);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wait end: closes the wait, writes `WAIT end`, and a second end exits 1", () => {
+  const { root, dir, trace } = tracedProject();
+  try {
+    cli(["wait", "start", "30", "--mode", "hard", "--trigger", "gate", "--dir", root, "--json"]);
+    assert.match(fs.readFileSync(trace, "utf8"), /trigger=gate$/m);
+
+    const noReason = cli(["wait", "end", "demo-run", "--dir", root, "--json"]);
+    assert.equal(noReason.status, 1);
+    assert.equal(jsonOf(noReason).reason, "no-reason");
+
+    const end = cli(["wait", "end", "demo-run", "--reason", "recovered", "--dir", root, "--json"]);
+    assert.equal(end.status, 0);
+    assert.equal(jsonOf(end).end_reason, "recovered");
+    assert.match(fs.readFileSync(trace, "utf8"), /\] cli\s+WAIT end :: done=0\/1 reason=recovered$/m);
+
+    const st = JSON.parse(fs.readFileSync(path.join(dir, "wait.json"), "utf8"));
+    assert.ok(st.wait_ended_at);
+    assert.equal(st.end_reason, "recovered");
+    assert.equal(jsonOf(cli(["wait", "status", "demo-run", "--dir", root, "--json"])).waiting, false);
+
+    const again = cli(["wait", "end", "demo-run", "--reason", "elapsed", "--dir", root, "--json"]);
+    assert.equal(again.status, 1);
+    assert.equal(jsonOf(again).reason, "no-wait");
+
+    // With no run in flight there is nothing to end — an answer, exit 1.
+    const empty = tmpdir();
+    try {
+      const none = cli(["wait", "end", "--reason", "elapsed", "--dir", empty, "--json"]);
+      assert.equal(none.status, 1);
+      assert.equal(jsonOf(none).reason, "no-run");
+    } finally {
+      rmrf(empty);
+    }
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wait status: a wait past its end plus one hop is NOT waiting — it reads `stale`", () => {
+  const { root, dir } = runProject();
+  try {
+    // A session that died mid-wait: started three hours ago, due two hours ago,
+    // never closed. One 30-minute hop of grace is long past.
+    const ago = (min) => new Date(Date.now() - min * 60000).toISOString();
+    fs.writeFileSync(
+      path.join(dir, "wait.json"),
+      JSON.stringify({
+        v: 1,
+        slug: "demo-run",
+        wait_started_at: ago(180),
+        mode: "hard",
+        minutes: 60,
+        hop_minutes: 30,
+        hops: [30, 30],
+        hops_planned: 2,
+        ends_at: ago(120),
+        wait_ended_at: null,
+      })
+    );
+    const s = jsonOf(cli(["wait", "status", "demo-run", "--dir", root, "--json"]));
+    assert.equal(s.waiting, false);
+    assert.equal(s.stale, true);
+    assert.equal(s.hops_done, 2, "the hop count is computed from the clock, and capped at the plan");
+
+    const c = cli(["wait", "cancel", "demo-run", "--dir", root, "--json"]);
+    assert.equal(c.status, 1);
+    assert.equal(jsonOf(c).reason, "no-wait");
+
+    // A stale wait never blocks the next one.
+    const next = cli(["wait", "start", "30", "--mode", "hard", "--run", "demo-run", "--dir", root, "--json"]);
+    assert.equal(next.status, 0);
+    assert.equal(jsonOf(next).recorded, true);
   } finally {
     rmrf(root);
   }

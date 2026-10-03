@@ -115,7 +115,7 @@ themselves are this lane's own and stay here.
 ## C1 — Intake (ONE round, ASK — never guess)
 
 Full field list, the round format and the "I don't know yet" exit:
-`../_shared/phases/intake.md`. It ends by running `orc challenge init`, which **freezes
+`references/intake.md`. It ends by running `orc challenge init`, which **freezes
 `goals.md`, `template.md` and the COUNCIL ROSTER**.
 
 **Question 7 is the P0 council ask**, rendered from `orc challenge roles --kind
@@ -284,11 +284,11 @@ documented defaults, out loud. Priorities and families:
 ## Calls
 
 **ONE catalogue, and it is not you:** `orc lane calls orc-challenge --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
+SHARED CLI call this lane makes, each with its exit-code contract, its cost, when to run
 it, and what an EMPTY answer means. Never invent a spelling, never re-word an
 exit code, and never re-derive a state word — the CLI's state words are the only
 state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
+a failure**. A call that neither it nor this skill names is a call this lane does not make.
 Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
 command you are about to run, out loud, before running it.
 

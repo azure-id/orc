@@ -1,4 +1,4 @@
-# Code-pattern pre-warm (opt-in — config `orc_wiki_pattern_findings: on`)
+# Code-pattern pre-warm (opt-in — config `orc_wiki_pattern_findings: true`)
 
 Default OFF. When on, after Phase 3 also **codify the code-pattern for every
 detected FE/BE language** as a scan byproduct — pre-warming
@@ -8,7 +8,7 @@ detected FE/BE language** as a scan byproduct — pre-warming
 Rules:
 
 - Rides the wiki's existing scan-consent, so there is NO separate ask (hence
-  on/off only, no `ask` value).
+  `true`/`false` only, no `ask` value).
 - Per detected language (`../../orc-pattern/references/INDEX.md`): dispatch
   `orc-pattern-codifier-sonnet-5-high` (`orc-pattern-codifier-opus-5-med` when
   `opus5_only` — `../../_shared/opus5-only.md`) with the generic playbook + the

@@ -10,7 +10,7 @@ U: /orc-mini add a `--json` flag to the `report` CLI command
 O: Creates run folder run/report-json-flag/ FIRST.
    [reads repo: Python/poetry/pytest — asks nothing about stack]
    graph: FRESH — 6 files · 8 symbols
-   GRAPH-MAP :: focus="report json flag" budget=800 → cli/report.py, tests/test_report.py
+   GRAPH-MAP focused :: files=6/6 focus=cli/report.py,tests/test_report.py gen=7 → cli/report.py, tests/test_report.py
    Batched round (medium tier): 1) What should exist? 2) Out of scope?
    3) How do we know it's done? 4) Patterns/files to avoid?
    [Q4's ➡️ already names cli/report.py and tests/test_report.py — the map
@@ -37,7 +37,7 @@ O: → claude-sonnet-5-5 / high :: DISPATCH orc-executor-sonnet-5-high :: add --
 O: VERIFY actual=claude-sonnet-5-5/high ✅ MATCH · evidence present ✓
 
 ## Phase M — Smoke gate (build + test; blocks ship on red)
-O: GRAPH-CHANGES → tests reached 1 file (call 1)
+O: GRAPH-CHANGES found :: symbols=1 high=0 medium=0 low=1 gen=7 → tests reached 1 file (call 1)
    [runs `pytest tests/test_report.py` FIRST]  ⛔ RED — 1 failure: JSON missing trailing key.
    Not offering commit. Auto-fix ONCE → re-dispatch executor with the failure output.
    [re-run] ✅ GREEN — tests reached 1 file → 4 passed · suite 12 passed · build ok.

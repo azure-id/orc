@@ -150,14 +150,37 @@ test("pact sync: PACT.md is DERIVED — worst state first, at the project root",
   }
 });
 
+// v2.1.2 F18 — the reason used to reuse the ANCHOR count as the touched count.
+test("pact: the DRIFTED reason names the files the commits TOUCHED, not every anchor", () => {
+  const { root, claudeDir, head } = repoWith({ "src/pay.ts": "export function pay() {}\n", "src/refund.ts": "r\n", "src/cart.ts": "c\n" });
+  try {
+    writeLedger(claudeDir, [
+      { id: "PACT-001", statement: "pay exists", origin: { lane: "user", kind: "constraint" }, anchors: ["src/pay.ts:1", "src/pay.ts:9", "src/refund.ts", "src/cart.ts"], check: { kind: "grep", ref: "pay" }, verified_commit: head, confidence: "high" },
+    ]);
+    fs.appendFileSync(path.join(root, "src/pay.ts"), "// tweak\n");
+    git(root, ["commit", "-qam", "tweak"]);
+    const row = json(cli(["pact", "status", "--json", "--dir", root])).rows[0];
+    assert.strictEqual(row.state, "DRIFTED");
+    // Two anchors in one file are ONE file: 3 anchored files, 1 touched.
+    assert.match(row.why, /^1 commit since [0-9a-f]{8} touched 1 of 3 anchored files \(src\/pay\.ts\)$/);
+    assert.deepStrictEqual(row.touched_files, ["src/pay.ts"]);
+  } finally {
+    rmrf(root);
+  }
+});
+
 /* ========================================================== ORC BOUNDARY === */
 
-function writeCard(claudeDir, name, header) {
+// `style: "block"` writes each array the way references/card.md shows it: the
+// key, then `  - item` lines (v2.1.2 F02 — the suite only ever wrote inline).
+function writeCard(claudeDir, name, header, style = "inline") {
   const p = path.join(claudeDir, "orc", "boundary", name);
   fs.mkdirSync(path.dirname(p), { recursive: true });
   const lines = ["---"];
-  for (const [k, v] of Object.entries(header))
-    lines.push(`${k}: ${Array.isArray(v) ? "[" + v.join(", ") + "]" : v}`);
+  for (const [k, v] of Object.entries(header)) {
+    if (Array.isArray(v) && style === "block") lines.push(`${k}:`, ...v.map((item) => `  - ${item}`));
+    else lines.push(`${k}: ${Array.isArray(v) ? "[" + v.join(", ") + "]" : v}`);
+  }
   lines.push("---", "", "# card");
   fs.writeFileSync(p, lines.join("\n"));
 }
@@ -207,6 +230,85 @@ test("boundary: an uncarded area is UNKNOWN (exit 3), never silently EXECUTE", (
     const r = cli(["boundary", "status", "src/payments", "--json", "--dir", root]);
     assert.strictEqual(r.status, 3);
     assert.strictEqual(json(r).reason, "no-card");
+  } finally {
+    rmrf(root);
+  }
+});
+
+// v2.1.2 F02 — the reference shape. Before it, a block list read as an empty
+// MAP: a REFUSE was MALFORMED and staleness counted every commit in the repo.
+test("boundary status: the block-list card of references/card.md reads exactly like the inline one", () => {
+  const { root, claudeDir, head } = repoWith({ "src/pay.ts": "x\n", "src/idem.ts": "y\n", "README.md": "# r\n" });
+  try {
+    writeCard(
+      claudeDir,
+      "pay.md",
+      {
+        area: "src/payments # verbatim",
+        verdict: "REFUSE",
+        anchored_files: ["src/pay.ts", "src/idem.ts"],
+        verified_commit: head,
+        reasons: ['"self-verify: no — no test runner in this package"', '"reversible: no — writes to a live ledger"'],
+        checklist: ["add a test runner to this package", "cover the idempotency path"],
+      },
+      "block"
+    );
+    let r = cli(["boundary", "status", "--json", "--dir", root]);
+    let d = json(r);
+    assert.strictEqual(r.status, 2, "a block-list REFUSE exits 2, not 3");
+    assert.deepStrictEqual(d.malformed, []);
+    let card = d.cards[0];
+    assert.strictEqual(card.area, "src/payments", "a trailing comment is not part of a value");
+    assert.strictEqual(card.checklist.length, 2);
+    assert.strictEqual(card.reasons[0], "self-verify: no — no test runner in this package", "a reason keeps its colon");
+    assert.strictEqual(card.anchored_files.length, 2);
+
+    // An UN-anchored commit must not age the card: the empty anchor list did.
+    fs.appendFileSync(path.join(root, "README.md"), "line\n");
+    git(root, ["commit", "-qam", "docs"]);
+    card = json(cli(["boundary", "status", "--json", "--dir", root])).cards[0];
+    assert.strictEqual(card.stale, false, "an unrelated commit leaves the card fresh");
+
+    fs.appendFileSync(path.join(root, "src/pay.ts"), "// tweak\n");
+    git(root, ["commit", "-qam", "tweak"]);
+    card = json(cli(["boundary", "status", "--json", "--dir", root])).cards[0];
+    assert.strictEqual(card.stale, true, "a commit on an anchored file makes it stale");
+    assert.strictEqual(card.distance, 1);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("boundary status: a non-indented block list and a quoted comma both read", () => {
+  const { root, claudeDir, head } = repoWith({ "src/pay.ts": "x\n" });
+  try {
+    const p = path.join(claudeDir, "orc", "boundary", "pay.md");
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(
+      p,
+      ["---", "area: src/pay.ts", "verdict: REFUSE", "anchored_files: [src/pay.ts]", `verified_commit: ${head}`, 'reasons: ["add a runner, then a test", second]', "checklist:", "- a", "- b   # column 0", "---", "", "# card"].join("\n")
+    );
+    const r = cli(["boundary", "status", "--json", "--dir", root]);
+    const card = json(r).cards[0];
+    assert.strictEqual(r.status, 2);
+    assert.deepStrictEqual(card.checklist, ["a", "b"], "`- item` at column 0 is a list item");
+    assert.deepStrictEqual(card.reasons, ["add a runner, then a test", "second"], "a comma inside quotes is text");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("boundary status: a list field written as a map is MALFORMED, never empty", () => {
+  const { root, claudeDir, head } = repoWith({ "src/pay.ts": "x\n" });
+  try {
+    const p = path.join(claudeDir, "orc", "boundary", "pay.md");
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, ["---", "area: src/pay.ts", "verdict: REFUSE", "anchored_files: [src/pay.ts]", `verified_commit: ${head}`, "checklist:", "  owner: x", "---", "", "# card"].join("\n"));
+    const r = cli(["boundary", "status", "--json", "--dir", root]);
+    const d = json(r);
+    assert.strictEqual(d.ok, false);
+    assert.match(d.malformed[0].problems.join(" "), /checklist is not a list/);
+    assert.strictEqual(r.status, 3);
   } finally {
     rmrf(root);
   }
@@ -420,6 +522,35 @@ test("aftermath: no git work tree, or nothing in the window, is exit 3 — never
     const r = cli(["aftermath", "status", "--json", "--dir", root]);
     assert.strictEqual(r.status, 3);
     assert.ok(["no-git", "shallow"].includes(json(r).reason));
+  } finally {
+    rmrf(root);
+  }
+});
+
+// v2.1.2 F20 — A0 writes `.current` and touches the lane's own trace before
+// `orc aftermath status` runs, so the open run was always in the window.
+test("aftermath: the OPEN run is never graded — the lane never reports itself", () => {
+  const { root, claudeDir } = repoWith({ "a.ts": "x\n" });
+  try {
+    const logs = path.join(claudeDir, "orc", "logs");
+    fs.mkdirSync(logs, { recursive: true });
+    const self = "run-aftermath-self-100826-093000.txt";
+    fs.writeFileSync(path.join(logs, self), "[100826 09:30:00.000] aftermath  PHASE a0 start\n");
+    fs.writeFileSync(path.join(logs, ".current"), self);
+
+    let r = cli(["aftermath", "status", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 3, "only the open run in the window = history too shallow");
+    assert.strictEqual(json(r).reason, "shallow");
+
+    const old = path.join(logs, "run-orc-old-100826-093000.txt");
+    fs.writeFileSync(old, "[100826 09:30:00.000] orc  FINISH :: shipped\n");
+    const then = Date.now() / 1000 - 20 * 86400;
+    fs.utimesSync(old, then, then);
+    r = cli(["aftermath", "status", "--json", "--dir", root]);
+    const d = json(r);
+    assert.strictEqual(d.runs.length, 1, "its row only");
+    assert.strictEqual(d.runs[0].slug, "old");
+    assert.ok(!d.runs.some((x) => x.lane === "aftermath"), "no row about the lane's own run");
   } finally {
     rmrf(root);
   }
@@ -790,4 +921,206 @@ test("panel: i18n never translates a CLI identifier", () => {
   // …but the CLI's own words that appear INSIDE prose stay untranslated.
   assert.match(id["pact.uncheckableNote"], /UNCHECKABLE/);
   assert.match(id["boundary.noneHint"], /UNKNOWN/);
+});
+
+// v2.1.2 F16 — exit 1 on this route is a low-confidence ANSWER, so a missing
+// plan argument is the "no plan" refusal: exit 3, and `--json` still gets its
+// one object (it printed usage on stderr and nothing on stdout).
+test("budget forecast --json with no plan argument is one object, exit 3", () => {
+  const { root } = freshInstall();
+  try {
+    const r = cli(["budget", "forecast", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 3);
+    const j = JSON.parse(r.stdout);
+    assert.strictEqual(j.ok, false);
+    assert.strictEqual(j.reason, "no-plan");
+    assert.match(j.hint, /^usage: orc budget forecast <plan-file>/);
+    // The human branch keeps the usage line, on the same exit code.
+    const h = cli(["budget", "forecast", "--dir", root]);
+    assert.strictEqual(h.status, 3);
+    assert.match(h.stderr, /usage: orc budget forecast/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+/* ------------------------------------------------ v2.1.2 — the budget wave --- */
+
+const PRICE = JSON.parse(fs.readFileSync(path.join(REPO, "bin", "pricing.json"), "utf8"));
+const usdAt = (v, model) => {
+  const r = PRICE.models[model];
+  return (v.input * r.input + v.cache_write * r.cache_write + v.cache_read * r.cache_read + v.output * r.output) / 1e6;
+};
+const VEC = (input, cache_write, cache_read, output) => ({ input, cache_write, cache_read, output });
+// One task that scores into `[21,31)` — the Sonnet 5 medium band.
+const PLAN_25 = "tasks:\n  - id: T1\n    declared_files: [a.ts]\n    depends_on: []\n    computed_score: 25\n";
+const ORC_ROLES = ["orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-reviewer-opus-5-low", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-4-5"];
+function seedRates(claudeDir, rates) {
+  fs.mkdirSync(path.join(claudeDir, "orc"), { recursive: true });
+  fs.writeFileSync(
+    path.join(claudeDir, "orc", "budget-rates.json"),
+    JSON.stringify({ version: 1, transcripts_readable: true, unattributed: { blocks: 0, tokens: VEC(0, 0, 0, 0) }, bands: {}, roles: {}, ...rates })
+  );
+}
+
+// v2.1.2 F16 — the catalogue row called exit 1 "refused — no history", so a lane
+// that obeyed it hid a real forecast. Exit 1 and exit 2 are both ANSWERS.
+test("budget forecast: exit 1 is a low-confidence ANSWER, exit 2 a context risk — and the catalogue says so", () => {
+  const { root, claudeDir } = repoWith({ "plan.md": PLAN_25 });
+  try {
+    const band = { samples: 3, p50: VEC(900, 6100, 12400, 900), p90: VEC(1500, 9800, 20100, 1600), peak_p50: 38000, peak_p90: 52000 };
+    seedRates(claudeDir, { dispatches_joined: 3, bands: { "[21,31)": band } });
+    let r = cli(["budget", "forecast", "plan.md", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1, "3 samples is below budget_min_samples");
+    assert.strictEqual(json(r).ok, true);
+    assert.strictEqual(json(r).low_confidence_bands, 1);
+
+    // Above 90% of the band's own window: the risk outranks the soft range.
+    const win = PRICE.context_windows["claude-sonnet-5-5"];
+    seedRates(claudeDir, { dispatches_joined: 3, bands: { "[21,31)": { ...band, peak_p90: Math.round(win * 0.95) } } });
+    r = cli(["budget", "forecast", "plan.md", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 2);
+    assert.strictEqual(json(r).ok, true);
+    assert.strictEqual(json(r).context_risk[0].task, "T1");
+
+    const row = json(cli(["lane", "calls", "orc-budget", "--json", "--dir", root])).calls.find((c) => c.id === "budget-forecast");
+    assert.deepStrictEqual(Object.keys(row.exits).sort(), ["0", "1", "2", "3"]);
+    assert.match(row.exits["1"], /LOW-CONFIDENCE/);
+    assert.match(row.exits["3"], /no history/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+// v2.1.2 F25 — the forecast priced every token at ONE Opus 4.8 rate: +34% on
+// /orc and +150% on the Sonnet lanes. The price follows what will run.
+test("budget forecast: each band and fixed role is priced at the model its agent file pins", () => {
+  const { root, claudeDir } = repoWith({ "plan.md": PLAN_25 });
+  try {
+    const band = { samples: 5, p50: VEC(900, 6100, 12400, 900), p90: VEC(1500, 9800, 20100, 1600) };
+    const role = { samples: 5, p50: VEC(3000, 20000, 40000, 4000), p90: VEC(4500, 30000, 60000, 6000) };
+    const one = { samples: 5, p50: VEC(2000, 14000, 28000, 2200), p90: VEC(3300, 21500, 44800, 3600) };
+    const roles = { "orc-executor-sonnet-5-high": one };
+    for (const name of ORC_ROLES) roles[name] = role;
+    seedRates(claudeDir, { dispatches_joined: 30, bands: { "[21,31)": band }, roles });
+
+    const r = cli(["budget", "forecast", "plan.md", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+    const d = json(r);
+    for (const p of ["p50", "p90"]) {
+      const want = usdAt(band[p], "claude-sonnet-5-5") + 4 * usdAt(role[p], "claude-opus-5-5") + usdAt(role[p], "claude-haiku-4-5");
+      assert.ok(Math.abs(d.usd[p] - want) < 1e-9, `${p}: ${d.usd[p]} is the sum of the rows, ${want}`);
+    }
+    // The NAME says `sonnet-5`; the file pins the point release, and that prices.
+    assert.strictEqual(d.bands[0].model, "claude-sonnet-5-5");
+    assert.strictEqual(d.fixed_roles.find((f) => f.role === "orc-trace-writer-haiku-4-5").model, "claude-haiku-4-5");
+    assert.strictEqual(d.fixed_roles.find((f) => f.role === "orc-planner-opus-5-med").model, "claude-opus-5-5");
+
+    // /orc-mini runs no Opus at all, so its dollars sit far below the figure
+    // the same tokens cost at the old single Opus rate.
+    const mini = d.lanes.find((l) => l.lane === "mini");
+    const miniVec = VEC(...["input", "cache_write", "cache_read", "output"].map((k) => one.p50[k] + role.p50[k]));
+    assert.strictEqual(mini.raw, miniVec.input + miniVec.cache_write + miniVec.cache_read + miniVec.output);
+    assert.ok(Math.abs(mini.usd - (usdAt(one.p50, "claude-sonnet-5-5") + usdAt(role.p50, "claude-haiku-4-5"))) < 1e-9);
+    assert.ok(mini.usd < usdAt(miniVec, "claude-opus-4-8") / 2, "below the token-proportional Opus figure");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("budget forecast: a foreign band with no provider rate makes the dollars null, never an Opus figure", () => {
+  const { root, claudeDir } = repoWith({ "plan.md": PLAN_25 });
+  try {
+    // A verified profile with one route row, WITHOUT a network probe (the
+    // `diy.test.js` fixture): the ledger is a plain JSON file.
+    assert.strictEqual(
+      cli(["extra", "add", "w", "--provider", "custom", "--engine", "api", "--base-url", "https://example.invalid/v1", "--env-key", "K", "--dir", root]).status,
+      0
+    );
+    const led = path.join(claudeDir, "orc", "extra.json");
+    const j = JSON.parse(fs.readFileSync(led, "utf8"));
+    j.profiles[0].verified_at = new Date().toISOString();
+    j.profiles[0].verify_method = "models";
+    fs.writeFileSync(led, JSON.stringify(j, null, 2));
+    assert.strictEqual(cli(["extra", "route", "set", "21-31", "w/fake-flash", "--dir", root]).status, 0);
+    fs.writeFileSync(path.join(claudeDir, "orc.config.yaml"), "extra_enabled: true\nextra_roles: [executor]\n");
+
+    const band = { samples: 5, p50: VEC(900, 6100, 12400, 900), p90: VEC(1500, 9800, 20100, 1600) };
+    seedRates(claudeDir, { dispatches_joined: 30, bands: { "[21,31)": band } });
+    const d = json(cli(["budget", "forecast", "plan.md", "--json", "--dir", root]));
+    assert.strictEqual(d.ok, true);
+    assert.strictEqual(d.bands[0].via, "extra:w", "the band goes to the foreign worker");
+    assert.strictEqual(d.bands[0].model, null, "no Claude model runs this row");
+    // The tokens are still the forecast; only the dollars are withheld. The
+    // shipped `providers.custom.models` map is empty on purpose.
+    assert.strictEqual(d.raw.p50, 900 + 6100 + 12400 + 900);
+    assert.strictEqual(d.usd.p50, null);
+    assert.strictEqual(d.usd.p90, null);
+    assert.strictEqual(d.lanes.find((l) => l.lane === "orc").usd, null);
+    assert.match(cli(["budget", "forecast", "plan.md", "--as", "usd", "--dir", root]).stdout, /USD\s+unavailable: a band or role has no rate/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+// One session per run, one sidechain dispatch each, on the model the case names.
+function txAndTrace(root, claudeDir, runs) {
+  const tx = path.join(root, "tx");
+  const logs = path.join(claudeDir, "orc", "logs");
+  fs.mkdirSync(tx, { recursive: true });
+  fs.mkdirSync(logs, { recursive: true });
+  // Trace lines carry LOCAL wall clock; transcripts carry ISO UTC (see above).
+  const at = (h, m, s) => new Date(2026, 7, 10, h, m, s).toISOString();
+  const blk = (sid, ts, model, side, out) =>
+    JSON.stringify({
+      sessionId: sid, timestamp: ts, cwd: root, isSidechain: side,
+      message: { model, usage: { input_tokens: 3, cache_creation_input_tokens: 100, cache_read_input_tokens: 900, output_tokens: out, server_tool_use: { web_search_requests: 0, web_fetch_requests: 0 } } },
+    });
+  for (const [i, run] of runs.entries()) {
+    const hh = String(9 + i * 2).padStart(2, "0");
+    fs.writeFileSync(path.join(tx, `s${i}.jsonl`), [
+      blk("s" + i, at(9 + i * 2, 30, 0), "claude-opus-5-5", false, 10),
+      blk("s" + i, at(9 + i * 2, 31, 5), run.model, true, 200),
+    ].join("\n") + "\n");
+    fs.writeFileSync(path.join(logs, `run-orc-${run.slug}-100826-${hh}3000.txt`),
+      `[100826 ${hh}:30:00.000] orc  PHASE planning start\n` +
+      `[100826 ${hh}:31:01.000] orc  DISPATCH ${run.dispatch}\n` +
+      `[100826 ${hh}:50:00.000] orc  FINISH :: shipped\n`);
+  }
+  return tx;
+}
+
+test("budget actual prices each joined dispatch at its transcript model", () => {
+  const { root, claudeDir } = repoWith({ "a.ts": "x\n" });
+  try {
+    const tx = txAndTrace(root, claudeDir, [
+      { slug: "demo", model: "claude-sonnet-4-6", dispatch: "orc-executor-sonnet-4-6-high :: T1 do it expect=sonnet-4-6/high" },
+    ]);
+    const d = json(cli(["budget", "actual", "demo", "--json", "--dir", root], { ORC_TRANSCRIPT_DIR: tx }));
+    assert.strictEqual(d.joined, 1);
+    assert.deepStrictEqual(d.actual.tokens, VEC(3, 100, 900, 200));
+    // Sonnet 4.6 did the work, so Sonnet 4.6 prices it — not the Opus rate.
+    assert.ok(Math.abs(d.actual.usd - usdAt(d.actual.tokens, "claude-sonnet-4-6")) < 1e-12);
+    assert.ok(d.actual.usd < usdAt(d.actual.tokens, "claude-opus-4-8"));
+  } finally {
+    rmrf(root);
+  }
+});
+
+// v2.1.2 F62 — the join compared model ids for equality, and the names kept the
+// family token across a point release: `opus-5` never equalled `claude-opus-5-5`.
+test("budget calibrate: a point release joins — expect=opus-5/low claims a claude-opus-5-5 block", () => {
+  const { root, claudeDir } = repoWith({ "a.ts": "x\n" });
+  try {
+    const tx = txAndTrace(root, claudeDir, [
+      { slug: "a", model: "claude-opus-5-5", dispatch: "orc-claude-writer :: refresh expect=opus-5/low" },
+      { slug: "b", model: "claude-opus-5-5", dispatch: "orc-claude-writer :: refresh expect=opus-5-5/low" },
+    ]);
+    const d = json(cli(["budget", "calibrate", "--json", "--dir", root], { ORC_TRANSCRIPT_DIR: tx }));
+    assert.strictEqual(d.dispatches_joined, 2, "the old spelling on disk joins as well as the exact one");
+    assert.strictEqual(d.roles["orc-claude-writer"].samples, 2);
+    assert.strictEqual(d.unattributed.blocks, 0);
+  } finally {
+    rmrf(root);
+  }
 });

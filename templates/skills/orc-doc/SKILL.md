@@ -11,8 +11,8 @@ description: >
   under sections/, which is the source of truth; document.md is a build
   artifact you rebuild for free whenever you want. The orchestrator never reads
   the document body — it works from a CLI-derived section map, dispatches
-  writers that each own ONE file, and dispatches checkers that each read ONE
-  bounded part. Every wave is a stop you can walk away from. It never edits
+  writers that each own ONE file, and dispatches checkers that each read only
+  the bounded part files of one slice. Every wave is a stop you can walk away from. It never edits
   source, never commits, and it hands you back the file plus the one line that
   resumes it.
 ---
@@ -267,7 +267,8 @@ that improvises the order is the drift this command exists to prevent.
 | **1** | waiting on a HUMAN decision — `blocked_by` names it in one sentence, never a generic "waiting" |
 | **2** | unknown slug |
 
-Also log the request: at **D1**, and at the opening of every edit round, call
+Also log the request: right after `orc doc init` (D5) log the D1 request, and
+at the opening of every edit round, call
 `orc doc log <slug> --kind request --text "<the user's words, VERBATIM>"`. Same
 rule that governs `context.md` — a paraphrase is where a resumed session quietly
 starts writing a different document. Settled D4/D5 decisions go in as
@@ -355,14 +356,24 @@ names the decision — the wave-review gate is just another `blocked_by`.
 2. `orc doc lint <slug> --json` — **free**. Always before anything paid.
 3. `orc doc map <slug> --json` — the fresh absolute line numbers.
 4. `orc doc plan <slug> --role check --json` → dispatch
-   **`orc-doc-checker-opus-5-low`** BY NAME. Each reads **ONE bounded part
-   file** and nothing else — no line arithmetic anywhere in the loop.
+   **`orc-doc-checker-opus-5-low`** BY NAME. Each reads **its slice's
+   bounded part files** (`files[]`, one or more) and nothing else — no line
+   arithmetic anywhere in the loop.
+5. Validate each checker return (§2), then record it:
+   `orc doc parts <slug> --checked <clean ids> --findings <id>=<P0+P1 count>,… --json`.
+   A section with P2/P3 findings only is `--checked`. Without this step,
+   `orc doc next` names the paid check again.
 
 ## D8 — Edit (cap 2 rounds)
 
 The writer opens `sections/<id>.md` and edits it in place — **no extract, no
 splice, no monolith touched**. For a section stored as sub-parts it opens the
 one sub-part that needs changing. Then `orc doc compile`, which is free.
+After the round, run `orc doc parts <slug> --confirm <ids>` for every section
+the round touched. Without it, `orc doc next` reads the lane's own edit as a
+hand edit. The confirm clears the recorded findings, and the edited sections
+go back to the check. After 2 rounds on one section, `orc doc next` stops and
+asks the user: accept it (`--checked <id>`), or say what must change.
 
 **Before each edit dispatch, print one line per finding:
 `sections/<id>.md · line <n> · <rule>`. After the round, print each file touched
@@ -476,11 +487,11 @@ documented defaults, out loud. Priorities and families:
 ## Calls
 
 **ONE catalogue, and it is not you:** `orc lane calls orc-doc --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
+SHARED CLI call this lane makes, each with its exit-code contract, its cost, when to run
 it, and what an EMPTY answer means. Never invent a spelling, never re-word an
 exit code, and never re-derive a state word — the CLI's state words are the only
 state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
+a failure**. A call that neither it nor this skill names is a call this lane does not make.
 Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
 command you are about to run, out loud, before running it.
 

@@ -55,8 +55,9 @@ const pact = {
       history: [{ at: "01-08-2026 10:11:02", status: "pass", commit: "c273793aa1" }],
       retired: false,
       state: "DRIFTED",
-      why: "6 commits since c273793a touched 1 anchored file",
+      why: "6 commits since c273793a touched 1 of 1 anchored file (src/billing/refund.ts)",
       distance: 6,
+      touched_files: ["src/billing/refund.ts"],
     },
     {
       id: "PACT-007",

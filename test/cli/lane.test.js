@@ -323,6 +323,28 @@ test("lane calls: a documented exit code is a code the route can really return",
       ["graph-impact", ["graph", "impact", "a.js", "--if-enabled"], 3],
       ["graph-notes-pending", ["graph", "notes", "pending", "--files", "a.js"], 1],
       ["graph-notes-pending", ["graph", "notes", "pending", "--files", "a.js", "--if-enabled"], 3],
+      // v2.1.2 F03/F16/F63 — rows that said `0: "answered"` for a route whose
+      // exit code carries a state. Each is the EMPTY state of a fresh install,
+      // so the probe is free: no wiki, no ledger, no card, no git, no cycle.
+      ["wiki-impact", ["wiki", "impact", "--json"], 1],
+      ["wiki-debt", ["wiki", "debt", "--json"], 3],
+      ["wiki-usage", ["wiki", "usage", "--json"], 1],
+      ["gotcha-list", ["gotcha", "list", "--json"], 1],
+      ["pact-status", ["pact", "status", "--json"], 3],
+      ["boundary-status", ["boundary", "status", "--json"], 3],
+      ["aftermath-status", ["aftermath", "status", "--json"], 3],
+      ["challenge-status", ["challenge", "status", "nosuch", "--json"], 3],
+      ["challenge-report", ["challenge", "report", "nosuch", "--json"], 3],
+      ["challenge-init", ["challenge", "init", "nosuch", "--json"], 2], // no answers
+      ["export-import", ["export", "import", "--json"], 3],
+      ["budget-actual", ["budget", "actual", "nosuch", "--json"], 3],
+      // exit 1 on this route is a low-confidence ANSWER, so both "no plan"
+      // shapes are the refusal (3).
+      ["budget-forecast", ["budget", "forecast", "--json"], 3],
+      ["budget-forecast", ["budget", "forecast", "no-such-plan.md", "--json"], 3],
+      ["extra-stats", ["extra", "stats", "--json"], 1],
+      ["extra-role", ["extra", "role", "list", "--json"], 1],
+      ["extra-dispatch", ["extra", "dispatch", "--json"], 2], // no --task
     ];
     for (const [id, argv, code] of probes) {
       assert.ok(byId[id], `${id} is catalogued`);
@@ -337,6 +359,24 @@ test("lane calls: a documented exit code is a code the route can really return",
   } finally {
     rmrf(root);
   }
+});
+
+// v2.1.2 F03 — a `cmd` is a spelling a lane copies. Six rows named a flag the
+// route never reads (`--slice`, `--area`, `--since`, `--plan`), or a subcommand
+// that does not exist (`clear`).
+test("lane calls: a row's cmd is the spelling the lanes use", () => {
+  const all = JSON.parse(cli(["lane", "calls", "--all", "--json"]).stdout);
+  const cmd = (id) => all.calls.find((c) => c.id === id).cmd;
+  assert.match(cmd("extra-dispatch"), /--task/);
+  assert.doesNotMatch(cmd("extra-dispatch"), /--slice/);
+  assert.match(cmd("extra-role"), /\brm\b/);
+  assert.match(cmd("extra-role"), /\bshow\b/);
+  assert.doesNotMatch(cmd("extra-role"), /clear/);
+  assert.match(cmd("budget-actual"), /<run-slug>/);
+  assert.doesNotMatch(cmd("budget-actual"), /--since/);
+  assert.match(cmd("challenge-init"), /--artifact/);
+  assert.doesNotMatch(cmd("boundary-status"), /--area/);
+  assert.doesNotMatch(cmd("budget-forecast"), /--plan/);
 });
 
 // ── `orc lane phases` — the phase library manifest (v1.0.0 W11) ─────────────
@@ -480,6 +520,41 @@ test("lane phases: trace_grammar is the lane's phase verbs plus the always set, 
   assert.ok(human.includes(`${Object.keys(q.trace_grammar).length} verbs`), "the human branch prints the grammar size");
 });
 
+// v2.1.2 F04/F68 — the call registry and the grammar are two lists of one
+// thing. A lane told "put each `trace` in the next packet VERBATIM" for a read
+// whose verb it was never handed can drop the line, and nothing says so.
+test("lane phases: every graph read a lane may make hands it that read's trace verb", () => {
+  // `graph-impact` is absent on purpose: its trace exists only with
+  // `--complexity`, which is /orc-mini's own verb (GRAPH-COMPLEXITY).
+  const VERB_OF = {
+    "graph-status": "GRAPH-CONSULT",
+    "graph-ctx": "GRAPH-CONSULT",
+    "graph-update": "GRAPH-UPDATE",
+    "graph-map": "GRAPH-MAP",
+    "graph-changes": "GRAPH-CHANGES",
+    "graph-gain": "GRAPH-GAIN",
+    "graph-cochange": "GRAPH-COCHANGE",
+    "graph-notes-pending": "GRAPH-NOTES",
+    "graph-coverage": "GRAPH-COVERAGE",
+  };
+  const phases = JSON.parse(cli(["lane", "phases", "--all", "--json"]).stdout);
+  const calls = JSON.parse(cli(["lane", "calls", "--all", "--json"]).stdout).calls;
+  let checked = 0;
+  for (const l of phases.lanes) {
+    // The composed tier reads a COMPILED flow: its grammar is the enabled
+    // blocks', and its status read comes through the `orc lane config` probe.
+    if (!l.trace_grammar || l.lane === "orc-diy") continue;
+    for (const c of calls) {
+      if (!VERB_OF[c.id] || !c.lanes.includes(l.lane)) continue;
+      assert.ok(VERB_OF[c.id] in l.trace_grammar, `${l.lane} may run ${c.id} but is not handed ${VERB_OF[c.id]}`);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 15, "the map met real rows");
+  // The verb the map leans on for `coverage` is in the closed set at all.
+  assert.ok(TRACE_REGISTRY().VERBS["GRAPH-COVERAGE"], "GRAPH-COVERAGE is a declared verb");
+});
+
 // v2.0.0 T17 (a) — `always` must be justified (_shared/phases/README.md rule 1). Two rows
 // earn it: the preflight and the trace pointer. The verb table is `on-demand`.
 test("lane phases: no manifest row except preflight and trace is `when: always`", () => {
@@ -546,6 +621,23 @@ test("lane phases: every manifested file is INSTALLED and carries the layers it 
     for (const f of fs.readdirSync(dir))
       if (f !== "README.md")
         assert.ok(seen.has("_shared/phases/" + f), `_shared/phases/${f} is claimed by LANE_PHASES`);
+  } finally {
+    rmrf(root);
+  }
+});
+
+// v2.1.2 F26 — orc-challenge owns its OWN `references/intake.md` (the goal
+// contract). The shared build intake opens a run folder and writes an
+// intent-spec, so the manifest must not name orc-challenge as a reader.
+test("lane phases: orc-challenge does not run the shared build intake", () => {
+  const { root } = freshInstall();
+  try {
+    const j = JSON.parse(cli(["lane", "phases", "orc-challenge", "--json", "--dir", root]).stdout);
+    assert.strictEqual(j.lanes[0].lane, "orc-challenge");
+    assert.ok(!j.lanes[0].phases.some((p) => p.id === "intake"), "orc-challenge has no `intake` row");
+    // The build lanes keep it.
+    const o = JSON.parse(cli(["lane", "phases", "orc-mini", "--json", "--dir", root]).stdout);
+    assert.ok(o.lanes[0].phases.some((p) => p.id === "intake"), "orc-mini still runs the shared intake");
   } finally {
     rmrf(root);
   }

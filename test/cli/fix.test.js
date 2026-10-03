@@ -267,6 +267,84 @@ test("host run: record writes ONE FIX line into that trace and does not touch .c
   }
 });
 
+// v2.1.2 F14 — a host is an OPEN run (6 h) that a LANE registered.
+test("host run: a pointer idle for more than 6 h is no host — mode may-fix, no FIX line", () => {
+  const root = project();
+  try {
+    const name = "run-quick-total-fix-021026-091200.txt";
+    const tp = trace(root, name);
+    const cur = path.join(logs(root), ".current");
+    fs.writeFileSync(cur, name);
+    fs.writeFileSync(tp + ".pending.json", "[]");
+    const old = new Date(Date.now() - 7 * 3600000);
+    fs.utimesSync(tp, old, old);
+    fs.utimesSync(cur, old, old);
+    const before = fs.readFileSync(tp, "utf8");
+    const c = j(classify(root, "fix Sonar typescript:S3776 in src/a.ts:10-20"));
+    assert.strictEqual(c.mode, "may-fix", "a run that ended without deleting its pointer is no host");
+    assert.strictEqual(c.host, null);
+    const r = j(record(root, Object.assign({}, c.record, { class_by: "user", introduced_by: "human" })));
+    assert.strictEqual(r.host, null);
+    assert.strictEqual(r.trace_line, null);
+    assert.strictEqual(fs.readFileSync(tp, "utf8"), before, "the dead trace is byte-identical");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("host run: the hook's bootstrap pointer names no lane — no host, no FIX line, .current untouched", () => {
+  const root = project();
+  try {
+    // The name the trace hook writes when /orc-fix's own executor is dispatched.
+    const name = "run-031026-130326.txt";
+    const tp = trace(root, name);
+    const cur = path.join(logs(root), ".current");
+    fs.writeFileSync(cur, name);
+    fs.writeFileSync(tp + ".pending.json", "[]");
+    const old = new Date(Date.now() - 600000);
+    fs.utimesSync(cur, old, old);
+    const mtime = fs.statSync(cur).mtimeMs;
+    const before = fs.readFileSync(tp, "utf8");
+    const c = j(classify(root, "fix Sonar typescript:S3776 in src/a.ts:10-20"));
+    assert.strictEqual(c.mode, "may-fix", "no lane registered this run, so no lane is there to make the fix");
+    assert.strictEqual(c.host, null);
+    assert.strictEqual(c.open_run, "run-031026-130326");
+    assert.ok(!c.record.fix_run, "no fix_run without a host");
+    const r = j(record(root, Object.assign({}, c.record, { class_by: "user", introduced_by: "human" })));
+    assert.strictEqual(r.host, null);
+    assert.ok(!r.observation.fix_run, "the record carries no fix_run");
+    assert.strictEqual(fs.readFileSync(tp, "utf8"), before, "no FIX line in the bootstrap trace");
+    assert.strictEqual(fs.statSync(cur).mtimeMs, mtime, ".current is never written");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("inflight: a bootstrap trace with an open dispatch still blocks the record, and names it", () => {
+  const root = project();
+  try {
+    const name = "run-031026-130326.txt";
+    const tp = trace(root, name, `[${stamp(new Date())}] hook     SPAWN orc-executor-sonnet-5-high\n`);
+    fs.writeFileSync(path.join(logs(root), ".current"), name);
+    fs.writeFileSync(tp + ".pending.json", JSON.stringify([{ agent: "orc-executor-sonnet-5-high", desc: "fix", ts: Date.now() }]));
+    // A lane-less in-flight trace made `c.host.run` a TypeError before v2.1.2.
+    const c = classify(root, "fix Sonar typescript:S3776 in src/a.ts:10-20");
+    assert.strictEqual(c.status, 1);
+    assert.doesNotMatch(c.stderr, /TypeError/);
+    assert.strictEqual(j(c).inflight, "in-flight");
+    assert.match(j(c).message, /run-031026-130326/);
+    const r = record(root, { source: "sonar", introduced_by: "human", rule: "typescript:S3776", path: "src/a.ts", lines: [10, 20] });
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(j(r).reason, "in-flight");
+    assert.strictEqual(j(r).open_run, "run-031026-130326");
+    assert.strictEqual(j(r).host, null);
+    assert.match(r.stdout + r.stderr, /in flight in run-031026-130326/);
+    assert.strictEqual(obsLines(root).length, 0);
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("review-scope: the store keeps the last 500 reviews and COUNTS what it drops", () => {
   const G = require("../../bin/gotcha.js");
   const root = tmpdir();
@@ -300,4 +378,28 @@ test("panel: the fixture carries fixes and misses, and the block's words exist i
   const panel = fs.readFileSync(path.join(__dirname, "..", "..", "bin", "webui", "js", "panels", "behaviour.js"), "utf8");
   assert.match(panel, /function bhFixes\(/);
   assert.match(panel, /c\.share/, "the bar width is the CLI's share");
+});
+
+// v2.1.2 F15 (DE-A3) — `other` has no source kind, so the store files it as a
+// defect. The trace and the printed line state the FILED source too.
+test("record: a class other is filed as defect — the row, the FIX line and the record line agree", () => {
+  const root = project();
+  try {
+    const name = "run-quick-total-fix-021026-091200.txt";
+    const tp = trace(root, name);
+    fs.writeFileSync(path.join(logs(root), ".current"), name);
+    fs.writeFileSync(tp + ".pending.json", "[]");
+    const res = record(root, { source: "other", introduced_by: "human", path: "src/a.ts", lines: [3] });
+    assert.strictEqual(res.status, 0, res.stdout + res.stderr);
+    const r = j(res);
+    assert.strictEqual(r.observation.source, "defect");
+    assert.match(r.trace_line, /FIX source=defect introduced_by=human /);
+    assert.match(r.line, /^recorded F-[0-9a-f]{8} · defect /);
+    const fixLines = fs.readFileSync(tp, "utf8").split("\n").filter((l) => /\] cli\s+FIX /.test(l));
+    assert.strictEqual(fixLines.length, 1);
+    assert.match(fixLines[0], /FIX source=defect introduced_by=human /);
+    assert.strictEqual(obsLines(root)[0].source, "defect");
+  } finally {
+    rmrf(root);
+  }
 });

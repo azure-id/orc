@@ -25,6 +25,7 @@ owner is this file has its detail in "Verb detail" below.
 | `GRAPH-CHANGES <found\|none> :: symbols=<n> high=<n> medium=<n> low=<n> gen=<n>` | orc → writer | one line at review, the `trace` field of `orc graph changes --json`, verbatim | `_shared/phases/trace-verbs.md` |
 | `GRAPH-COMPLEXITY <mini-ok\|recommend-orc> :: files=<n> callers=<n> caller_files=<n> maybe=<n> tests=<n> risk=<n> cochange=<n> gen=<n>` | orc → writer | one line per /orc-mini run, the `trace` field of the `--complexity` impact call, verbatim | `_shared/phases/trace-verbs.md` |
 | `GRAPH-COCHANGE <found\|none> :: rows=<n> commits=<n>` | orc → writer | one line per planning batch, for the file that produced the widest answer | `_shared/phases/trace-verbs.md` |
+| `GRAPH-COVERAGE <clean\|gaps> :: paths=<n> gaps=<n> gen=<n>` | orc → writer | the `trace` field of `orc graph coverage --json` — which files a card's silence can be trusted on | `_shared/phases/trace-verbs.md` |
 | `GRAPH-HINT injected=<n> subagent_start=<n> read_notes=<n> updates=<n>` | orc → writer | ONE line per phase close, the graph hook's counters; omitted when the counter file does not exist | `_shared/phases/trace-verbs.md` |
 | `GRAPH-GAIN paid=<n> low=<n> high=<n> calls=<n>` | orc → writer | ONE line per run at ship; `paid` is exact, `low`/`high` are an estimate never collapsed into one number | `_shared/phases/trace-verbs.md` |
 | `GRAPH-NOTES <applied\|below-min\|none\|deferred\|off\|skipped> :: <detail>` | orc → writer | one notes batch; `applied` copies the noter's one-line return verbatim | `_shared/phases/trace-verbs.md` |
@@ -44,7 +45,8 @@ owner is this file has its detail in "Verb detail" below.
 | `FINDING p0=<n> p1=<n> p2=<n> p3=<n>[ pre=<n> suppressed=<n> folded=<n>]` | reviewer→orc → writer | review outcome (P0–P3 severity ladder); the tail counts the after-filter's buckets | `_shared/phases/review.md` |
 | `FINDING-OUTCOME addressed=<n> disputed=<n> wontfix=<n> open=<n> pre=<n> suppressed=<n> :: <cat>:<addressed>/<total>,…` | orc → writer | ONE line at review close (a clean review too) — what became of each finding; `orc gotcha quality` counts it as a review | `_shared/phases/trace-verbs.md` |
 | `REVIEW-WHICH chose=<orc\|project\|skip> name=<the review the rule names> by=<user\|ledger\|learned> :: <file:line of the rule>` | orc → writer | the answer to §0 "which review" when the project names its own review — written ALWAYS, also under habits off; the FINISH nudge reads it | `_shared/phases/trace-verbs.md` |
-| `FIX source=<sonar\|ci\|defect\|pr\|review\|other> introduced_by=<orc\|ai\|human\|unknown> by=<user\|evidence> obs=<id8>[ missed_by=<run>] :: <path:lines> <rule or finding>` | cli | one fix recorded by `orc fix record` (/orc-fix) into the HOST run's trace — the CLI writes it, never a packet | `orc-fix/SKILL.md` |
+| `FIX source=<sonar\|ci\|defect\|pr\|review> introduced_by=<orc\|ai\|human\|unknown> by=<user\|evidence> obs=<id8>[ missed_by=<run>] :: <path:lines> <rule or finding>` | cli | one fix recorded by `orc fix record` (/orc-fix) into the HOST run's trace — the CLI writes it, never a packet — `source` is the FILED kind: a class `other` is filed as `defect` | `orc-fix/SKILL.md` |
+| `WAIT mode=<safe\|soft\|hard> requested=<n>m start=<HH:MM> end=<HH:MM> hops=<planned>/<max> trigger=<user\|gate> · WAIT end :: done=<k>/<planned> reason=<elapsed\|recovered\|cancelled\|max-hops> · WAIT block :: reason="<why>" by=user · WAIT unblock` | cli | a wait started, ended, blocked or unblocked — `orc wait` writes it into the open trace, never a packet | `_shared/wait.md` |
 | `VERDICT pass\|fail :: <detail>` | verifier→orc → writer | verification outcome | `_shared/phases/verify.md` |
 | `DRIFT loop=<n> :: <user description, compressed>` | orc → writer | mock-example drift-recovery loop opened (hard cap 2 loops) | `_shared/drift-recovery.md` |
 | `TDD-RED task=<id> iter=<n> :: <failing tests>` | executor→orc → writer | TDD repair-loop iteration — the plan's acceptance tests still red | `_shared/phases/trace-verbs.md` |
@@ -55,6 +57,7 @@ owner is this file has its detail in "Verb detail" below.
 | `PACT <state> :: <ids> · PACT inject task=<id> :: <PACT-id> · PACT recheck pass\|fail :: <ids>` | orc → writer | invariant-ledger state at the Phase-1 probe, a promise injected into a task, the Phase-6 recheck | `orc-pact/references/gate.md` |
 | `BOUNDARY <EXECUTE\|ESCALATE\|REFUSE\|unknown> task=<id> :: <area> · BOUNDARY lift task=<id> :: <area>` | orc → writer | per-task boundary verdict; an uncarded area is `unknown`, never REFUSE | `orc-boundary/references/gate.md` |
 | `CHALLENGE iter=<n> findings=P0:<n>/P1:<n>/P2:<n> coverage=<n>% verdict=PASS\|FAIL · CHALLENGE accept\|rebut :: <id> · CHALLENGE regoal\|retemplate :: v<n>` | orc → writer | one line per completed /orc-challenge iteration — `orc challenge record`'s `trace_line`, verbatim | `orc-challenge/SKILL.md` |
+| `DOC cycle=<n> sections=<k>/<m>[ wave=<k>/<n>]` | orc → writer | one line per completed /orc-doc cycle — a completed WAVE is a completed cycle | `orc-doc/SKILL.md` |
 | `EXTRA <profile>/<model> engine=<api\|claude-shim\|cli> task=<id> band=[lo,hi) tok=in/cw/cr/out outcome=<done\|partial\|failed\|fallback> dur=<m>m<s>s · EXTRA fallback task=<id> :: <reason> → <agent> · EXTRA substitution task=<id> :: requested=<m> reported=<m> · EXTRA reroute task=<id> :: <providers> · EXTRA resume task=<id> attempt=<n> :: from=<reason> attribution=<verdict> target=<extra:profile\|agent> files_preexisting=<n> · EXTRA orphan task=<id> :: attempt=<n> lease-expired files_changed=<n> state=<state> · EXTRA demote run=<slug> :: profile=<p> reason=<consecutive-stall\|stale-live-attempt\|manual> n=<k> → <ladder>` | orc → writer | one line per FOREIGN dispatch — `orc extra dispatch`'s `trace_line`, verbatim | `_shared/extra-dispatch.md` |
 | `FINISH :: <detail>` | orc → writer | run ended — mandatory, even on an abort | `_shared/phases/trace.md` |
 
@@ -108,7 +111,8 @@ reaches the file through a packet — you never append lines by hand.
 - **`GRAPH-MAP`.** Also at a `/orc-quick` Q1 look that had no file to name.
   `files=` is how many the budget SHOWED over how many the repository has, so a
   short map can be told from a small repository. `focused` means `--focus`
-  re-ranked the repository around what the request named. RANK is a hint about
+  re-ranked the repository around the files the focus RESOLVED to (`repo` when
+  nothing resolved). RANK is a hint about
   where to look first and the trace never says more than that.
 - **`GRAPH-CHANGES`.** `high` counts symbols that are exported, have three or
   more callers and NO test reaching them.
@@ -119,6 +123,8 @@ reaches the file through a packet — you never append lines by hand.
   the USER chose after the offer.
 - **`GRAPH-COCHANGE`.** Not per file — the `trace` field of
   `orc graph cochange --json` for the file that produced the widest answer.
+- **`GRAPH-COVERAGE`.** One line per `coverage` call. `gaps` counts files the
+  extractor did not finish; a gap is an answer, never an error.
 - **`GRAPH-HINT`.** Not one per hint — the counters `orc-graph-hook.js` keeps in
   `<log_dir>/<run>.graph-hook.json`. Omitted when the file does not exist (the
   hook is off, or it never had anything to say).

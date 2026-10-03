@@ -62,11 +62,11 @@ Behavior-trace logging is permanent (always on). Resolve `log_dir`
 `../_shared/phases/trace.md`; the marker set is in "Behavior trace"
 below. Weave the **Trace:** steps in as each event happens.
 
-1. **Topic pick (wiki-first).** Read `wiki/INDEX.md` +
-   `.claude/orc/wiki-meta.json` and compute the freshness tier
-   (`../orc-wiki/references/staleness.md` — computed on read, never stored).
-   **Trace:** `WIKI-CONSULT tier=<FRESH|AGING|STALE|none> :: topic-pick`
-   (emitted even when the wiki is absent, with `none`).
+1. **Topic pick (wiki-first).** Read the tier from `orc wiki status --json`
+   (`state`, then `tier`) — the CLI is its only executor; never compute it from
+   `.claude/orc/wiki-meta.json` yourself. Then read `wiki/INDEX.md`.
+   **Trace:** `WIKI-CONSULT <fresh|aging|stale|absent> :: docs=<topic doc|none>`
+   (emitted even when the wiki is absent, with `absent`).
    - Wiki FRESH/AGING → present its feature areas as a pick-list; the chosen
      area's `covers` globs seed the writer's file set.
    - No wiki / STALE / topic not covered → ask the user to point at the
@@ -83,7 +83,7 @@ below. Weave the **Trace:** steps in as each event happens.
    `wiki_tier`, `focus_hint|null`, and the paths to
    `references/deepen.md`, `references/template-learning.md`,
    `references/template-knowledge.md`. **Trace:**
-   `DISPATCH orc-learn-writer :: init <slug> expect=opus-5/low` just
+   `DISPATCH orc-learn-writer :: init <slug> expect=opus-5-5/low` just
    before the spawn (the hook adds `SPAWN`/`RETURN` on its own).
 4. On return, check `actual_model`/`actual_effort` against the pinned tier —
    mismatch → prepend a tier-downgrade warning to the report. **Trace:**
@@ -108,9 +108,9 @@ below. Weave the **Trace:** steps in as each event happens.
    selected → stop, no writes.
 4. **Trace:** write `log_dir/.current` = `run-learn-<slug>-<DDMMYY>-<HHMMSS>.txt`. For each
    selected feature, spawn the writer with `mode=refresh` and that feature's
-   slice (re-deepen just that feature; a FRESH/AGING wiki may again seed the
-   boundary — emit one `WIKI-CONSULT tier=<tier> :: refresh` when the wiki is
-   read). One `DISPATCH`/`VERIFY` pair per feature, same markers as INIT.
+   slice (re-deepen just that feature; a FRESH/AGING tier from
+   `orc wiki status --json` may again seed the boundary — emit one
+   `WIKI-CONSULT <tier> :: docs=<doc|none>` when the wiki is read). One `DISPATCH`/`VERIFY` pair per feature, same markers as INIT.
 5. The (last) writer re-derives `learning-docs/INDEX.md` from all current
    feature headers. Relay the combined report. **Trace:**
    `FINISH :: refresh <n> features`, then delete `log_dir/.current`.
@@ -130,8 +130,8 @@ Dispatch-only lane: emit ONLY the markers it can truthfully witness — no
 `PHASE`/`SCORE`/`FINDING`/`VERDICT`, because deepening and writing happen
 inside the writer, which self-traces nothing and returns only
 `actual_model`/`actual_effort`. The marker set, in order (actor `orc`, plus the
-hook's `SPAWN`/`RETURN`): `WIKI-CONSULT tier=<tier> :: <topic-pick|refresh>` at
-every wiki read · `DISPATCH orc-learn-writer :: <mode> <slug> expect=opus-5/low`
+hook's `SPAWN`/`RETURN`): `WIKI-CONSULT <tier> :: docs=<doc|none>` at
+every wiki read · `DISPATCH orc-learn-writer :: <mode> <slug> expect=opus-5-5/low`
 per spawn (REFRESH runs one per selected feature) · `VERIFY writer
 actual=<model>/<effort>` · `FINISH :: <init <slug>|refresh <n> features>`.
 `decisions` carries which feature was picked and why, plus the user's answer
@@ -167,11 +167,11 @@ preflight line and has no gate to honour.
 ## Calls
 
 **ONE catalogue, and it is not you:** `orc lane calls orc-learn --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
+SHARED CLI call this lane makes, each with its exit-code contract, its cost, when to run
 it, and what an EMPTY answer means. Never invent a spelling, never re-word an
 exit code, and never re-derive a state word — the CLI's state words are the only
 state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
+a failure**. A call that neither it nor this skill names is a call this lane does not make.
 Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
 command you are about to run, out loud, before running it.
 

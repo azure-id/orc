@@ -876,7 +876,7 @@ const extraRole = {
       slot: "doc-checker", lane: "/orc-doc", routed: false,
       profile: null, model: null, small_model: null, max_turns: null, added_at: null,
       provider: null, engine: null, verify_state: null, verify_age_days: null, model_known: null,
-      meaning: "the checker reads one bounded part and reports; it rewrites nothing, so a finding it makes is a finding you read.",
+      meaning: "the checker reads only the bounded part files of one slice and reports; it rewrites nothing, so a finding it makes is a finding you read.",
       asks: false, announce_point: "before the wave",
       claude: { via: "claude", agent: "orc-doc-checker-opus-5-low", agents: ["orc-doc-checker-opus-5-low"], table: "shipped" },
       resolved: "claude", held_back: null,
@@ -962,7 +962,7 @@ const extraLanes = {
     {
       lane: "/orc-fast", shape: "slot", agent: null, routes: "roles",
       slots: [
-        { slot: "fast-executor", routes: true, profile: "glm", model: "glm-4.6", claude: "orc-executor-sonnet-5-med", held_back: null, why: "slot row fast-executor holds this position and outranks orc-executor-sonnet-4-6-high." },
+        { slot: "fast-executor", routes: true, profile: "glm", model: "glm-4.6", claude: "orc-executor-sonnet-5-med", held_back: null, why: "slot row fast-executor holds this position and outranks orc-executor-sonnet-5-med." },
       ],
       detail: "fast-executor is held by a non-Claude worker; every position with no row stays on its pinned Claude agent.",
     },
