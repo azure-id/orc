@@ -54,6 +54,10 @@ never spawn other agents, never work outside your task slice.
   absent. Present = you must show the bug is real BEFORE you fix it: kind `test`
   when the project has a runner, `command` when it has none. Absent = this task
   is not a defect report; never invent a reproduction nobody asked for
+- graph_anchors — up to 12 `path:a-b` ranges the dig found, and one `read all:`
+  command, or absent; it may end with a fenced block that carries the code of
+  every range. Present → `graph_anchors` may carry the code of its EDIT-SITE ranges (edit target, router, caller) inline — use it as already read; do NOT read those ranges again. Copy-from and contract ranges are never inline; your FIRST call prints them (below). With `graph_anchors`, a wiki page is OPTIONAL: read it only for a business rule that the requirement, the anchors and the code do not settle. Your FIRST call prints EVERY range in `graph_anchors` in ONE shell command — the `read all:` line when present, else one `sed -n 'a,bp' <file>` per range joined with `;` and an `echo == <file>:<a>-<b>` header each. Then read further only for what those ranges do not show; do not `cat` a whole anchored file over 150 lines. A file you will EDIT is still read in
+  full first (read-ladder exception 1). The inline code and the ranges are real bytes of the current blob.
 - worktree_path — work here if set, else the current tree
 
 ## Procedure (embedded — self-contained)
@@ -61,7 +65,8 @@ never spawn other agents, never work outside your task slice.
 2. Read spec_ref if provided.
 2a. Read discipline — `.claude/skills/_shared/read-ladder.md` IS the rule, its
    two exceptions are the only ones, and it holds the rest of this step.
-   - Step 0 before any Grep: `orc graph ctx <symbol|file> --if-enabled --json --brief`;
+   - Step 0: the slice carries `graph_anchors` → `graph_anchors` may carry the code of its EDIT-SITE ranges (edit target, router, caller) inline — use it as already read; do NOT read those ranges again. Copy-from and contract ranges are never inline; your FIRST call prints them (below). With `graph_anchors`, a wiki page is OPTIONAL: read it only for a business rule that the requirement, the anchors and the code do not settle. Your FIRST call prints EVERY range in `graph_anchors` in ONE shell command — the `read all:` line when present, else one `sed -n 'a,bp' <file>` per range joined with `;` and an `echo == <file>:<a>-<b>` header each. Then read further only for what those ranges do not show; do not `cat` a whole anchored file over 150 lines. Then, for a symbol the anchors do not cover, before any Grep:
+     `orc graph ctx <symbol|file> --if-enabled --json --brief`;
      add `--source` for the card AND the range's lines in one call. A file you
      will EDIT is still read IN FULL with Read first. Exit 3 = graph off, skip
      step 0 for the rest of the task.
@@ -90,6 +95,12 @@ never spawn other agents, never work outside your task slice.
 4. Run the proof: if the project has a runnable build/test, run it for your
    changes and capture {command, exit_code, last ~5 output lines} VERBATIM —
    never paraphrased, never predicted. No runner → no_runner_detected: true.
+   Coverage: when the project asks for a coverage level, run the coverage ONCE
+   for your own files only (`--collectCoverageFrom=<each file you changed>` and
+   the text reporter), read the uncovered lines from that text table, add the
+   tests that cover them, and run it once more. Never grep lcov or the jest
+   cache, and never probe the test transformer or its internals. A gap that is
+   still open after the second run goes in unmet[] with the file and lines.
 5. Self-check: re-read your diff against every acceptance[] line and every
    constraint. Anything you could not satisfy goes in unmet[] — a non-empty
    unmet[] means status partial (or failed), never done.
@@ -129,12 +140,13 @@ never spawn other agents, never work outside your task slice.
   did, never what you were handed. `none` is a valid, useful answer — it says
   those pages did not help; never claim a read to look thorough. Omit only when
   the slice carried no wiki material.
-- graph_used — REQUIRED when the slice carried `orc graph ctx` cards or you ran
-  `orc graph ctx` yourself: `{targets, generation}` — the card targets you ACTUALLY used (or
-  `none`) and the `generation` number the cards carry, copied from the card's own JSON. A card
+- graph_used — REQUIRED when the slice carried `graph_anchors` or you ran
+  `orc graph ctx` yourself: `{targets, generation}` — the anchors (`path:a-b`) or the
+  card targets you ACTUALLY used (or `none`) and the `generation` number the slice or card
+  carries, copied from its own header or JSON. A card
   is a LOCATOR — read the range it names before you rely on behaviour, and trust a card whose
   header says CHANGED, or one whose header names a `coverage` gap, as a hint only. `none` is a
-  valid answer; never claim a card helped to look thorough. Omit only when the slice carried no cards.
+  valid answer; never claim anchors or a card helped to look thorough. Omit only when the slice carried no anchors and you ran no `ctx`.
 - repro — REQUIRED when the slice carried `repro.required: true`; absent
   otherwise. Either {command, before: {exit_code, tail}, after: {exit_code,
   tail}} quoted VERBATIM from the two runs, or `none` + a one-line reason.

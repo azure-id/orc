@@ -458,8 +458,10 @@ one row in the gain ledger per file per run, no line sent to anyone. `orc graph
 gain` prints the count as `wide reads`. It is the number to look at before you
 turn `on,read` on; nothing turns it on by itself.
 
-It says each thing once per run. It never speaks to the main session, never
-outside an ORC run, and never when the map does not exist.
+It says each thing once per run. It speaks to the main session in one case
+only: a Grep, Glob or shell search of a name the graph knows gets the ctx card
+(callers, tests, coverage, the `--anchors` line), once per name and at most 3
+per run, under `code_graph: on` only. It never speaks outside an ORC run, and never when the map does not exist.
 
 ### What it will never do
 

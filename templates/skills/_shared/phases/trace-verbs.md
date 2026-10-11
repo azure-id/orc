@@ -19,15 +19,15 @@ owner is this file has its detail in "Verb detail" below.
 | `CONFIG <key=value …>` | orc → writer | Phase 1 — the resolved config values this run will consume, ALWAYS with opus5_only | `_shared/phases/trace-verbs.md` |
 | `WIKI-CONSULT <fresh\|aging\|stale\|absent\|empty> :: docs=<list\|none>` | orc → writer | project wiki consulted for grounding, with its staleness tier | `_shared/phases/wiki-consult.md` |
 | `CROSSLINK <cached\|configured-no-cache\|none> :: boundaries=<n> peers=<names> · CROSSLINK inject task=<id> :: <boundary>` | orc → writer | cross-repo peer-knowledge state at the consult point; `inject` when a slice receives a linked contract | `_shared/phases/wiki-consult.md` |
-| `GRAPH-CONSULT <fresh\|updated\|built\|drifted\|none\|off> :: files=<n> symbols=<n>[ density=<n>[ thin=1]] · GRAPH-CONSULT card task=<id> :: targets=<…>` | orc → writer | the code graph's preflight state, copied VERBATIM from the CLI `trace` field | `_shared/code-graph.md` |
+| `GRAPH-CONSULT <fresh\|updated\|built\|drifted\|none\|semi\|off\|pack\|anchors> :: files=<n> symbols=<n>[ density=<n>[ thin=1]] · GRAPH-CONSULT card task=<id> :: targets=<…> · GRAPH-CONSULT pack :: files=<n> refs=<n> excerpts=<n> tokens=<n> gen=<n> · GRAPH-CONSULT anchors :: ranges=<n> files=<n> gen=<n>` | orc → writer | the code graph's preflight state, copied VERBATIM from the CLI `trace` field | `_shared/code-graph.md` |
 | `GRAPH-UPDATE <state> :: parsed=<n> reused=<n> deleted=<n> gen=<n> route=<n> ms=<n>` | orc → writer | one graph update, the `trace` field of `orc graph update --json`, verbatim | `_shared/phases/trace-verbs.md` |
 | `GRAPH-MAP <repo\|focused> :: files=<shown>/<total> [focus=<a,b>] gen=<n>` | orc → writer | ONE line at the start of planning, the `trace` field of `orc graph map --json`, verbatim | `_shared/phases/trace-verbs.md` |
 | `GRAPH-CHANGES <found\|none> :: symbols=<n> high=<n> medium=<n> low=<n> gen=<n>` | orc → writer | one line at review, the `trace` field of `orc graph changes --json`, verbatim | `_shared/phases/trace-verbs.md` |
 | `GRAPH-COMPLEXITY <mini-ok\|recommend-orc> :: files=<n> callers=<n> caller_files=<n> maybe=<n> tests=<n> risk=<n> cochange=<n> gen=<n>` | orc → writer | one line per /orc-mini run, the `trace` field of the `--complexity` impact call, verbatim | `_shared/phases/trace-verbs.md` |
-| `GRAPH-COCHANGE <found\|none> :: rows=<n> commits=<n>` | orc → writer | one line per planning batch, for the file that produced the widest answer | `_shared/phases/trace-verbs.md` |
+| `GRAPH-COCHANGE <found\|none> :: rows=<n> commits=<n> · GRAPH-COCHANGE none :: history=<n>` | orc → writer | one line per planning batch, for the file that produced the widest answer | `_shared/phases/trace-verbs.md` |
 | `GRAPH-COVERAGE <clean\|gaps> :: paths=<n> gaps=<n> gen=<n>` | orc → writer | the `trace` field of `orc graph coverage --json` — which files a card's silence can be trusted on | `_shared/phases/trace-verbs.md` |
 | `GRAPH-HINT injected=<n> subagent_start=<n> read_notes=<n> updates=<n>` | orc → writer | ONE line per phase close, the graph hook's counters; omitted when the counter file does not exist | `_shared/phases/trace-verbs.md` |
-| `GRAPH-GAIN paid=<n> low=<n> high=<n> calls=<n>` | orc → writer | ONE line per run at ship; `paid` is exact, `low`/`high` are an estimate never collapsed into one number | `_shared/phases/trace-verbs.md` |
+| `GRAPH-GAIN paid=<n> low=<n> high=<n> calls=<n>` | orc → writer | OLD traces only — no lane emits it now (`orc graph gain` is a user command); `paid` is exact, `low`/`high` are an estimate never collapsed into one number | `_shared/phases/trace-verbs.md` |
 | `GRAPH-NOTES <applied\|below-min\|none\|deferred\|off\|skipped> :: <detail>` | orc → writer | one notes batch; `applied` copies the noter's one-line return verbatim | `_shared/phases/trace-verbs.md` |
 | `SPAWN <agent>` | hook | an agent dispatch was observed (skeleton) | `hooks/orc-trace.js` |
 | `RETURN <agent> :: <desc> dur=<m>m<s>s [model=<id>]` | hook | a subagent finished (skeleton) — not an orchestrator obligation; the model check is VERIFY | `hooks/orc-trace.js` |
@@ -52,7 +52,7 @@ owner is this file has its detail in "Verb detail" below.
 | `TDD-RED task=<id> iter=<n> :: <failing tests>` | executor→orc → writer | TDD repair-loop iteration — the plan's acceptance tests still red | `_shared/phases/trace-verbs.md` |
 | `TDD-GREEN task=<id> iter=<n>` | executor→orc → writer | the task's TDD acceptance tests pass | `_shared/phases/trace-verbs.md` |
 | `REPRO red\|green :: <cmd> exit=<n> · REPRO none :: <reason>` | executor→orc → writer | a DEFECT task's reproduction: RED before the fix, GREEN after | `_shared/return-validation.md` |
-| `NOTE :: <decisions>` | writer | the packet's `decisions` field — the WHY layer; one line, only when non-empty | `agents/orc-trace-writer-haiku-4-5.md` |
+| `NOTE :: <decisions>` | writer | the packet's `decisions` field — the WHY layer; one line, only when non-empty | `agents/orc-trace-writer-haiku-5-high.md` |
 | `STATS lane=<l> slug=<s> dispatches=<n> waves=<n> tasks=<n> bands=<h:n,m:n,l:n> downgrades=<n> duration_ms=<n>` | orc → writer | ONE summary line per run, in the FINISH packet, immediately BEFORE the FINISH line | `_shared/phases/trace-verbs.md` |
 | `PACT <state> :: <ids> · PACT inject task=<id> :: <PACT-id> · PACT recheck pass\|fail :: <ids>` | orc → writer | invariant-ledger state at the Phase-1 probe, a promise injected into a task, the Phase-6 recheck | `orc-pact/references/gate.md` |
 | `BOUNDARY <EXECUTE\|ESCALATE\|REFUSE\|unknown> task=<id> :: <area> · BOUNDARY lift task=<id> :: <area>` | orc → writer | per-task boundary verdict; an uncarded area is `unknown`, never REFUSE | `orc-boundary/references/gate.md` |
@@ -101,11 +101,12 @@ reaches the file through a packet — you never append lines by hand.
   `orc graph status --heal --json --brief` (`code-graph.md` §4). `density=` is
   the named symbols per file, and `thin=1` means most files hold none, so most
   questions asked of the graph will not find one (v1.9.1). A `GATE` line that
-  describes the graph in other words does not replace it. The `card` form is the
-  `trace` of `orc graph ctx --json`, with `task=` added, when a slice receives
-  cards.
-- **`GRAPH-UPDATE`.** One graph update at a wave close, a green smoke gate, a
-  code-writing `/orc-quick` request, or ship. The graph HOOK writes its own
+  describes the graph in other words does not replace it. The `anchors` form is the
+  `trace` of the anchors call (`orc graph ctx --for-slice … --anchors --json --brief`),
+  with `task=` added, when a slice receives `graph_anchors`. The `card` form is the
+  `trace` of a plain `orc graph ctx --json` (an orient call).
+- **`GRAPH-UPDATE`.** One lane graph update — ONLY when `update_step` is `lane` — at a
+  wave close, a green smoke gate, a code-writing `/orc-quick` request, or ship. The graph HOOK writes its own
   `GRAPH-UPDATE … :: by=hook …` lines directly; never copy one of those, it is
   already in the file.
 - **`GRAPH-MAP`.** Also at a `/orc-quick` Q1 look that had no file to name.
@@ -128,10 +129,8 @@ reaches the file through a packet — you never append lines by hand.
 - **`GRAPH-HINT`.** Not one per hint — the counters `orc-graph-hook.js` keeps in
   `<log_dir>/<run>.graph-hook.json`. Omitted when the file does not exist (the
   hook is off, or it never had anything to say).
-- **`GRAPH-GAIN`.** The `trace` field of `orc graph gain --run <trace name>
-  --json`, verbatim. `paid` is exact (the tokens the graph put in); `low`/`high`
-  are an ESTIMATE of the retrieval it kept out. Omitted when the ledger is empty
-  or the graph is off.
+- **`GRAPH-GAIN`.** Kept so OLD traces still parse. No lane emits it now: `orc graph gain`
+  is a user command. `paid` is exact; `low`/`high` are an ESTIMATE.
 - **`GRAPH-NOTES`.** The `trace` field of `orc graph notes pending --json` when
   it exited 3 or 5; `skipped` under the Opus-5-only mode.
 - **`RETURN`.** The hook attributes the RETURN to the finishing agent from the
@@ -288,7 +287,7 @@ for every run even if the orchestrator never writes a rich marker. Only
   formats — the two halves agree by construction. An unknown verb, a missing or
   "now" `ts`, or a parse error exits 2 and writes NOTHING; a missing `.current`
   on a later packet exits 3. Only on exit ≠ 0 does the lane dispatch
-  `orc-trace-writer-haiku-4-5` with the SAME packet (the fallback).
+  `orc-trace-writer-haiku-5-high` with the SAME packet (the fallback).
 - **Pairing rule (the anti-forget mechanism).** The write for phase N is issued
   **in the same tool block as phase N+1's first dispatch** — logging
   piggybacks on the very action the model reliably performs. A phase with no next

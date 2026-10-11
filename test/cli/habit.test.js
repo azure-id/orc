@@ -132,12 +132,12 @@ test("rule: the ratchet — away from `careful` an apply habit is class never", 
 // agent it can only mean; an extra slot and an ambiguous family word stay.
 test("parser: a gate answer is stored with the canonical agent name", () => {
   const P = (t) => H.parseAskLine("[011026 10:00:00.000] quick  ASK quick.q2.gate.code :: " + t);
-  const a = P("offered=sonnet-4-6-med|opus-5-low|deepseek-v4-flash rec=sonnet-4-6-med chose=sonnet-4-6-med by=user");
-  assert.deepStrictEqual([a.chose, a.rec, a.offered], ["orc-executor-sonnet-4-6-med", "orc-executor-sonnet-4-6-med", ["orc-executor-sonnet-4-6-med", "orc-executor-opus-5-low", "deepseek-v4-flash"]]);
+  const a = P("offered=haiku-5-high|opus-5-low|deepseek-v4-flash rec=haiku-5-high chose=haiku-5-high by=user");
+  assert.deepStrictEqual([a.chose, a.rec, a.offered], ["orc-executor-haiku-5-high", "orc-executor-haiku-5-high", ["orc-executor-haiku-5-high", "orc-executor-opus-5-low", "deepseek-v4-flash"]]);
   assert.strictEqual(P("offered=deepseek-v4-flash|opus-5-low rec=deepseek-v4-flash chose=deepseek-v4-flash by=user").chose, "deepseek-v4-flash", "an extra slot stays");
-  assert.strictEqual(P("offered=sonnet|sonnet-5-high|sonnet-4-6-med rec=sonnet chose=sonnet by=user").chose, "sonnet", "two Sonnet agents on the menu: the family word stays");
+  assert.strictEqual(P("offered=sonnet|sonnet-5-high|sonnet-4-6-high rec=sonnet chose=sonnet by=user").chose, "sonnet", "two Sonnet agents on the menu: the family word stays");
   assert.strictEqual(P("offered=sonnet|opus|extra rec=sonnet chose=sonnet by=user").chose, "sonnet", "a bare family word with no menu match is never guessed");
-  const full = P("offered=orc-executor-sonnet-4-6-med|orc-executor-opus-5-low rec=orc-executor-sonnet-4-6-med chose=orc-executor-sonnet-4-6-med by=user");
+  const full = P("offered=orc-executor-haiku-5-high|orc-executor-opus-5-low rec=orc-executor-haiku-5-high chose=orc-executor-haiku-5-high by=user");
   assert.strictEqual(full.chose, a.chose, "the full and the short spelling are ONE option");
   const recon = H.parseAskLine("[011026 10:00:00.000] quick  ASK quick.q2.gate.recon :: offered=sonnet-5-med|opus-5-low rec=sonnet-5-med chose=sonnet-5-med by=user");
   assert.strictEqual(recon.chose, "orc-recon-sonnet-5-med", "the recon gate maps to the recon agent, never the executor");

@@ -108,6 +108,6 @@ did the REFUSE-listed thing anyway is a blocking finding with an anchor
 
 `BOUNDARY <verdict> task=<id> :: <area>` per gated task, and
 `BOUNDARY lift task=<id> :: <area>` when `block` removes one. Carried in the phase
-packet like every other verb — handed to `orc-trace-writer-haiku-4-5`, never
+packet like every other verb — handed to `orc-trace-writer-haiku-5-high`, never
 written directly. `/orc-retro` reads them to answer the question this whole lane
 exists for: how much work did we stop attempting, and was that right?

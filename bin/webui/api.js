@@ -1294,6 +1294,14 @@ async function handleApi(req, res, url, ctx) {
     const build = READS[route];
     if (!build) return json(res, 404, { error: "unknown endpoint " + route });
     const out = readCli(build(q), ctx);
+    // v2.2.0 — `graph status` without --if-enabled answers the INDEX state, so
+    // a `semi` project looks like `on`. The configured mode is passed through
+    // from `orc config get` so the panel can show the SEMI badge.
+    if (route === "/api/graph" && out.ok && out.data && !out.data.mode) {
+      const cfgRes = readCli(["config", "get", "code_graph"], ctx);
+      const row = cfgRes.data && Array.isArray(cfgRes.data.keys) ? cfgRes.data.keys.find((k) => k.key === "code_graph") : null;
+      if (row) out.data.mode = String(row.value).toLowerCase();
+    }
     // v0.49.2 — a read that produced no parseable object still has to SAY why.
     // The body already carried `stderr` and `stdout`; nothing named `error`, so
     // the client fell through to "request failed (500)" and one corrupt ledger

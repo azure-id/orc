@@ -202,8 +202,8 @@ test("lane config: roles are resolved, and a lane never maps a role to an agent 
     assert.strictEqual(mini.shipped, "orc-analyze-mini-sonnet-5-high");
 
     // The trace writer transcribes a packet and is NEVER forced.
-    assert.strictEqual(b.roles["orc-trace-writer-haiku-4-5"].forced_by, null);
-    assert.strictEqual(b.roles["orc-trace-writer-haiku-4-5"].agent, "orc-trace-writer-haiku-4-5");
+    assert.strictEqual(b.roles["orc-trace-writer-haiku-5-high"].forced_by, null);
+    assert.strictEqual(b.roles["orc-trace-writer-haiku-5-high"].agent, "orc-trace-writer-haiku-5-high");
   } finally {
     rmrf(plain);
     rmrf(forced);
@@ -417,7 +417,7 @@ test("lane phases: --json is not a summary — every field the human branch prin
   try {
     const j = JSON.parse(cli(["lane", "phases", "orc", "--json", "--dir", root]).stdout);
     assert.deepStrictEqual(Object.keys(j), [
-      "ok", "lane", "all", "count", "layer_set", "phase_files", "lanes",
+      "ok", "lane", "all", "count", "layer_set", "phase_files", "lanes", "trace_grammar", "ask_ids",
     ]);
     assert.deepStrictEqual(j.layer_set, ["core", "full", "trim", "composed"]);
     const l = j.lanes[0];
@@ -641,4 +641,15 @@ test("lane phases: orc-challenge does not run the shared build intake", () => {
   } finally {
     rmrf(root);
   }
+});
+
+// v2.2.0 T13 — one lane answered: the grammar and the ASK ids sit at the top
+// level too, where a lane spine tells the run to read them.
+test("lane phases: one lane → top-level trace_grammar and ask_ids; --all → neither", () => {
+  const j = JSON.parse(cli(["lane", "phases", "orc-quick", "--json"]).stdout);
+  assert.deepStrictEqual(j.trace_grammar, j.lanes[0].trace_grammar);
+  assert.ok(j.ask_ids && typeof j.ask_ids === "object");
+  assert.match(j.ask_ids["quick.q2.gate.code"] || "", /^offered=/);
+  const all = JSON.parse(cli(["lane", "phases", "--all", "--json"]).stdout);
+  assert.ok(!("trace_grammar" in all) && !("ask_ids" in all), "--all has no top-level grammar");
 });

@@ -76,7 +76,8 @@ test("E1 — a component: the owner, every member, the section never in the qnam
   assert.ok(submit.calls.some((c) => c.name === "validate" && c.self), "this.validate() is a self call");
   assert.ok(q["CreateFundTransferModal.amount"].calls.some((c) => c.name === "reset" && c.self));
   // Promise 5: `data() {` and `submit() {` are declarations.
-  const all = r.symbols.flatMap((s) => s.calls.map((c) => c.name));
+  // v2.2.0 T3: the template's `@submit.prevent="submit"` IS a call, so only the script is read here.
+  const all = r.symbols.filter((s) => s.kind !== "template").flatMap((s) => s.calls.map((c) => c.name));
   for (const decl of ["data", "canSubmit", "submit", "get", "set"]) assert.ok(!all.includes(decl), `${decl}( is a declaration, not a call`);
 });
 
@@ -217,8 +218,12 @@ test("answers — the mixin calls the component's submit; the component reaches 
   assert.equal(submit.state, "found");
   assert.deepStrictEqual(
     submit.callers.map((c) => [c.qname, c.file, c.line]),
-    [["formMixin.reset", "src/mixins/formMixin.js", 7]],
-    "the mixin's this.submit() is the caller"
+    // v2.2.0 T3: the template's `@submit.prevent="submit"` is a caller too.
+    [
+      ["CreateFundTransferModal.template", "src/components/CreateFundTransferModal.vue", 2],
+      ["formMixin.reset", "src/mixins/formMixin.js", 7],
+    ],
+    "the template and the mixin's this.submit() are the callers"
   );
   assert.ok(submit.calls.some((c) => c.target && c.target.qname === "formMixin.validate" && c.inherited), "validate is inherited through mixins");
   assert.equal(submit.note.source, "doc", "an Options API method with a comment gets its doc note for free");
@@ -238,7 +243,7 @@ test("answers — SET_USER and the constants are found by name; a string dispatc
   assert.deepStrictEqual(s.callers, [], "commit('SET_USER') is a string, and a string is not an edge");
   assert.equal(json(graph(root, "ctx", "API_BASE", "--json")).target.kind, "const");
   const st = json(graph(root, "status", "--json"));
-  assert.equal(st.engine, "graph@6");
+  assert.equal(st.engine, "graph@7");
   assert.equal(st.density.zero_files, 0, "every file of the fixture now holds a named symbol");
 });
 

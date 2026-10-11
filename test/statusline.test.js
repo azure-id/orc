@@ -614,6 +614,13 @@ test("statusline: the graph component is a FLOOR — off, none, fresh, behind �
     git("commit", "-qm", "two");
     assert.match(render(), /\bbehind\b/, "HEAD moved past the commit the index was built at");
 
+    // v2.2.0: semi is its own floor word — never fresh, behind or drifted.
+    cli(["config", "set", "code_graph", "semi", "--dir", root]);
+    const semi = render();
+    assert.match(semi, /\bsemi\b/, "a semi config shows the semi state");
+    assert.ok(!/\b(behind|fresh|drifted)\b/.test(semi));
+    cli(["config", "set", "code_graph", "on", "--dir", root]);
+
     // LF, always — the slice below looks for `\n}\n`, a needle a CRLF checkout
     // never contains. Without this, indexOf returns -1, the slice runs to the
     // end of the file, and the guard fails on Windows for the wrong reason.

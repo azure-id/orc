@@ -81,11 +81,11 @@ test("trace: without agent_type, RETURN falls back to FIFO and marks it approxim
     runHook(claudeDir, "orc-trace.js", {
       hook_event_name: "PreToolUse",
       tool_name: "Agent",
-      tool_input: { subagent_type: "orc-executor-haiku-4-5", description: "tiny task" },
+      tool_input: { subagent_type: "orc-executor-haiku-5-high", description: "tiny task" },
     });
     runHook(claudeDir, "orc-trace.js", { hook_event_name: "SubagentStop" });
     const { texts } = traceFiles(claudeDir);
-    assert.match(texts, /RETURN ~orc-executor-haiku-4-5 :: tiny task/, "FIFO fallback attributes + marks ~");
+    assert.match(texts, /RETURN ~orc-executor-haiku-5-high :: tiny task/, "FIFO fallback attributes + marks ~");
   } finally {
     rmrf(root);
   }
@@ -195,7 +195,7 @@ test("trace: a FRESH pointer to a not-yet-created file is HONORED, not rotated",
     runHook(claudeDir, "orc-trace.js", {
       hook_event_name: "PreToolUse",
       tool_name: "Agent",
-      tool_input: { subagent_type: "orc-trace-writer-haiku-4-5", description: "packet 1" },
+      tool_input: { subagent_type: "orc-trace-writer-haiku-5-high", description: "packet 1" },
     });
 
     assert.strictEqual(
@@ -225,7 +225,7 @@ test("trace: a STALE pointer to a missing file still rotates to a fresh bootstra
     runHook(claudeDir, "orc-trace.js", {
       hook_event_name: "PreToolUse",
       tool_name: "Agent",
-      tool_input: { subagent_type: "orc-executor-haiku-4-5", description: "new run" },
+      tool_input: { subagent_type: "orc-executor-haiku-5-high", description: "new run" },
     });
 
     assert.notStrictEqual(
@@ -251,16 +251,16 @@ test("trace: the first writer dispatch's SPAWN and RETURN both land in the regis
     runHook(claudeDir, "orc-trace.js", {
       hook_event_name: "PreToolUse",
       tool_name: "Agent",
-      tool_input: { subagent_type: "orc-trace-writer-haiku-4-5", description: "run_meta packet" },
+      tool_input: { subagent_type: "orc-trace-writer-haiku-5-high", description: "run_meta packet" },
     });
     runHook(claudeDir, "orc-trace.js", {
       hook_event_name: "SubagentStop",
-      agent_type: "orc-trace-writer-haiku-4-5",
+      agent_type: "orc-trace-writer-haiku-5-high",
     });
 
     const text = fs.readFileSync(path.join(dir, rich), "utf8");
-    assert.match(text, /SPAWN orc-trace-writer-haiku-4-5/, "SPAWN in the rich file");
-    assert.match(text, /RETURN orc-trace-writer-haiku-4-5/, "RETURN in the SAME file (was dropped)");
+    assert.match(text, /SPAWN orc-trace-writer-haiku-5-high/, "SPAWN in the rich file");
+    assert.match(text, /RETURN orc-trace-writer-haiku-5-high/, "RETURN in the SAME file (was dropped)");
     const pend = JSON.parse(fs.readFileSync(path.join(dir, rich + ".pending.json"), "utf8"));
     assert.deepStrictEqual(pend, [], "no unconsumable pending record left behind");
   } finally {
@@ -415,7 +415,7 @@ test("trace: a suspended lane that re-writes its pointer on RESUME keeps ONE fil
     runHook(claudeDir, "orc-trace.js", {
       hook_event_name: "PreToolUse",
       tool_name: "Agent",
-      tool_input: { subagent_type: "orc-trace-writer-haiku-4-5", description: "brainstorm packet" },
+      tool_input: { subagent_type: "orc-trace-writer-haiku-5-high", description: "brainstorm packet" },
     });
 
     // It suspends into the receiving lane, which runs its own normal run and —
@@ -432,7 +432,7 @@ test("trace: a suspended lane that re-writes its pointer on RESUME keeps ONE fil
     runHook(claudeDir, "orc-trace.js", {
       hook_event_name: "PreToolUse",
       tool_name: "Agent",
-      tool_input: { subagent_type: "orc-trace-writer-haiku-4-5", description: "post-return packet" },
+      tool_input: { subagent_type: "orc-trace-writer-haiku-5-high", description: "post-return packet" },
     });
 
     const runFiles = fs.readdirSync(dir).filter((f) => f.endsWith(".txt"));
@@ -499,7 +499,7 @@ test("trace: orc-retro is never traced (the miner must not pollute its own data)
     runHook(claudeDir, "orc-trace.js", {
       hook_event_name: "PreToolUse",
       tool_name: "Agent",
-      tool_input: { subagent_type: "orc-executor-haiku-4-5", description: "tiny" },
+      tool_input: { subagent_type: "orc-executor-haiku-5-high", description: "tiny" },
     });
     runHook(claudeDir, "orc-trace.js", {
       hook_event_name: "SubagentStop",
@@ -521,9 +521,9 @@ test("trace: PHASE-EDGE on a role change, suppressed within a role and for the w
         tool_input: { subagent_type: agent, description: "d" },
       });
     spawn("orc-planner-opus-5-med");
-    spawn("orc-trace-writer-haiku-4-5"); // narration — never an edge
+    spawn("orc-trace-writer-haiku-5-high"); // narration — never an edge
     spawn("orc-executor-sonnet-5-high");
-    spawn("orc-executor-haiku-4-5"); // same family — no second edge
+    spawn("orc-executor-haiku-5-high"); // same family — no second edge
     spawn("orc-reviewer-opus-5-low");
     const { texts } = traceFiles(claudeDir);
     assert.match(texts, /PHASE-EDGE planning :: first=orc-planner-opus-5-med/);
@@ -1307,7 +1307,7 @@ test("session hook: SubagentStart hands the gotcha card to a reviewer, and nothi
     assert.strictEqual(j.hookSpecificOutput.hookEventName, "SubagentStart");
     assert.match(j.hookSpecificOutput.additionalContext, /orc gotcha card/);
     assert.match(j.hookSpecificOutput.additionalContext, /G-001/);
-    const ex = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "SubagentStart", agent_type: "orc-executor-sonnet-4-6-med" });
+    const ex = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "SubagentStart", agent_type: "orc-executor-haiku-5-high" });
     assert.strictEqual(ex.stdout, "", "an executor gets no review card");
   } finally {
     rmrf(root);
@@ -1319,8 +1319,8 @@ test("session hook: the narration guard blocks ONE stop of a run that dispatched
   const { root, claudeDir } = freshInstall();
   try {
     const trace = openRun(claudeDir, "t9");
-    const hookOnly = "[270926 17:52:08.332] hook     SPAWN orc-executor-sonnet-4-6-med :: add /time\n" +
-      "[270926 17:52:29.366] hook     RETURN orc-executor-sonnet-4-6-med :: add /time dur=0m21s\n";
+    const hookOnly = "[270926 17:52:08.332] hook     SPAWN orc-executor-haiku-5-high :: add /time\n" +
+      "[270926 17:52:29.366] hook     RETURN orc-executor-haiku-5-high :: add /time dur=0m21s\n";
     fs.writeFileSync(trace, hookOnly);
     const sub = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop", agent_id: "a1" });
     assert.strictEqual(sub.stdout, "", "never for a subagent");
@@ -1335,15 +1335,15 @@ test("session hook: the narration guard blocks ONE stop of a run that dispatched
     assert.strictEqual(reentry.stdout, "");
     // A run that already narrated, or that dispatched nothing yet, is never blocked.
     const t2 = openRun(claudeDir, "t10");
-    fs.writeFileSync(t2, hookOnly + "[270926 17:53:00.000] orc      DISPATCH orc-executor-sonnet-4-6-med :: add /time\n");
+    fs.writeFileSync(t2, hookOnly + "[270926 17:53:00.000] orc      DISPATCH orc-executor-haiku-5-high :: add /time\n");
     // A CLI-written line has its .jsonl twin (orc trace write writes both).
-    fs.writeFileSync(t2 + ".jsonl", JSON.stringify({ ts: "270926 17:53:00.000", actor: "orc", verb: "DISPATCH orc-executor-sonnet-4-6-med" }) + "\n");
+    fs.writeFileSync(t2 + ".jsonl", JSON.stringify({ ts: "270926 17:53:00.000", actor: "orc", verb: "DISPATCH orc-executor-haiku-5-high" }) + "\n");
     assert.strictEqual(runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" }).stdout, "");
     // A CLI line may carry HH:MM:SS with no milliseconds (TS_RE allows it): with its
     // jsonl row it is NOT hand-written (E21 round 4: an early guard blocked one).
     const tms = openRun(claudeDir, "t16");
-    fs.writeFileSync(tms, hookOnly + "[270926 17:53:30] orc      DISPATCH orc-executor-sonnet-4-6-med :: add /time\n");
-    fs.writeFileSync(tms + ".jsonl", JSON.stringify({ ts: "270926 17:53:30", actor: "orc", verb: "DISPATCH orc-executor-sonnet-4-6-med" }) + "\n");
+    fs.writeFileSync(tms, hookOnly + "[270926 17:53:30] orc      DISPATCH orc-executor-haiku-5-high :: add /time\n");
+    fs.writeFileSync(tms + ".jsonl", JSON.stringify({ ts: "270926 17:53:30", actor: "orc", verb: "DISPATCH orc-executor-haiku-5-high" }) + "\n");
     assert.strictEqual(runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" }).stdout, "", "no ms + a jsonl row = CLI-written");
     // v2.1.0 (E21 D7): narration written BY HAND (no jsonl row, or no stamp) is
     // blocked ONCE, with the command that runs the skipped checks.

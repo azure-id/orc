@@ -40,6 +40,10 @@ function fixtureRepo(opts) {
   git("add", "-A");
   git("commit", "-qm", "fixture");
   if (o.history !== false) {
+    // v2.2.0 (G-15): `cochange` answers nothing under 20 commits, so the
+    // history is padded with EMPTY commits — they touch no file, so every
+    // co-change count is the one the goldens froze.
+    for (let i = 1; i <= 16; i++) git("commit", "--allow-empty", "-qm", `pad ${i}`);
     for (let i = 1; i <= 3; i++) {
       for (const rel of ["src/auth.js", "src/reports.js"]) {
         const f = path.join(root, ...rel.split("/"));

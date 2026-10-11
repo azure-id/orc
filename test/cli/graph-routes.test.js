@@ -147,8 +147,8 @@ test("routes — a supertest URL is a ROUTE caller of the route it reaches, and 
 
   // `impact` on the store walks store → route → test, and names the test file.
   const imp = json(graph(root, "impact", "src/stores/orderStore.js", "--json"));
-  const d2 = imp.callers.filter((c) => c.depth === 2 && c.state === "ROUTE");
-  assert.ok(d2.some((c) => c.file === "tests/orders.test.js" && c.url === "GET /orders/search?q=mu"), JSON.stringify(imp.callers));
+  // v2.2.0 (T6b): a test file is a `tests` entry, never a caller row.
+  assert.ok(!imp.callers.some((c) => c.file === "tests/orders.test.js"), JSON.stringify(imp.callers));
   assert.ok(imp.tests.includes("tests/orders.test.js"));
 
   // Promise 5: a bare `get("/p")` is never the method `OrderStore.get`.
@@ -172,7 +172,7 @@ test("routes — the cache stores ROUTE rows (flag 2 + the URL) and answers byte
   const c = repo(EXPRESS);
   G.graphUpdate(c.claudeDir, c.root, { enabled: true });
   const cache = JSON.parse(fs.readFileSync(R.resolvedPath(c.claudeDir), "utf8"));
-  assert.equal(cache.schema, 3);
+  assert.equal(cache.schema, 4); // v2.2.0 (T4): the engine bump moved the resolve cache to schema 4
   const rows = cache.callers["src/routes/orders.js#GET /search"];
   assert.ok(rows.some((r) => r[0] === "tests/orders.test.js#<module>" && r[2] === "ROUTE" && r[3] === 2 && r[4] === "GET /orders/search?q=mu"), JSON.stringify(rows));
   const hot = Q.loadModel(c.claudeDir, c.root);

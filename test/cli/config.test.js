@@ -127,7 +127,7 @@ test("config: opus5_only forces, warns about what it shadows, and honors the ret
     assert.strictEqual(on.status, 0);
     assert.match(on.stdout, /orc-executor-opus-5-low/, "the executor ladder is shown");
     assert.match(on.stdout, /orc-wiki-scanner-opus-5-low/, "the fixed-role roster is shown");
-    assert.match(on.stdout, /trace-writer-haiku-4-5/, "the excluded role is named");
+    assert.match(on.stdout, /trace-writer-haiku-5-high/, "the excluded role is named");
     assert.match(on.stdout, /EVERY dispatch does/, "the tier cost is stated");
 
     // A setting the run will now ignore has to be called out, not left to rot.
@@ -469,7 +469,7 @@ test("config: a flat file regroups on the next set and re-reads to the identical
       "opus5_executor_only: true\n" + // the LEGACY spelling
       "log_dir: .claude/orc/logs\n" +
       "rubric_bands_override:\n" + // the documented HAND-EDITED block
-      "  - { min: 0, max: 50, agent: orc-executor-haiku-4-5 }\n" +
+      "  - { min: 0, max: 50, agent: orc-executor-haiku-5-high }\n" +
       "gotchas_max: 40\n"
   );
   const readMap = () => {

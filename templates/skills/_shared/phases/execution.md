@@ -27,10 +27,10 @@ the codifier); hold resolved patterns in run state.
 1. Dispatch EVERY task as a spawned subagent (emit `DISPATCH <agent> :: <task>
    expect=<model>/<effort>` BEFORE the Task call; subagent wrapper framing + the
    task's INPUT SLICE per orc-execution/core.md + its scored model). Every
-   slice carries ONE `orc graph ctx --for-slice <the task's declared_files> --if-enabled --json --brief`
-   `card` as its `graph` block (`../code-graph.md` §7; exit 3 = off → no block) —
-   the OUTSIDE view only, because the executor reads each declared file in full
-   itself,
+   slice that writes code carries `graph_anchors` from ONE anchors call —
+   `orc graph ctx --for-slice <the task's declared_files> --focus=<the planning words> [--refs=<task.precedent>] --anchors --if-enabled --json --brief` (a request that names one symbol: `ctx <symbol> --anchors` gives the card and the anchors in one call)
+   (`../code-graph.md` §0 step 3, §7): print its `line`; paste its `card` into
+   the slice VERBATIM as `graph_anchors`, with its `read all: …` line and its code block — never shorten it; exit 3 or 4 → none. With `graph_anchors` in the slice, list at most ONE wiki page path (the one about the feature's intent), not 1–3. No anchors when the change stays inside ONE file the user named and nothing outside it changes (no signature change, no new export) — the executor reads that file anyway. The slice also carries
    the task's `acceptance[]`, its `tdd_spec` tests (the executor
    implements to green: implement→test→repair, cap `tdd_loop_max`, emitting
    `TDD-RED`/`TDD-GREEN` per iteration; cap hit → STOP SEQUENCE + honest red
@@ -71,13 +71,14 @@ the codifier); hold resolved patterns in run state.
    `unmet[]` is `partial`.
 4. **Post-wave worktree audit (GATE, `_shared/return-validation.md` §6):** diff `git status --short` before/after the wave — a changed path in NO task's `declared_files`, INCLUDING one that became less modified (the revert signature), blocks the close until named and decided.
    Overlap → `failure_reason: "file-collision:<file> with <agent>"`, requeue later wave.
-4a. **Code graph (`../code-graph.md` §5–§6):** after the audit, ONE call —
+4a. **Code graph (`../code-graph.md` §5–§6):** ONLY when `probes["graph-status"].update_step`
+   is `lane` (else the hook already did it — no call): after the audit, ONE call —
    `orc graph update --notes-pending --files <the wave's changed paths> --at wave --if-enabled --json --brief`
    (emit `GRAPH-UPDATE`; the answer's `notes_pending` is the notes half):
-   `notes_pending.exit` 0 → dispatch `orc-graph-noter-sonnet-4-6-med` (slice = paths only) in the
+   `notes_pending.exit` 0 → dispatch `orc-graph-noter-haiku-5-high` (slice = paths only) in the
    SAME tool block as the next wave's first dispatch; 3 or 5 → nothing, the
    symbols wait for a later batch. The noter returns ONE line (emit `GRAPH-NOTES`) —
-   never pull its notes into this context. A slice that carried cards gets a
+   never pull its notes into this context. A slice that carried `graph_anchors` gets a
    `graph:` continuation on its `DISPATCH` line and a `graph_used` return.
 5. Append worker `log_entries` to the decision log; regenerate the digest.
    **Gotcha capture (`gotchas: on`):** a return that CLOSED a repair loop carries
@@ -139,11 +140,12 @@ outside `declared_files` (a revert included) gates the wave close.
 <!-- /diy:when -->
 
 <!-- diy:when code_graph=on -->
-Code graph cache (never skipped): each slice gets ONE `orc graph ctx --for-slice <the task's
-declared_files> --if-enabled --json --brief` `card` as its `graph` block, and the return
-carries `graph_used`. After each wave's worktree audit run ONE call —
+Code graph anchors (never skipped): each slice that writes code carries `graph_anchors` (the `card`, inline) from
+ONE call — `orc graph ctx --for-slice <the task's declared_files> --focus=<the planning words> [--refs=<task.precedent>] --anchors --if-enabled --json --brief`
+(print its `line`; exit 3 or 4 → none), and the return carries `graph_used`. ONLY when
+`update_step` is `lane`, after each wave's worktree audit run ONE call —
 `orc graph update --notes-pending --files <the wave's changed paths> --at wave --if-enabled --json --brief`
-(copy its `trace` verbatim); `notes_pending.exit` 0 → dispatch `orc-graph-noter-sonnet-4-6-med` paired
+(copy its `trace` verbatim); `notes_pending.exit` 0 → dispatch `orc-graph-noter-haiku-5-high` paired
 with the next wave's first dispatch, exit 3 or 5 → nothing. Canonical:
 `.claude/skills/_shared/code-graph.md`.
 <!-- /diy:when -->

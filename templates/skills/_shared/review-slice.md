@@ -65,7 +65,7 @@ that changed files re-runs it first.
 | `previous_findings[]` | the checkpoint, on a re-review ONLY (R9), each with its outcome |
 | `mode` | `review` · `disprove` · `security` |
 
-- **`graph_changes`** (`code-graph.md` §7): the symbols THIS diff's hunks overlap,
+- **`graph_changes`** (`code-graph.md` §0 step 4, §7): the symbols THIS diff's hunks overlap,
   each with its callers, its tests and a risk word that carries its own reason.
   The reviewer is handed `symbols[].caller_files` and reads them.
 It replaces a whole-file `orc graph impact` here: a file card reports every symbol in

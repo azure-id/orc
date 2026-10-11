@@ -976,7 +976,7 @@ const extraLanes = {
       // user gets to make, per entry.
       lane: "/orc-quick", shape: "gated-choice", agent: null, routes: "offered",
       slots: [
-        { slot: "quick-executor", routes: true, profile: "cheap", model: "deepseek-chat", claude: "orc-executor-sonnet-5-med", held_back: null, why: "slot row quick-executor holds this position and outranks orc-executor-sonnet-4-6-med." },
+        { slot: "quick-executor", routes: true, profile: "cheap", model: "deepseek-chat", claude: "orc-executor-sonnet-5-med", held_back: null, why: "slot row quick-executor holds this position and outranks orc-executor-haiku-5-high." },
       ],
       detail: "quick-executor is OFFERED as one more option at the dispatch gate. It never becomes a default and never sticks — this lane asks before every dispatch.",
     },

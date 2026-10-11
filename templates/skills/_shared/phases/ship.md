@@ -41,14 +41,10 @@ wiki now?"** (H `orc.phase-8.wiki-refresh`); on "later" print the prominent stal
 usage report — /usage limits + the full dispatch log (model/effort/score per
 subagent). The user must always know what the run cost. A `proposal` in
 `habits{}` → its ONE line joins that report (`../habits.md` §3). **Code graph
-(`../code-graph.md` §5–§6):** run `orc graph update --if-enabled` once more —
-fix rounds move code — and emit `GRAPH-UPDATE`; then run `orc graph notes pending
---files <every path the run changed> --at end --if-enabled` — exit 0 → one noter
-dispatch, exit 3 or 5 → nothing. Then ONE line, once, copied VERBATIM from
-`orc graph gain --run <this run's trace name> --if-enabled --json --brief` (emit
-`GRAPH-GAIN`): what the graph put in, and an ESTIMATE of the retrieval it kept
-out. Exit 1 or 3 → no line. **Never restate it as one number** — the range and
-the word "estimate" are the claim. Finally emit
+(`../code-graph.md` §5–§6):** ONLY when `probes["graph-status"].update_step` is
+`lane`, run `orc graph update --notes-pending --files <every path the run changed> --at end --if-enabled --json --brief`
+once more — fix rounds move code — and emit `GRAPH-UPDATE`; `notes_pending.exit` 0 →
+one noter dispatch, 3 or 5 → nothing. No lane calls `orc graph gain`. Finally emit
 `PHASE ship end`, then the one-line `STATS lane=… dispatches=… downgrades=…`
 summary (trace.md — what `orc stats` reads), then `FINISH :: <detail>`,
 and in ONE step delete BOTH `log_dir/.current` and the run's `RESUME.md` (that
@@ -64,8 +60,9 @@ State the current branch and the change summary BEFORE any git action, and
 never ship on a red build (locked rule).
 
 <!-- diy:when code_graph=on -->
-Before the ship action, run `orc graph update --if-enabled` once more — fix rounds
-move code (`.claude/skills/_shared/code-graph.md` §5).
+Before the ship action, ONLY when `update_step` is `lane`, run
+`orc graph update --notes-pending --files <every path the run changed> --at end --if-enabled --json --brief`
+once more — fix rounds move code (`.claude/skills/_shared/code-graph.md` §5).
 <!-- /diy:when -->
 <!-- diy:when ship_mode=ask -->
 Ask the user how to ship: commit, PR (via

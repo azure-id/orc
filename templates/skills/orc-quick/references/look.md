@@ -22,13 +22,17 @@ way round.
 
 | The request | The call |
 |---|---|
-| names a file or a symbol | `orc graph ctx <targets> --if-enabled --json --brief` — 5 targets at most |
-| names none ("where is the retry logic?") | `orc graph map --focus "<3–6 words from the request>" --budget 800 --if-enabled --json --brief`, then `ctx` on the files it ranks first |
-| asks what breaks, or who uses something | `orc graph ctx <symbol> --depth 2 --if-enabled --json --brief`, then `orc graph coverage <files> --if-enabled --json --brief` |
+| names a symbol | ONE `orc graph ctx <symbol> --anchors --focus=<words> --if-enabled --json --brief` — the card gives the callers, the tests (also via a caller) and the coverage verdict: do not Grep that name, do not run `coverage` unless the card says `partial` |
+| names a file | `orc graph ctx <targets> --if-enabled --json --brief` — 5 targets at most |
+| names none ("where is the retry logic?") | `orc graph map --focus=<3–6 words from the request> --budget 300 --if-enabled --json --brief`, then `ctx` on the files it ranks first |
+| asks what breaks, or who uses a FILE | `orc graph ctx <files> --if-enabled --json --brief`, then `orc graph coverage <files> --if-enabled --json --brief` |
 
 Exit 3 = the graph is off → Grep and Glob, as before, and make no other graph
 call this session. Exit 1 = no index → the same. **A `map` answer is ONE call**,
-not one per file it lists.
+not one per file it lists. After `map`, get facts about the files it names with
+ONE `orc graph ctx <files…> --if-enabled --json --brief` (≤ 5) — not `cat`/`grep`
+of those files. Read source only for a fact the card cannot give (a literal
+string, a template line).
 
 Copy each answer's `line` into chat. Copy each answer's `trace` into the running
 record, word for word.
@@ -38,9 +42,10 @@ record, word for word.
 **A card does not replace reading the range it names.** It tells you where to
 look. It never tells you what the code does.
 
-**No card in the slice for a change inside one file the user named**, when no
-signature changes and nothing new is exported (`../../_shared/code-graph.md`
-§7). The executor reads that file whole anyway, so the card would be paid twice.
+**The slice gets the pack path, never a card.** A dispatch that writes code
+gets ONE pack (§5). **No pack when the change stays inside ONE file the user
+named and nothing outside it changes** (no signature change, no new export):
+the executor reads that file anyway, and a pack there is pure cost.
 
 **`--source [N]` is for a range you will NOT edit.** A caller's body, a
 neighbour, a test. A file the executor is going to change is read in full by the
@@ -76,14 +81,31 @@ sentence, word for word:
 
 ## 5. What you hand to an executor
 
+**A request that names a symbol:** the look call `ctx <symbol> --anchors` (§2)
+already returned the anchors. Its `anchors_card` goes into the slice as
+`graph_anchors` — no second `--for-slice` call for that dispatch. Declared files
+= the target file + the caller files the card lists.
+
+**A request that names files, or nothing (map first):**
+
 ```
-orc graph ctx <declared files> --for-slice --if-enabled --json --brief
+orc graph ctx --for-slice <file1> <file2> … (space- or comma-separated) --focus=<the dig words> [--refs=<copy-from files>] --anchors --if-enabled --json --brief
 ```
 
-ONE call, 10 files at most. Its `card` becomes the slice's `graph` block. This
-is the **outside view** — who imports these files, who calls into them from
-elsewhere, which tests reach them, where they are mounted. It is the half the
-executor cannot see by reading the files it was given.
+ONE call, 10 files at most. No file is written; it answers ONE `line` (print it)
+and a `card`. Paste the `card` into the slice VERBATIM as `graph_anchors`, with its `read all: …` line and its code block — never shorten it. With `graph_anchors` in the slice, list at most ONE wiki page path (the one about the feature's intent), not 1–3. The card:
+up to 12 `path:a-b` ranges the dig found — the members of the declared files and
+of the `--refs` files that best match the focus words — and ONE `read all:` command
+the executor runs first. `--refs` = every file the request or its
+requirement document says to copy behaviour or style FROM, plus the precedent
+the dig found (max 5) — never the files you will edit. You have none → leave it out; the CLI picks them.
+
+`--focus=` takes 3–8 words from the request AND from the requirement document it names — always
+the words the document uses to name a file to copy behaviour or style from (e.g. `swap,modal,selection`).
+Before the anchors call, locate every copy-from file the document names with ONE
+`orc graph map --focus=<its words> --budget 300 --if-enabled --json --brief` (or `orc graph ctx <Name>
+--if-enabled --json --brief` when the name is exact), and pass it in `--refs=`.
+Exit 3 or 4 → none. One named file, nothing outside it changes → none (§3).
 
 Its `trace` gets `entry=<n>`.
 

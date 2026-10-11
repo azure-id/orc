@@ -5,6 +5,8 @@
   "knowledge.graph.unknownHint": "The CLI did not answer. Run the command in a terminal to see why.",
   "knowledge.graph.off": "The code graph is off.",
   "knowledge.graph.offHint": "It is off by default. When it is on, code lanes build a local map of the code for free and keep it current.",
+  "knowledge.graph.semi": "semi — kept current, lanes do not read it",
+  "knowledge.graph.semiHint": "The graph is kept current, but no lane reads it. To enable reading, run this command:",
   "knowledge.graph.none": "The graph is on, but no index exists yet. The next code lane builds it, or press the button.",
   "knowledge.graph.files": "Files",
   "knowledge.graph.symbols": "Symbols",

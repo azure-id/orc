@@ -6,7 +6,7 @@ a failure (requeue/re-dispatch with reason — lane sets the retry cap).
 
 **Read the SECTION, not the file.** Every return: §1–§3. Then ONLY the § of
 each field the slice carried — §4 `pattern`, §5 `tdd_spec`, §5b wiki, §5b.1
-graph cards, §5c the rules card, §5d `repro`. §2b only for a foreign return. §0
+the graph pack, §5c the rules card, §5d `repro`. §2b only for a foreign return. §0
 only before a re-dispatch. §6 only after a wave. §7 only on a repair loop. The §
 numbers are anchors: never renumber or rename a § heading.
 
@@ -141,14 +141,18 @@ shipped into every slice and read by nobody is the failure mode this field
 exists to make visible, and it is invisible if `none` is quietly dropped. Absent
 on a slice that carried wiki material is malformed. Not required otherwise.
 
-## 5b.1 Graph attestation (when code-graph cards were injected — v1.8.0)
+## 5b.1 Graph attestation (when the slice carried `graph_anchors` — v2.2.0)
 
-A task whose slice carried `orc graph ctx` cards must return **`graph_used`** —
-`{targets, generation}`: the card targets it ACTUALLY used (or `none`), and the `generation`
-the cards carried. The same honesty rule as `wiki_used`: `none` is informative (the cards did
-not help), absent is malformed, and a lane never drops it. A `generation` lower than the one
+A task whose slice carried `graph_anchors` (or that ran `orc graph ctx` itself) must return
+**`graph_used`** — `{targets, generation}`: the anchors (`path:a-b`) it ACTUALLY used
+(or `none`), and the `generation` of the anchors call. The same honesty rule as `wiki_used`: `none`
+is informative (the anchors did not help), absent is malformed, and a lane never drops it. A `generation` lower than the one
 `orc graph status` reports now means the agent acted on an OLD index — record it, do not
 re-run the task for it alone. Canonical: `code-graph.md`.
+
+A planner task MAY carry `precedent[]` — read-only files this task copies behaviour or style
+from (max 5). It is OPTIONAL: absent is fine and never makes a plan malformed. When present, the
+lane passes it as the pack's `--refs=`.
 
 ## 5c. Rules attestation (when the anti-slop card was injected — v1.7.0)
 

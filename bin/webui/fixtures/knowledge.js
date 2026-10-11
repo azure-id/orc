@@ -309,6 +309,8 @@ const graph = {
   generation: 42,
   gen_id: "c878981d",
   state: "drifted",
+  // v2.2.0 — the configured `code_graph`, added by the API (not by the CLI).
+  mode: "on",
   behind: { added: 1, changed: 3, deleted: 0 },
   engine_stale: false,
   auto_update: true,
@@ -334,6 +336,11 @@ const graph = {
 
 // v1.8.2 W4b — `orc graph gain --json`. The fixture carries the ESTIMATE word
 // and a RANGE, because those are the two things the card must never lose.
+// v2.2.0 — the same index under `code_graph: semi`. `graph status` (no
+// --if-enabled) answers the index state; the API adds `mode` from the config.
+// Served on /api/graph?mode=semi so the default tab stays DRIFTED.
+const graphSemi = { ...graph, state: "fresh", behind: { added: 0, changed: 0, deleted: 0 }, mode: "semi" };
+
 const graphGain = {
   ok: true,
   state: "rows",
@@ -376,4 +383,4 @@ const graphGainMeasured = {
     "executor windows and session totals are kept apart: the main session is 74–80% of a run and the graph never touches it. Every delta is printed beside the OFF group's own spread — a delta smaller than that spread is noise, not a result.",
 };
 
-module.exports = { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact, graph, graphGain, graphGainMeasured };
+module.exports = { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact, graph, graphSemi, graphGain, graphGainMeasured };

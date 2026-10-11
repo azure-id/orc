@@ -161,6 +161,28 @@ function multiplier(model, rel) {
   return m;
 }
 
+// ── hub damping (v2.2.0 D6, focus only) ────────────────────────────────────
+// A focused map must not be led by the shared hubs every feature touches. A
+// file with NO focus hit whose path names a hub folder or file, or whose
+// in-degree is in the top 2 % of files, has its final score multiplied by
+// HUB_DAMP. A file the focus reached is never damped.
+const HUB_DAMP = 0.35;
+const HUB_PATH = /(^|\/)(utils?|helpers?|config|constants|mixins|store|plugins|api\/httpClient)(\/|\.|$)/i;
+
+function hubDamping(files, edges, focused) {
+  const n = files.length;
+  const indeg = new Array(n).fill(0);
+  for (const [, b] of edges) indeg[b] += 1;
+  const sorted = indeg.filter((d) => d > 0).sort((a, b) => b - a);
+  const k = Math.max(1, Math.ceil(0.02 * n));
+  const cut = sorted.length ? sorted[Math.min(k, sorted.length) - 1] : Infinity;
+  return files.map((rel, i) => {
+    if (focused.has(rel)) return 1;
+    if (HUB_PATH.test(rel) || (indeg[i] > 0 && indeg[i] >= cut)) return HUB_DAMP;
+    return 1;
+  });
+}
+
 // ── build (called by `update`, inside the lock) ─────────────────────────────
 // It never throws into the update: a map that cannot be written is a slower
 // `orc graph map`, not a broken graph.
@@ -237,4 +259,4 @@ function fanCounts(model) {
   return out;
 }
 
-module.exports = { MAP_SCHEMA, SYMS_PER_FILE, mapPath, build, load, edgesFor, buildEdges, pageRank, multiplier, fanCounts };
+module.exports = { MAP_SCHEMA, SYMS_PER_FILE, HUB_DAMP, HUB_PATH, hubDamping, mapPath, build, load, edgesFor, buildEdges, pageRank, multiplier, fanCounts };

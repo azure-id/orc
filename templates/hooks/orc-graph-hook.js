@@ -39,7 +39,11 @@
  *   · a graph exists on disk
  *   · (the three delivery events) a SUBAGENT is acting — `agent_id` is present.
  *     The orchestrator gets cards through the lane; a second copy in the main
- *     session is the same tokens spent twice.
+ *     session is the same tokens spent twice. ONE exception (R12, v2.2.0): a
+ *     MAIN-session Grep / Glob / shell search of a name the graph knows gets
+ *     the brief ctx card (callers, tests, coverage, the --anchors line), ONCE
+ *     per name and at most 3 per run, under `code_graph: on` only. Live runs
+ *     showed the main session ignore the graph text and hunt the tests by hand.
  *
  * FAIL-OPEN, ALWAYS, AND FAIL-QUIET. Exit 0 on every path, output nothing on
  * any error, and never write to stderr — a PreToolUse hook that exits non-zero
@@ -60,6 +64,7 @@
  *   hooks.PreToolUse[]     { matcher:"Grep|Glob", hooks:[{…}] }
  *   hooks.PreToolUse[]     { matcher:"Bash|Read", hooks:[{…}] }
  *   hooks.PostToolUse[]    { matcher:"Read", hooks:[{…}] }
+ *   hooks.PostToolUse[]    { matcher:"Task|Agent", hooks:[{…}] }  (R13, main session)
  *
  * Wired even though it does nothing until `code_graph` is on — arming the
  * feature is a config edit, never an install step the user has to discover.
@@ -275,7 +280,11 @@ function run() {
   const event = String(data.hook_event_name || data.hookEventName || "");
   if (!event) return;
 
-  if (String(cfg("code_graph") || "off").toLowerCase() !== "on") return;
+  // `semi` (v2.2.0) keeps the graph CURRENT but no lane reads it: only the
+  // SubagentStop update gets through. No hint, no additionalContext, no rows.
+  const graphMode = String(cfg("code_graph") || "off").toLowerCase();
+  if (graphMode !== "on" && graphMode !== "semi") return;
+  if (graphMode === "semi" && event !== "SubagentStop") return;
   // `code_graph_hooks` is `off`, `on`, or `on,read` (D3/DE-J). `on` is every
   // hint that was on in 1.8.1 PLUS the Bash search (DE-C: a shell grep is a
   // Grep). The whole-file READ hint is the one that changes how an agent reads,
@@ -295,7 +304,13 @@ function run() {
   // a subagent payload and absent in a main-session one — the same positive
   // test orc-read-gate.js measured in W1. Never test for the absence of some
   // other key, which asserts nothing.
-  if (data.agent_id == null) return;
+  if (data.agent_id == null) {
+    // R12 — the one main-session delivery: a search of a known name.
+    if (event === "PreToolUse" && graphMode === "on" && String(data.tool_name || "") !== "Read") return onMainSearch(data, runName, meta);
+    // R13 — an executor came back: hand the main session the touchpoint-4 card.
+    if (event === "PostToolUse" && graphMode === "on" && /^(Agent|Task)$/.test(String(data.tool_name || ""))) return onExecutorReturn(data, runName, meta);
+    return;
+  }
 
   if (event === "SubagentStart") return onSubagentStart(data, runName, meta);
   if (event === "PreToolUse") {
@@ -377,7 +392,7 @@ function onSubagentStart(data, runName, meta) {
 // ── E4b — a search for a name the graph already knows ──────────────────────
 // It reads names.json ONLY: a name lookup, no index parse, no resolution. This
 // is what keeps the hook off the critical path of every Grep.
-function onSearch(data, runName, meta) {
+function searchHit(data, meta) {
   const tool = String(data.tool_name || "");
   const input = data.tool_input || {};
   let pattern = "";
@@ -409,6 +424,12 @@ function onSearch(data, runName, meta) {
     }
   }
   if (!hit || !Array.isArray(hit.rows) || !hit.rows.length) return;
+  return hit;
+}
+
+function onSearch(data, runName, meta) {
+  const hit = searchHit(data, meta);
+  if (!hit) return;
   // Once per run per name. A wave of greps for the same symbol pays once.
   if (!bump(runName, "injected", "name:" + hit.word)) return;
 
@@ -421,6 +442,233 @@ function onSearch(data, runName, meta) {
   // The search STILL RUNS, so a careful ladder saved nothing here; a careless
   // one saved the range read the anchor pointed at. Low 0, high one range.
   ledger(runName, "hint", body, { low: 0, high: HINT_RANGE_TOKENS, calls_low: 0, calls_high: 1 });
+}
+
+// ── R12 (v2.2.0) — the MAIN session searched a name the graph knows ────────
+// In /orc-quick the main session does the dig, and live runs showed it ignore
+// the graph text and spend calls hunting the tests by hand. So the hook answers
+// the search itself with the ctx card: callers, tests (also via a caller),
+// coverage and the one-call anchors line. Once per name, at most 3 per run, so
+// the main context cannot grow without a bound. A CLI that is missing, slow or
+// broken falls back to the names.json one-liner. The search still runs.
+const MAIN_CARDS = 3;
+const MAIN_CALLERS = 8;
+const MAIN_TEXT = 1800;
+
+// R12b — the main session chains: `cd x && cat y; grep -rn "name" src`. Any
+// segment (split on && || ; | and newlines) that starts with a search program
+// counts, after `cd`, env assignments and `rtk` are dropped. The pattern is the
+// first quoted argument of THAT segment, else its first bare non-flag word.
+// MAIN PATH ONLY: the subagent path keeps BASH_SEARCH and FIRST_QUOTED as-is.
+const SEARCH_HEAD = /^(?:grep|rg|ag|ack|findstr|git\s+grep|select-string|sls)\b/i;
+// Split on && || ; | and newlines OUTSIDE quotes, so a grep pattern like
+// "a\|b" stays one argument.
+function shellSegments(cmd) {
+  const segs = [];
+  let cur = "";
+  let quote = null;
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (quote) {
+      if (c === quote) quote = null;
+      cur += c;
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      quote = c;
+      cur += c;
+      continue;
+    }
+    if (c === ";" || c === "|" || c === "&" || c === "\n" || c === "\r") {
+      segs.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += c;
+  }
+  segs.push(cur);
+  return segs;
+}
+
+function mainPattern(data) {
+  const tool = String(data.tool_name || "");
+  const input = data.tool_input || {};
+  if (tool === "Grep" || tool === "Glob") return String(input.pattern || "");
+  if (tool !== "Bash") return "";
+  for (let seg of shellSegments(String(input.command || ""))) {
+    seg = seg.trim().replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, "").replace(/^rtk\s+/i, "");
+    const m = SEARCH_HEAD.exec(seg);
+    if (!m) continue;
+    const rest = seg.slice(m[0].length);
+    const q = FIRST_QUOTED.exec(rest);
+    if (q) return q[1] !== undefined ? q[1] : q[2];
+    const bare = rest.split(/\s+/).find((t) => t && !t.startsWith("-"));
+    if (bare) return bare;
+  }
+  return "";
+}
+
+// R12b — the word with the HIGHEST fan-in wins; a word with fan-in 0 never
+// spends a slot (a card that says "callers: none found" is noise).
+function mainHit(data, meta) {
+  const pattern = mainPattern(data);
+  if (!pattern) return null;
+  const words = (pattern.match(/[A-Za-z_][A-Za-z0-9_]*/g) || []).filter((w) => w.length >= MIN_TOKEN);
+  if (!words.length) return null;
+  const names = readJson(path.join(GRAPH_DIR, "names.json"));
+  if (!names || !names.names || names.generation !== meta.generation) return null;
+  let best = null;
+  for (const w of words) {
+    if (!Object.prototype.hasOwnProperty.call(names.names, w)) continue;
+    const rows = names.names[w];
+    if (!Array.isArray(rows) || !rows.length) continue;
+    const fan = Math.max(...rows.map((x) => Number(x[5]) || 0));
+    if (fan > 0 && (!best || fan > best.fan)) best = { word: w, rows, fan };
+  }
+  return best;
+}
+
+function onMainSearch(data, runName, meta) {
+  const hit = mainHit(data, meta);
+  if (!hit) return;
+  const counters = readJson(seenFile(runName)) || {};
+  if ((Number(counters.main_cards) || 0) >= MAIN_CARDS) return;
+  if (!bump(runName, "injected", "main:" + hit.word)) return;
+  bump(runName, "main_cards");
+  const word = clean(hit.word, 80);
+
+  let out = null;
+  try {
+    const stamp = readJson(path.join(CLAUDE_DIR, "hooks", "orc-version.json"));
+    const cli = stamp && stamp.cli;
+    if (cli && fs.existsSync(cli)) {
+      const deadline = Math.max(1500, Number(cfg("code_graph_heal_ms")) || DEFAULT_DEADLINE_MS);
+      // Full --json, not --brief: --brief drops the callers[] rows this card
+      // names. The answer stays inside the hook; only the card text goes out.
+      const r = spawnSync(process.execPath, [cli, "graph", "ctx", hit.word, "--if-enabled", "--json", "--dir", PROJECT_ROOT], {
+        encoding: "utf8",
+        timeout: deadline,
+        windowsHide: true,
+      });
+      if (!r.error) out = JSON.parse(r.stdout || "{}");
+    }
+  } catch (_) {
+    out = null;
+  }
+
+  let text;
+  if (out && out.ok && out.target && out.target.file) {
+    const t = out.target;
+    const lines = Array.isArray(t.lines) ? t.lines : [];
+    const parts = [`graph: ${word} — ${clean(t.file, 160)}:${Number(lines[0]) || 0}-${Number(lines[1]) || 0}`];
+    const callers = Array.isArray(out.callers) ? out.callers.slice(0, MAIN_CALLERS) : [];
+    parts.push("callers: " + (callers.length ? callers.map((c) => `${clean(c.qname, 80)} ${clean(c.file, 160)}:${Number(c.line) || 0}`).join(", ") : "none found"));
+    const tests = new Set((Array.isArray(out.tests) ? out.tests : []).map((x) => clean(x, 160)));
+    for (const v of Array.isArray(out.tests_via) ? out.tests_via : []) if (v && v.file) tests.add(clean(v.file, 160));
+    parts.push("tests: " + (tests.size ? [...tests].slice(0, 8).join(", ") : "none found"));
+    const cov = out.coverage && typeof out.coverage === "object" ? out.coverage.verdict : out.coverage;
+    parts.push("coverage: " + (clean(cov, 40) || "unknown"));
+    parts.push(`slice anchors in one call: orc graph ctx ${word} --anchors --focus=${word} --if-enabled --json --brief`);
+    text = parts.join(" · ") + ". The search below still runs.";
+  } else {
+    const rows = hit.rows.slice(0, MAX_ROWS).map((r) => `${clean(r[0], 80)} (${clean(r[1], 20)}) ${clean(r[2], 160)}:${Number(r[3]) || 0}-${Number(r[4]) || 0} fan-in ${Number(r[5]) || 0}`);
+    text = `"${word}" is defined at ${rows.join(" · ")}. Read those ranges, or run orc graph ctx ${word} --json for callers and callees. The search below still runs.`;
+  }
+  const body = clean(text, MAIN_TEXT);
+  if (!body) return;
+  try {
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: `${PREFIX} ${body}` } }));
+  } catch (_) {}
+  const tokens = Math.ceil((PREFIX.length + 1 + body.length) / 4);
+  ledger(runName, "main-hint", body, { low: 0, high: HINT_RANGE_TOKENS, calls_low: 0, calls_high: 1 }, {
+    targets: [word],
+    gen: meta.generation,
+    paid: { card: tokens, source: 0, hints: 0, envelope: 0 },
+  });
+}
+
+// ── R13 (v2.2.0) — an executor returned to the MAIN session ──────────────
+// The SubagentStop update already ran, so the graph is current. The hook asks
+// `orc graph changes` for the files git sees as changed and injects ONE card:
+// the line, the tests to run first, and the risky symbols. Once per dispatch
+// (tool_use_id). Fail quiet: no card, and the lane runs `changes` itself.
+const CHANGES_TEXT = 1500;
+const CHANGES_MAX_FILES = 30;
+const CHANGES_SKIP = /^(?:\.claude\/|orc-quick\/|coverage\/|node_modules\/)|\/node_modules\//;
+
+function changedFiles() {
+  const r = spawnSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: PROJECT_ROOT, encoding: "utf8", timeout: 3000, windowsHide: true });
+  if (r.error || r.status !== 0) return [];
+  const out = [];
+  for (const line of String(r.stdout || "").split(/\r?\n/)) {
+    if (line.length < 4) continue;
+    const xy = line.slice(0, 2);
+    if (xy.includes("D")) continue; // no deletions
+    let p = line.slice(3);
+    const arrow = p.indexOf(" -> ");
+    if (arrow >= 0) p = p.slice(arrow + 4);
+    p = p.replace(/^"|"$/g, "").replace(/\\/g, "/");
+    if (!p || p.endsWith("/") || CHANGES_SKIP.test(p)) continue;
+    out.push(p);
+    if (out.length >= CHANGES_MAX_FILES) break;
+  }
+  return out;
+}
+
+function onExecutorReturn(data, runName, meta) {
+  const input = data.tool_input || {};
+  const agent = String(input.subagent_type || "");
+  if (!agent || !EXECUTOR.test(agent)) return;
+  const id = String(data.tool_use_id || "");
+  if (!id) return;
+  const counters = readJson(seenFile(runName)) || {};
+  if (Array.isArray(counters.tokens) && counters.tokens.includes("changes:" + id)) return;
+
+  const stamp = readJson(path.join(CLAUDE_DIR, "hooks", "orc-version.json"));
+  const cli = stamp && stamp.cli;
+  if (!cli || !fs.existsSync(cli)) return;
+  const files = changedFiles();
+  if (!files.length) return;
+
+  let out = null;
+  try {
+    const deadline = Math.max(1500, Number(cfg("code_graph_heal_ms")) || DEFAULT_DEADLINE_MS);
+    // Full --json, not --brief: --brief drops the symbols[] rows the risk list
+    // needs. The answer stays inside the hook; only the card text goes out.
+    const r = spawnSync(process.execPath, [cli, "graph", "changes", "--files=" + files.join(","), "--if-enabled", "--json", "--dir", PROJECT_ROOT], {
+      encoding: "utf8",
+      timeout: deadline,
+      windowsHide: true,
+    });
+    if (!r.error) out = JSON.parse(r.stdout || "{}");
+  } catch (_) {
+    out = null;
+  }
+  if (!out || !out.ok || typeof out.line !== "string") return;
+  if (!bump(runName, "changes_cards", "changes:" + id)) return;
+
+  const parts = [clean(String(out.line).split(/\r?\n/)[0], 300)];
+  const tests = (Array.isArray(out.tests) ? out.tests : []).map((x) => clean(x, 160)).filter(Boolean);
+  parts.push("tests to run first: " + (tests.length ? tests.slice(0, 12).join(", ") : "none"));
+  const risky = (Array.isArray(out.symbols) ? out.symbols : []).filter((x) => x && (x.risk === "high" || x.risk === "medium")).slice(0, 5);
+  if (risky.length) {
+    parts.push(
+      "risk: " +
+        risky.map((x) => `${clean(x.risk, 8)} ${clean(x.qname, 80)} ${clean(x.file, 160)}:${Number((x.lines || [])[0]) || 0} (${(Array.isArray(x.why) ? x.why : []).map((w) => clean(w, 40)).join(", ")})`).join("; ")
+    );
+  }
+  const tail = " This is the touchpoint-4 changes answer — do not run orc graph changes for this dispatch.";
+  const body = clean(parts.join(" · "), CHANGES_TEXT - PREFIX.length - tail.length - 2) + tail;
+  try {
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: `${PREFIX} ${body}` } }));
+  } catch (_) {}
+  const tokens = Math.ceil((PREFIX.length + 1 + body.length) / 4);
+  ledger(runName, "changes-hint", body, null, {
+    agent: clean(agent, 60),
+    targets: files.slice(0, 10).map((x) => clean(x, 160)),
+    gen: out.generation || meta.generation,
+    paid: { card: tokens, source: 0, hints: 0, envelope: 0 },
+  });
 }
 
 // ── D3 (v1.8.2 W3) — a whole-file Read of a WIDE file ──────────────────────

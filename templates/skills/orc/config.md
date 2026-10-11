@@ -43,8 +43,8 @@ EFFORT, which is why the old four Opus rows are two. **Every band from score 41
 needs an Opus 5.5 MAIN session** or it silently falls back to the session model
 (the tier-honesty rule reports the downgrade) — that is the cost of this table.
 
-**Seven executors are named by NO band** — `orc-executor-haiku-4-5`,
-`orc-executor-sonnet-4-6-med`, `orc-executor-sonnet-4-6-high`,
+**Six executors are named by NO band** — `orc-executor-haiku-5-high`,
+`orc-executor-sonnet-4-6-high`,
 `orc-executor-opus-4-7-med`, `orc-executor-opus-4-7-high`,
 `orc-executor-opus-4-8-high` and `orc-executor-opus-5-high`. They still ship,
 reachable through `rubric_bands_override`, `orc diy`'s `fixed_executor` and

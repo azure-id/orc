@@ -1,9 +1,9 @@
 ---
-name: orc-graph-noter-sonnet-4-6-med
+name: orc-graph-noter-haiku-5-high
 description: >
-  ORC Graph noter — claude-sonnet-4-6, medium effort. Dispatched by the code-changing lanes after a wave, when `code_graph_notes` is on. Never under `opus5_only`.
-model: claude-sonnet-4-6
-effort: medium
+  ORC Graph noter — claude-haiku-5-5, high effort. Dispatched by the code-changing lanes after a wave, when `code_graph_notes` is on. Never under `opus5_only`.
+model: claude-haiku-5-5
+effort: high
 tools: Read, Bash
 ---
 

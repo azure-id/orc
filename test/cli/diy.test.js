@@ -70,7 +70,7 @@ test("diy: every compiled flow carries the trace protocol (tracing is not compos
     assert.match(flow, /Behavior trace \(PERMANENT/, "the trace block is stitched in");
     assert.match(flow, /run-diy-<slug>-/, "the diy lane token is named");
     assert.match(flow, /touch the trace file/, "run-start pointer+file rule present");
-    assert.match(flow, /orc-trace-writer-haiku-4-5/, "narration dispatch present");
+    assert.match(flow, /orc-trace-writer-haiku-5-high/, "narration dispatch present");
   } finally {
     rmrf(root);
   }
@@ -311,7 +311,7 @@ test("diy: fixed_executor can name a FOREIGN target, and the skipped tier rule i
 
     // The option list is EXTENDED; DIY_EXECUTORS is not.
     let opts = JSON.parse(cli(["diy", "show", "--json", "--dir", root]).stdout).keys.find((k) => k.key === "fixed_executor").options;
-    assert.ok(opts.includes("orc-executor-haiku-4-5"), "the Claude agents are still there");
+    assert.ok(opts.includes("orc-executor-haiku-5-high"), "the Claude agents are still there");
     assert.ok(opts.includes("extra:w/custom/big-pickle"), "a verified profile's routed model is offerable");
 
     // TWO KEYS, TWO QUESTIONS. `scoring: off` plus a foreign executor still
@@ -341,4 +341,61 @@ test("diy: fixed_executor can name a FOREIGN target, and the skipped tier rule i
   } finally {
     rmrf(root);
   }
+});
+
+// v2.2.0 — the agent renames. A flow or config written before 2.2.0 names an
+// agent that no longer ships; it resolves to the new agent with ONE notice.
+test("diy: a legacy executor name resolves to orc-executor-haiku-5-high with one notice", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    assert.strictEqual(cli(["diy", "init", "--dir", root]).status, 0);
+    const set = cli(["diy", "set", "fixed_executor", "orc-executor-haiku-4-5", "--dir", root]);
+    assert.strictEqual(set.status, 0, set.stdout + set.stderr);
+    assert.match(set.stderr, /agent orc-executor-haiku-4-5 is now orc-executor-haiku-5-high \(2\.2\.0\)/);
+    // A hand-edited flow that still names the OLD agent.
+    const p = path.join(claudeDir, "orc-diy.config.yaml");
+    fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(/^fixed_executor:.*$/m, "fixed_executor: orc-executor-sonnet-4-6-med"));
+    const show = cli(["diy", "show", "--json", "--dir", root]);
+    assert.strictEqual(show.status, 0, show.stdout + show.stderr);
+    const k = JSON.parse(show.stdout).keys.find((x) => x.key === "fixed_executor");
+    assert.strictEqual(k.value, "orc-executor-haiku-5-high");
+    assert.strictEqual(show.stderr.match(/is now orc-executor-haiku-5-high/g).length, 1, "one notice line, not one per read");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("config: an override naming orc-executor-haiku-4-5 resolves to orc-executor-haiku-5-high", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    fs.writeFileSync(path.join(claudeDir, "orc.config.yaml"), "extra_fallback_agent: orc-executor-haiku-4-5\nrubric_bands_override:\n  - [0, 101, orc-executor-sonnet-4-6-med]\n");
+    const r = cli(["config", "get", "extra_fallback_agent", "--dir", root]);
+    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /orc-executor-haiku-5-high/);
+    assert.doesNotMatch(r.stdout, /haiku-4-5/);
+    assert.match(r.stderr, /agent orc-executor-haiku-4-5 is now orc-executor-haiku-5-high \(2\.2\.0\)/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("name parser: orc-executor-haiku-5-high is claude-haiku-5-5 at high effort", () => {
+  const src = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  const grab = (re) => { const m = re.exec(src); assert.ok(m, "source block missing: " + re); return m[0]; };
+  const code = [
+    grab(/^const MODEL_FAMILIES = .*$/m),
+    grab(/^const EFFORT_WORDS = .*$/m),
+    "const pinnedModels = () => ({});",
+    grab(/^function modelOf\(name\) \{[\s\S]*?\n\}/m),
+    grab(/^function effortOf\(name\) \{[\s\S]*?\n\}/m),
+    "return { modelOf, effortOf };",
+  ].join("\n");
+  const { modelOf, effortOf } = new Function(code)();
+  // Unpinned, the name alone yields the family token; the budget join's
+  // sameModel() then claims a `claude-haiku-5-5` block with it.
+  assert.ok("claude-haiku-5-5".startsWith(modelOf("orc-executor-haiku-5-high") + "-"));
+  assert.strictEqual(effortOf("orc-executor-haiku-5-high"), "high");
+  const fm = fs.readFileSync(path.join(REPO, "templates", "agents", "orc-executor-haiku-5-high.md"), "utf8");
+  assert.match(fm, /^model: claude-haiku-5-5$/m);
+  assert.match(fm, /^effort: high$/m);
 });

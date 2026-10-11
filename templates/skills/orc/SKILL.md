@@ -120,7 +120,7 @@ in the SAME step; store `trace_path`.
 **Under `ultra_mode` the lane segment is `ultra`, not `orc`** (`run-ultra-<slug>-…`)
 — the filename IS the per-lane data, so an ultra run named `orc` is counted as a
 plain `/orc` run forever, hiding the costliest lane in every usage report.
-**Phase close = `orc trace write --packet -`** (exit ≠ 0 → `orc-trace-writer-haiku-4-5`).
+**Phase close = `orc trace write --packet -`** (exit ≠ 0 → `orc-trace-writer-haiku-5-high`).
 The first packet is solo — it repairs a hook-bootstrap filename.
 `DISPATCH`/`VERIFY` models are derived from the agent NAME and checked against
 each return's `actual_model`/`actual_effort` — surface any ⛔ DOWNGRADE to the
@@ -179,7 +179,7 @@ them; they are never dispatched as subagents).
 - Phase 5.5 → `../_shared/phases/security-checklist.md`; 6.5 → `subskills/orc-testgen/`
 - Phase 8 → `subskills/orc-pr/SKILL.md` (template `subskills/orc-pr/pr.md`);
   stack gate → `subskills/orc-pr/stack-gate.md` + `_shared/pr-templates.md`
-- Code graph cache, NEVER skipped (§0 of the contract) — `orc graph status --if-enabled --heal --json` at preflight BEFORE the first dispatch (builds or updates it) · ONE `orc graph ctx <declared files>` call per slice · `orc graph map` FIRST at planning (orientation — before any Glob, before `impact`) then `orc graph impact` + `orc graph cochange`, `orc graph changes` at review · `orc graph coverage` before you trust a card's silence · `orc graph update` + `orc graph notes` at every wave close and ship · every `--json` read carries `--brief` · print each JSON `line`, copy each `trace` VERBATIM (CLI-resolved) → `../_shared/code-graph.md`
+- Code graph — the four touchpoints (`../_shared/code-graph.md` §0), every call with `--if-enabled --json --brief`: (1) consult at preflight — print `probes["graph-status"].line`; `orc graph status --heal` only when `heal_needed`; exit 3 (`off` or `semi`) → no other graph call · (2) orient at planning — `orc graph map --focus=<3–6 words> --budget 800` ONCE, then `orc graph impact` + `orc graph cochange` on the candidate files · (3) anchors — one `orc graph ctx --for-slice <declared files> --focus=<words> [--refs=<task.precedent>] --anchors` per writing dispatch (a request that names one symbol: `ctx <symbol> --anchors` gives the card and the anchors in one call); its `card` goes into the slice VERBATIM as `graph_anchors`, with its `read all: …` line and its code block — never shorten it; With `graph_anchors` in the slice, list at most ONE wiki page path (the one about the feature's intent), not 1–3. ( none for one named file with no outside change) · (4) affected tests — `orc graph changes --files=<actual files>` at review. `orc graph update --notes-pending` only when `update_step` is `lane`. No lane runs the gain meter. Print each `line`; copy each `trace` VERBATIM
 - Schemas (you own; pass slices only): `schemas/intent-spec.md`,
   `schemas/planning-output.md`, `schemas/checkpoint.md`
 - Worked example (orient only — never execute from it) → `examples/full-run-mock.md`

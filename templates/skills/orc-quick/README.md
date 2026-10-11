@@ -127,8 +127,7 @@ build          npm run build → GREEN
 tests reached  1 file (call 1) → 4 passed
 suite          41 passed
 blast radius   2 symbols · callers 3 in 2 files · tests reach 2 · risk none
-graph          gen 43 · 2 files updated
-graph gain     paid 1.2K tokens · avoided an estimated 3–9K · measured: not yet (N=1)
+graph pack     2 files · 3 ranges quoted
 
 (test-update not offered — the executor already fixed the spec)
 

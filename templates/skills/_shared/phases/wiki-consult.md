@@ -70,7 +70,7 @@ in play.
   config/env work.
 
 **Lane delta — orc-fast and orc-mini pass POINTERS, not content:** each selects
-1–3 page PATHS from `wiki/INDEX.md` and puts the paths in its slices with the
+1–3 page PATHS from `wiki/INDEX.md` (a slice that carries graph anchors lists at most one page) and puts the paths in its slices with the
 instruction to READ them first (TL;DR for orientation, `Contracts & shapes` for
 specifics). Neither pastes a wiki body into a slice, and neither reads one into
 its OWN context — for fast, a Sonnet-medium orchestrator curating wiki prose

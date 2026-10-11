@@ -10,6 +10,138 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v2.2.0 — one graph contract for every coding lane, a graph that reads Vue, and Haiku 5.5 _(2026-10-11)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+This is a minor release. The code graph changes its index shape. Every project
+rebuilds its graph ONE time (cold). Three agents get new names.
+
+EVAL: real company Vue 2.7 repo, /orc-quick, graph OFF vs ON, medians. RMT2
+(change one helper and every caller, N=3/3): cost −2.0 %, time −8.6 %, tokens
+−4.2 %, grade equal (86). RMT1 (build step 1 of a create-transaction flow from a
+requirement, N=3 ON / 5 OFF): cost −9.6 %, time −28.4 %, tokens −15.8 %, grade
+equal (84), e2e 12/12 in every run. RMT3 (build step 2 on the built step 1, N=2/2, means): cost −8.9 %, tokens −14.0 %, time +4.0 %. RMT4 (a cross-file change inside the built page, stored notes on ON, N=2/2, means): no gain — cost +7.7 %, time +45.5 %, tokens +4.4 %; the executor explored only about 4 calls in either arm, so the graph and the stored notes had nothing to save. Details: guides/code-graph-benefit.md.
+
+When the code graph helps, with live numbers: [guides/code-graph-benefit.md](guides/code-graph-benefit.md)
+
+- **New guide:** `guides/code-graph-benefit.md` tells when the code graph helps, with live OFF / ON numbers.
+
+**1. Code graph quality on Vue / JS**
+
+- The `@/` alias resolves. The order is: `jsconfig` / `tsconfig` `paths` (and
+  `baseUrl`) nearest the importer, then the `'@'` alias in the vue / webpack /
+  vite config, then the nearest `src/`, then the repo-root `src/`.
+- The template of a Vue SFC makes edges. Handlers, bindings and component tags
+  are callers. One `<Comp>.template` symbol owns them.
+- `props`, `emits` and `inject` are symbols (`prop`, `emit`, `inject`). A card
+  shows the contract of the component.
+- `() => import('x')` is an import, not a function. SPA route records are
+  `route` symbols (`VIEW /path`). `$router.push({ name })` and
+  `router-link :to` make a route-name edge.
+- `this.$x` built-ins (`$t`, `$router`, …) make no edge.
+- A caller that is not a test never resolves into a test file.
+- `orc graph map --focus`: no word is dropped (IDF weight). Path segments
+  match first. Hubs are damped. Every file is ranked.
+- `orc graph ctx` accepts a bare file name.
+- `orc graph path` can end at a file.
+- `orc graph impact` shows a tests row.
+
+**2. One graph contract for every coding lane**
+
+- Every coding lane uses the same four touchpoints: consult (probe) · orient
+  one time · anchors per code dispatch · affected tests with `changes`.
+- The `graph-status` probe of `orc lane config` has a new field
+  `update_step` (`none` · `hook` · `lane` · `preflight`). A lane runs
+  `orc graph update` only when it is `lane`.
+- Lanes do not call `orc graph gain`.
+- New: `orc graph ctx --for-slice … --anchors`. It gives up to 12
+  `path:a-b` lines and ONE `read all:` command. The slice carries it as
+  `graph_anchors`. The executor runs that command first. This replaces the
+  card in the slice.
+- Declared files can be joined with commas. `ctx --for-slice a.js,b.vue` is
+  the same as `ctx --for-slice a.js b.vue`. A wrong path prints
+  `not found: <path>` on the anchors line. Before, the full list was one
+  missing path, and the slice got no anchors.
+- Focus callees. When a focus word names an exported function or method of a
+  declared file, the anchors are its definition and up to 8 call sites
+  (declared files included). Callers of other exports are dropped. One-word
+  member hits are dropped. A Vue component is never a focus callee.
+- One look-time card. `orc graph ctx <symbol>` also lists the tests that reach
+  a caller (by call, import or name) and a coverage verdict. With `--anchors`
+  it also gives the slice anchors (`anchors_card`). One call replaces grep,
+  the test search, `coverage` and a separate `--for-slice` call. The
+  lane-config announce lines 2/4 and 3/4 name this path.
+- The graph hook speaks to the main session (graph `on` only). (a) A
+  main-session Grep, Glob or shell search of a known symbol gets the ctx card.
+  Compound commands are included. The hook uses the matched name with the
+  highest fan-in, and never a name with fan-in 0. It gives one card per name
+  and 3 cards per run at most. (b) When an ORC executor returns, a new
+  PostToolUse(Task|Agent) hook entry injects the `changes` card (affected
+  tests and risk). The lane then does not call `orc graph changes`.
+  `orc init` and `orc update` add the new hook entry. `orc doctor` counts 6
+  hook entries.
+- `--pack=` stays for users. No lane uses it.
+
+**3. New: `code_graph: semi`**
+
+- The preflight heal and the SubagentStop hook keep the graph current.
+- Every lane read with `--if-enabled` exits 3 (the same as `off`). The trace
+  says `mode=semi`. No hint goes into a context.
+- A read that you type without `--if-enabled` answers from the index.
+- The status line and `orc doctor` show `semi`. The `orc ui` Code graph tab
+  shows a `SEMI` chip.
+
+**4. Gain meter fixes**
+
+- The run match is normalised.
+- `changes` prices only old symbols with callers outside the diff, one time
+  per diff.
+- Every ledger row has an `outcome` field.
+- The heal line is correct.
+- `cochange` says when the history is too short.
+- The parse coverage line uses clearer words.
+
+**5. Trace friction**
+
+- `orc lane phases <lane> --json` has `trace_grammar` and `ask_ids` at the
+  top level.
+- A refused packet names PHASE / NOTE / ASK and the verbs of the lane.
+- A parse error quotes the bad line and shows an example packet.
+
+**6. Models**
+
+- `orc-executor-haiku-4-5` and `orc-executor-sonnet-4-6-med` become ONE
+  agent: `orc-executor-haiku-5-high` (`claude-haiku-5-5`, high).
+- `orc-trace-writer-haiku-4-5` → `orc-trace-writer-haiku-5-high`.
+- `orc-graph-noter-sonnet-4-6-med` → `orc-graph-noter-haiku-5-high`.
+- An old name in your config still works. ORC prints ONE line:
+  `agent <old> is now <new> (2.2.0)`.
+- `bin/pricing.json` has a `claude-haiku-5-5` row (input 0.1, cache write
+  0.125, cache read 0.01, output 0.5; context 1M).
+
+**7. Executor coverage rule**
+
+- The executor runs coverage one time for its own files, with a text report.
+  It does not probe lcov, the jest cache or the transformer. It runs a second
+  time at most. The rest goes to `unmet[]`.
+
+**8. Engine `graph@7`**
+
+- `graph@7` / `heuristic@7` / `RESOLVE_SCHEMA 4`. The first `orc graph update`
+  after the upgrade rebuilds the index cold, one time.
+
+**What you have to do:** run `orc update` once. Then run `orc graph update`
+one time if `code_graph` is `on` or `semi`.
+
 ### v2.1.2 — a typed /orc meets the effort guard, and the budget uses each model's price _(2026-10-03)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

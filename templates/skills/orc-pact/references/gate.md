@@ -67,4 +67,4 @@ If any promise went BROKEN during the run, name it in the summary and offer
 
 `PACT <state> :: <ids>` at the preflight point, and `PACT recheck <pass|fail> ::
 <ids>` at Phase 6. Carried in the phase packet like every other verb — the
-orchestrator hands it to `orc-trace-writer-haiku-4-5`, never writes it directly.
+orchestrator hands it to `orc-trace-writer-haiku-5-high`, never writes it directly.

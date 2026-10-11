@@ -489,12 +489,14 @@ function complexityOf(claudeDir, root, model, rels, opts) {
     callerFiles.size >= COMPLEXITY_CALLER_FILES || callersOutside >= COMPLEXITY_CALLERS || risk.length > 0 || cochange.length > 0 ? "recommend-orc" : "mini-ok";
 
   const riskText = risk.length ? risk.map((x) => `${x.class}${x.at ? ` (${x.at})` : ""}`).join(", ") : riskGiven ? "none" : "not given";
-  const cochangeText = cochange.length ? cochange.map((x) => `${x.path} x${x.count} not in plan`).join(", ") : "none";
+  // v2.2.0 (G-15): no co-change row is no segment — `cochange none` was a
+  // line about nothing.
+  const cochangeText = cochange.length ? ` · cochange ${cochange.map((x) => `${x.path} x${x.count} not in plan`).join(", ")}` : "";
   const maybeText = maybe ? ` · maybe ${maybe}` : "";
   const line =
     verdict === "mini-ok"
-      ? `complexity: mini-ok — ${rels.length} files · confident callers ${callersOutside} in ${callerFiles.size} files${maybeText} · tests reach ${testsReaching} · risk ${riskText} · cochange ${cochangeText}`
-      : `complexity: recommend /orc — ${rels.length} files · callers ${callersOutside} in ${callerFiles.size} files${maybeText} · tests reach ${testsReaching} · risk ${riskText} · cochange ${cochangeText}`;
+      ? `complexity: mini-ok — ${rels.length} files · confident callers ${callersOutside} in ${callerFiles.size} files${maybeText} · tests reach ${testsReaching} · risk ${riskText}${cochangeText}`
+      : `complexity: recommend /orc — ${rels.length} files · callers ${callersOutside} in ${callerFiles.size} files${maybeText} · tests reach ${testsReaching} · risk ${riskText}${cochangeText}`;
 
   return {
     verdict,

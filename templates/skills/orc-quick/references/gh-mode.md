@@ -88,7 +88,8 @@ it — a test that arrives through a URL included. Print one line per thread:
 [1] dana · export.js:34 → streamRows (callers 2 · tests 1)
 ```
 
-That card goes into the thread's slice. Exit 3 (the graph is off) or exit 4 (not
+Use that card to choose the thread's declared files. The slice gets the pack
+(`SKILL.md` Q3.1), not this card. Exit 3 (the graph is off) or exit 4 (not
 found) → skip the line and work from the anchor alone.
 
 ## One gate per thread

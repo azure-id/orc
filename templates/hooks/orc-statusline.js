@@ -1478,6 +1478,9 @@ function extendedScan(d, wants, wantsProvider) {
       try {
         raw = fs.readFileSync(path.join(projectDir, ".claude", "orc.config.yaml"), "utf8");
       } catch (_) {}
+      // `semi` (v2.2.0): kept current, never read by a lane. Still a floor: it
+      // says only `semi`, never fresh, behind or drifted.
+      if (/^[ \t]*code_graph:[ \t]*["']?semi["']?[ \t]*\r?$/m.test(raw)) return { state: "semi" };
       if (!/^[ \t]*code_graph:[ \t]*["']?on["']?[ \t]*\r?$/m.test(raw)) return { state: "off" };
       const meta = readJson(path.join(orc, "graph", "meta.json"));
       if (!meta) return { state: "none" };

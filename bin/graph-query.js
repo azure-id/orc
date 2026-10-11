@@ -133,12 +133,133 @@ function filesInDir(model, dir, ext) {
   return (model.dirs.get(dir) || []).filter((f) => f.endsWith(ext));
 }
 
+// v2.2.0 (D1): the `@/` alias. A SPA whose code lives under `client/src/`
+// is not served by "`@/` means `src/`". The aliases a project DECLARES win —
+// jsconfig/tsconfig `paths`, a bundler `alias`, a jest `moduleNameMapper` —
+// read from disk once per directory per process (never evaluated). Then the
+// nearest package `src/`, then the old root `src/`.
+const ALIAS_JSON = ["jsconfig.json", "tsconfig.json"];
+const ALIAS_BUNDLER = ["vue.config.js", "webpack.config.js", "vite.config.js", "vite.config.ts", "vite.config.mjs"];
+const ALIAS_RX_RESOLVE = /['"]?(@[\w-]*|~)['"]?\s*:\s*(?:path\.)?(?:resolve|join)\(\s*__dirname\s*,\s*['"]([^'"]+)['"]\s*\)/g;
+const ALIAS_RX_URL = /['"]?(@[\w-]*|~)['"]?\s*:\s*fileURLToPath\(\s*new\s+URL\(\s*['"]([^'"]+)['"]/g;
+const ALIAS_RX_JEST = /['"]\^(@[\w-]*|~)\/\(\.\*\)\$['"]\s*:\s*['"]<rootDir>\/([^'"]*?)\/?\$1['"]/g;
+
+const cleanRel = (p) => {
+  const n = posix.normalize(p).replace(/^\.\//, "");
+  return n === "." ? "" : n;
+};
+
+function readText(file) {
+  try {
+    return fs.readFileSync(file, "utf8");
+  } catch (_) {
+    return null;
+  }
+}
+
+function stripJsonc(t) {
+  return t
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:"'\\])\/\/.*$/gm, "$1")
+    .replace(/,(\s*[}\]])/g, "$1");
+}
+
+// One table per directory: [{ prefix, target, exact }]. Built once per
+// directory per process; a cache hit makes no fs call.
+function aliasTable(model, dir) {
+  if (!model.aliasTables) model.aliasTables = new Map();
+  if (model.aliasTables.has(dir)) return model.aliasTables.get(dir);
+  const out = [];
+  const at = (name) => path.join(model.root || "", dir, name);
+  for (const name of ALIAS_JSON) {
+    const t = readText(at(name));
+    if (t === null) continue;
+    let j = null;
+    try {
+      j = JSON.parse(stripJsonc(t));
+    } catch (_) {
+      j = null;
+    }
+    const co = (j && j.compilerOptions) || {};
+    const baseUrl = typeof co.baseUrl === "string" ? co.baseUrl : ".";
+    for (const [k, v] of Object.entries(co.paths || {})) {
+      const first = Array.isArray(v) ? v[0] : v;
+      if (typeof first !== "string") continue;
+      const target = cleanRel(posix.join(dir, baseUrl, first.replace(/\*$/, "")));
+      if (k.endsWith("*")) out.push({ prefix: k.slice(0, -1), target, exact: false });
+      else out.push({ prefix: k, target, exact: true });
+    }
+  }
+  const scan = (t, rx) => {
+    rx.lastIndex = 0;
+    let m;
+    while ((m = rx.exec(t))) out.push({ prefix: m[1] + "/", target: cleanRel(posix.join(dir, m[2])), exact: false });
+  };
+  for (const name of ALIAS_BUNDLER) {
+    const t = readText(at(name));
+    if (t === null) continue;
+    scan(t, ALIAS_RX_RESOLVE);
+    scan(t, ALIAS_RX_URL);
+  }
+  const jt = readText(at("jest.config.js"));
+  if (jt !== null) scan(jt, ALIAS_RX_JEST);
+  model.aliasTables.set(dir, out);
+  return out;
+}
+
+// Nearest ancestor first, the repository root ("") last.
+function ancestorDirs(from) {
+  const out = [];
+  let d = posix.dirname(from);
+  for (;;) {
+    if (d === "." || d === "/" || d === "") {
+      out.push("");
+      break;
+    }
+    out.push(d);
+    d = posix.dirname(d);
+  }
+  return out;
+}
+
+// Every directory D for which the index holds a file under `D/src/`.
+function srcRoots(model) {
+  if (model.srcRoots) return model.srcRoots;
+  const out = new Set();
+  for (const f of model.fileSet) {
+    const parts = f.split("/");
+    for (let i = 0; i < parts.length - 1; i++) if (parts[i] === "src") out.add(parts.slice(0, i).join("/"));
+  }
+  model.srcRoots = out;
+  return out;
+}
+
+function aliasBase(model, from, spec) {
+  const dirs = ancestorDirs(from);
+  for (const d of dirs) {
+    let best = null;
+    for (const e of aliasTable(model, d)) {
+      const ok = e.exact ? spec === e.prefix : spec.startsWith(e.prefix);
+      if (ok && (!best || e.prefix.length > best.prefix.length)) best = e;
+    }
+    if (best) return cleanRel(best.exact ? best.target : posix.join(best.target, spec.slice(best.prefix.length)));
+  }
+  if (/^[@~]\//.test(spec)) {
+    const roots = srcRoots(model);
+    for (const d of dirs) if (roots.has(d)) return cleanRel(posix.join(d, "src", spec.slice(2)));
+    return "src/" + spec.slice(2);
+  }
+  return null;
+}
+
 function resolveJs(model, from, spec) {
   let base;
   if (spec.startsWith(".")) base = posix.normalize(posix.join(posix.dirname(from), spec));
-  else if (/^[@~]\//.test(spec)) base = "src/" + spec.slice(2);
   else if (spec.startsWith("/")) base = spec.slice(1);
-  else return [];
+  else {
+    base = aliasBase(model, from, spec);
+    if (base === null) return [];
+  }
   const cands = [base, ...JS_EXT.map((e) => base + e), ...JS_EXT.map((e) => `${base}/index${e}`)];
   // TS ESM writes `./x.js` for a file that is `x.ts` on disk.
   if (/\.(js|jsx|mjs|cjs)$/.test(base)) {
@@ -378,9 +499,66 @@ function inheritedMember(model, rel, className, member, depth, seen) {
   return null;
 }
 
+// v2.2.0: SPA route navigation. `{ name: "<route name>", route: true }`, or
+// `{ name: "IDENT.MEMBER", route: true, via: true }` where IDENT is a const
+// object (this file's own, or imported) whose `values[MEMBER]` holds the
+// route name. Never subject to the `call.ref` restriction.
+function routeNameIndex(model) {
+  if (model.routeNames) return model.routeNames;
+  const idx = new Map();
+  for (const s of model.symbols.values()) {
+    if (s.kind !== "route" || typeof s.route_name !== "string") continue;
+    if (!idx.has(s.route_name)) idx.set(s.route_name, []);
+    idx.get(s.route_name).push(s);
+  }
+  model.routeNames = idx;
+  return idx;
+}
+
+function resolveRouteCall(model, rel, call) {
+  // The sharded fast model holds no symbol table to search for route names,
+  // so it DECLINES and the full model answers.
+  if (model.fast) {
+    const S = require("./graph-shard.js");
+    throw new S.FastUnavailable("route-call");
+  }
+  let rname = call.name;
+  if (call.via) {
+    const parts = String(call.name).split(".");
+    const id = parts[0];
+    const member = parts.slice(1).join(".");
+    const f = model.byFile[rel] || {};
+    let s = (f.symbols || []).find((x) => x.kind !== "module" && x.qname === id) || null;
+    if (!s) {
+      const bd = fileBindings(model, rel).map.get(id);
+      if (bd && bd.files.length) {
+        const wanted = bd.kind === "named" ? bd.orig : bd.local;
+        for (const pair of barrelTargets(model, bd.files, wanted, 0, new Set())) {
+          const tsyms = ((model.byFile[pair.file] || {}).symbols || []).filter((x) => x.kind !== "module");
+          s = tsyms.find((x) => x.qname === pair.name) || null;
+          if (s) break;
+        }
+      }
+    }
+    const values = s && s.values;
+    const v = values && Object.prototype.hasOwnProperty.call(values, member) ? values[member] : undefined;
+    if (typeof v !== "string") return { state: "UNRESOLVED" };
+    rname = v;
+  }
+  const hits = routeNameIndex(model).get(rname) || [];
+  if (hits.length === 1) return { state: "ROUTE", target: hits[0].id };
+  if (hits.length > 1) return { state: "AMBIGUOUS", candidates: hits.map((s) => s.id) };
+  return { state: "UNRESOLVED", missing_route: rname };
+}
+
 function resolveCall(model, rel, caller, call) {
   const cls = caller ? classOf(caller) : null;
-  const key = `${rel}\0${cls || ""}\0${call.name}\0${call.self ? 1 : 0}\0${call.ref ? 1 : 0}\0${call.sup ? 1 : 0}\0${call.alias ? 1 : 0}`;
+  const key = `${rel}\0${cls || ""}\0${call.name}\0${call.self ? 1 : 0}\0${call.ref ? 1 : 0}\0${call.sup ? 1 : 0}\0${call.alias ? 1 : 0}\0${call.route ? (call.via ? 2 : 1) : 0}`;
+  if (call.route) {
+    const rr = resolveRouteCall(model, rel, call);
+    model.resolved.set(key, rr);
+    return rr;
+  }
   if (model.resolved.has(key)) return model.resolved.get(key);
   const parts = call.name.split(".");
   const last = parts[parts.length - 1];
@@ -486,7 +664,10 @@ function resolveCall(model, rel, caller, call) {
     // W1: a bare `get(…)` is never a class METHOD — a method is reached through
     // a receiver, `this`, or inheritance. Before this, `request(app).get("/p")`
     // resolved UNIQUE to the only method named `get` in the repository.
-    const all = model.byName.get(last) || [];
+    // v2.2.0 (D5): a source file never resolves into a test helper. A test
+    // caller keeps every candidate.
+    const named = model.byName.get(last) || [];
+    const all = TEST_FILE.test(rel) ? named : named.filter((s) => !TEST_FILE.test(s.file));
     const cands = head || call.self ? all : all.filter((s) => !classOf(s));
     if (head) {
       const hl = head.toLowerCase();
@@ -766,6 +947,9 @@ function calleesOf(model, sym) {
     if (seen.has(c.name)) continue;
     seen.add(c.name);
     if (stored) {
+      // v2.2.0: a route call is answered by the full model only (its
+      // UNRESOLVED answer names the missing route, which no shard stores).
+      if (c.route) throw new (require("./graph-shard.js").FastUnavailable)("route-call");
       const row = stored.get(i);
       const S = require("./graph-shard.js");
       out.push({
@@ -816,6 +1000,14 @@ function findTarget(model, q) {
   const named = model.byName.get(s) || [];
   if (named.length === 1) return { kind: "symbol", sym: named[0] };
   if (named.length > 1) return { kind: "ambiguous", candidates: named };
+  // v2.2.0 (T6): lanes type SHORT file names — `OutwardRemittance.vue`, or a
+  // path suffix. The ONE indexed file whose path ends with `/<it>` is the
+  // target; several is an answer that lists them.
+  if (/\.[A-Za-z0-9]+$/.test(s) || s.includes("/")) {
+    const suf = bySuffix(model, s);
+    if (suf.length === 1) return { kind: "file", rel: suf[0] };
+    if (suf.length > 1) return { kind: "ambiguous-file", files: suf.slice().sort() };
+  }
   const ql = s.toLowerCase();
   const nearest = [];
   for (const [n, arr] of model.byName) if (n.toLowerCase().includes(ql)) nearest.push(...arr);
@@ -970,7 +1162,7 @@ function fit(items, budget, footer, tail, blocks) {
 // It is a FORMAT, never a filter: the same rows, the same order, the same JSON.
 // `--format prose` stays the default, because a shorter card that is read wrong
 // costs more than it saves.
-const KIND_SHORT = { function: "fn", method: "me", class: "cl", route: "rt", module: "mo", const: "co", var: "va", type: "ty", interface: "in", enum: "en", struct: "st" };
+const KIND_SHORT = { prop: "p", emit: "e", inject: "i", template: "t", function: "fn", method: "me", class: "cl", route: "rt", module: "mo", const: "co", var: "va", type: "ty", interface: "in", enum: "en", struct: "st" };
 const STATE_SHORT = { LOCAL: "L", IMPORT: "I", UNIQUE: "U", ROUTE: "R", AMBIGUOUS: "A", UNRESOLVED: "-" };
 const shortKind = (k) => KIND_SHORT[k] || String(k).slice(0, 2);
 
@@ -1188,6 +1380,7 @@ function ctx(model, query, opts) {
   const t = findTarget(model, query);
   if (t.kind === "none") return { ok: false, state: "not-found", query, nearest: t.nearest.map(brief), exit: 4 };
   if (t.kind === "ambiguous") return { ok: false, state: "ambiguous-target", query, candidates: t.candidates.map(brief), exit: 4 };
+  if (t.kind === "ambiguous-file") return { ok: false, state: "ambiguous-target", query, candidates: t.files.map((file) => ({ file })), exit: 4 };
   if (t.kind === "file") return fileCard(model, t.rel, budget, opts);
 
   const sym = t.sym;
@@ -1241,6 +1434,13 @@ function ctx(model, query, opts) {
   const walk = (s, level, indent) => {
     for (const { call, res } of calleesOf(model, s)) {
       if (res.state === "UNRESOLVED") {
+        // v2.2.0: a route call whose name no route record carries is SAID,
+        // one line, no guess — it is shown, so it is not counted as hidden.
+        if (level === 1 && call.route && res.missing_route) {
+          const miss = `${indent}→ route ${res.missing_route}  NO ROUTE — no record has this name`;
+          push(2, "calls", miss, { item: "call", name: call.name, line: call.line, state: "UNRESOLVED", missing_route: res.missing_route, level }, miss);
+          continue;
+        }
         if (level === 1) unresolved++;
         continue;
       }
@@ -1255,7 +1455,10 @@ function ctx(model, query, opts) {
       const target = model.symbols.get(res.target);
       if (!target) continue;
       const mark = res.inherited ? " (inherited)" : call.alias ? ` (via ${call.alias})` : "";
-      const row = (short) => `${indent}→ ${call.ref ? "uses " : "calls"}      ${target.qname}  ${where(target)}  ${stateWord(res.state, short)}${mark}`;
+      const row = (short) =>
+        call.route && res.state === "ROUTE"
+          ? `${indent}→ route ${call.name}  ${target.qname}  ${where(target)}  ${stateWord(res.state, short)}`
+          : `${indent}→ ${call.ref ? "uses " : "calls"}      ${target.qname}  ${where(target)}  ${stateWord(res.state, short)}${mark}`;
       push(level === 1 ? 2 : 3 + level, "calls", row(false), {
         item: "call",
         name: call.name,
@@ -1283,6 +1486,39 @@ function ctx(model, query, opts) {
   if (wiki.length) push(6, "wiki", `  wiki  ${wiki.join(", ")}`, { item: "wiki", docs: wiki });
   const tests = [...new Set(callers.confident.filter((c) => TEST_FILE.test(c.sym.file)).map((c) => c.sym.file))];
   if (tests.length) push(5, "tests", `  tests ${tests.join(", ")}`, { item: "tests", files: tests });
+  // R11 (v2.2.0): a target no test calls DIRECTLY is often reached by a spec
+  // THROUGH one of its callers. One hop, confident callers only, test files
+  // only, max 6 — so the reader does not grep for the tests.
+  const testsVia = [];
+  const plainCallers = callers.confident.filter((c) => !TEST_FILE.test(c.sym.file));
+  if (!tests.length && plainCallers.length) {
+    // R11b: the SAME three rules the file card uses for its tests — a test
+    // that CALLS a symbol of the caller's file, IMPORTS that file, or is
+    // NAMED after it. Ranked call > import > name. Only TEST files are asked
+    // who they import, so the fast model loads test blobs and nothing else.
+    const SIG = require("./graph-signals.js");
+    const seenVia = new Set();
+    const add = (file, via) => {
+      if (testsVia.length >= 6 || seenVia.has(file) || !TEST_FILE.test(file)) return;
+      seenVia.add(file);
+      testsVia.push({ file, via });
+    };
+    const callerFiles = [...new Set(plainCallers.map((c) => c.sym.file))];
+    for (const c of plainCallers) for (const cc of callersOf(model, c.sym).confident) add(cc.sym.file, c.sym.qname);
+    for (const rel of callerFiles)
+      for (const s of ((model.byFile[rel] || {}).symbols || []).filter((x) => x.kind !== "module"))
+        for (const cc of callersOf(model, s).confident) add(cc.sym.file, s.qname);
+    for (const rel of callerFiles) for (const f of importersOf(model, rel, true).sort()) add(f, rel);
+    for (const rel of callerFiles) for (const f of SIG.testsByName(model, rel)) add(f, rel);
+    if (testsVia.length) push(5, "tests", `  tests (via callers) ${testsVia.map((x) => `${x.file} ← ${x.via}`).join(", ")}`, { item: "tests_via", rows: testsVia });
+    for (const x of testsVia) if (!tests.includes(x.file)) tests.push(x.file);
+  }
+  // R11: the parse-coverage verdict of the target file + every caller file —
+  // the same per-path reading `orc graph coverage` prints (G.coverageOf).
+  const covFiles = [...new Set([sym.file, ...callers.confident.map((c) => c.sym.file)])];
+  const covPartial = covFiles.filter((rel) => G.coverageOf(model.byFile[rel]).coverage !== "full");
+  const coverage = { verdict: covPartial.length ? "partial" : "full", files: covFiles.length, gaps: covPartial };
+  push(5, "coverage", `  coverage ${coverage.verdict} · ${covFiles.length} files${covPartial.length ? ` · ${covPartial.join(", ")}` : ""}`, { item: "coverage" });
 
   const short = pickShort(items);
   // The footer is printed ONLY when the card hid something, dropped an
@@ -1316,6 +1552,8 @@ function ctx(model, query, opts) {
     effects: kept.filter((d) => d.item ==="effect"),
     wiki,
     tests,
+    tests_via: testsVia,
+    coverage,
     unresolved,
     source: tail && f.source && f.source.kept ? { file: tail.file, from: tail.from, to: tail.from + f.source.kept - 1, text: sourceText(tail, f.source.kept), cut: f.source.cut } : null,
     ...callersSource,
@@ -1326,10 +1564,11 @@ function ctx(model, query, opts) {
   };
 }
 
-function importersOf(model, rel) {
+function importersOf(model, rel, testsOnly) {
   const out = [];
   for (const other of model.fileSet) {
     if (other === rel) continue;
+    if (testsOnly && !TEST_FILE.test(other)) continue;
     const { map, includes } = fileBindings(model, other);
     let hit = includes.includes(rel);
     if (!hit) for (const bd of map.values()) if (bd.files.includes(rel)) { hit = true; break; }
@@ -1355,7 +1594,17 @@ function fileCard(model, rel, budget, opts) {
     const fanIn = callersOf(model, s).confident.length;
     return { s, fanIn, imp: SIG.importance(model, s, fanIn) };
   });
-  allRows.sort((a, b) => b.imp - a.imp || b.fanIn - a.fanIn || a.s.lines[0] - b.s.lines[0]);
+  // v2.2.0: a component's interface leads — props, emits and injects in
+  // source order, then its template, then the rest by importance.
+  const GROUP = { prop: 0, emit: 0, inject: 0, template: 1 };
+  const grp = (s) => (GROUP[s.kind] === undefined ? 2 : GROUP[s.kind]);
+  allRows.sort((a, b) => {
+    const ga = grp(a.s);
+    const gb = grp(b.s);
+    if (ga !== gb) return ga - gb;
+    if (ga < 2) return a.s.lines[0] - b.s.lines[0];
+    return b.imp - a.imp || b.fanIn - a.fanIn || a.s.lines[0] - b.s.lines[0];
+  });
   // `--offset` pages the SYMBOL rows. Paging is not truncation: `has_more` says
   // there is a next page, and the budget footer still says what it hid.
   const offset = Math.max(0, Number(opts.offset) || 0);
@@ -1507,7 +1756,8 @@ function sliceBlock(model, rel, budget, opts) {
   const importers = importersOf(model, rel);
   // Only the importers that call NOTHING — the ones the caller rows already
   // name are the same fact printed twice.
-  const quiet = importers.filter((x) => !byFile.has(x));
+  // T6c: a test file is never on the `imp` line — it stays on `tst`.
+  const quiet = importers.filter((x) => !byFile.has(x) && !TEST_FILE.test(x));
   if (quiet.length) {
     const pre = dirPrefix(quiet);
     if (pre) push(1, "importers", `  dir ${pre}`, null);
@@ -1523,7 +1773,8 @@ function sliceBlock(model, rel, budget, opts) {
     .filter((r) => r.sym.file === rel)
     .map((r) => `${r.method} ${r.full || r.own}${r.mounted === "known" || r.mounted === "none" ? "" : " (mount ambiguous)"}`);
   const unreached = routes.filter((x) => !reached.has(x));
-  if (unreached.length) push(1, "routes", `  rt  ${unreached.join("  ")}  (no caller in the graph)`, { item: "routes", routes: unreached });
+  // T6c: at most 8 routes on the line, then `+<n>` — a router answers 85.
+  if (unreached.length) push(1, "routes", `  rt  ${unreached.slice(0, 8).join("  ")}${unreached.length > 8 ? `  +${unreached.length - 8}` : ""}  (no caller in the graph)`, { item: "routes", routes: unreached });
 
   const shownFiles = new Set(rows.map((r) => r.file));
   const allTests = [
@@ -1624,7 +1875,10 @@ function impact(model, files, opts) {
 
   const tree = opts.format === "tree";
   const offset = Math.max(0, Number(opts.offset) || 0);
-  const page = hits.slice(offset);
+  // T6b: a caller in a TEST file is not a caller row — the budget shows the
+  // CODE that depends on the change, and the tests get one line of their own.
+  const codeHits = hits.filter((h) => !TEST_FILE.test(h.sym.file));
+  const page = codeHits.slice(offset);
   const items = [];
   const push = (pri, section, text, data) => items.push({ pri, section, text, data });
   push(0, "header", `impact of ${rels.join(", ")} — ${targets.length} symbols · depth ${depth}`);
@@ -1651,7 +1905,7 @@ function impact(model, files, opts) {
   }
   for (const r of callRows) push(r.pri, "callers", useTree ? r.tree : r.prose, r.data);
   const j = useTree ? " " : ", ";
-  if (tests.length) push(1, "tests", `  tests${useTree ? "" : " "} ${tests.join(j)}`, { item: "tests" });
+  if (tests.length) push(1, "tests", `  tests  ${tests.length} files: ${tests.slice(0, 6).join(", ")}${tests.length > 6 ? `, +${tests.length - 6}` : ""}`, { item: "tests" });
   if (wiki.length) push(2, "wiki", `  wiki${useTree ? "" : "  "} ${wiki.join(j)}`, { item: "wiki" });
   if (maybe) push(2, "maybe", useTree ? `  maybe ${maybe} ambiguous, not followed` : `  maybe  ${maybe} AMBIGUOUS caller(s) not followed`, { item: "maybe" });
   if (missing.length) push(1, "missing", useTree ? `  absent ${missing.join(" ")}` : `  not in the graph: ${missing.join(", ")}`, { item: "missing" });
@@ -1664,12 +1918,12 @@ function impact(model, files, opts) {
     state: "found",
     format: useTree ? "tree" : "prose",
     offset,
-    has_more: offset + keptCallers.length < hits.length,
+    has_more: offset + keptCallers.length < codeHits.length,
     files: rels,
     missing,
     symbols: targets.length,
     callers: kept.filter((d) => d.item ==="caller"),
-    total_callers: hits.length,
+    total_callers: codeHits.length,
     maybe_callers: maybe,
     tests,
     wiki,
@@ -1681,15 +1935,31 @@ function impact(model, files, opts) {
 }
 
 // ── path ────────────────────────────────────────────────────────────────────
+// T6b: a FILE as an end means ANY symbol in that file — the shortest
+// confident path to (or from) any of them.
+function pathEnd(model, q) {
+  const t = findTarget(model, q);
+  if (t.kind === "symbol") return { t, syms: [t.sym], label: t.sym.qname };
+  if (t.kind === "file") {
+    const syms = ((model.byFile[t.rel] || {}).symbols || []).filter((s) => s.kind !== "module");
+    if (syms.length) return { t, syms, label: t.rel, file: t.rel };
+  }
+  return { t, syms: null };
+}
+
 function pathBetween(model, fromQ, toQ) {
-  const a = findTarget(model, fromQ);
-  const b = findTarget(model, toQ);
-  if (a.kind !== "symbol" || b.kind !== "symbol") {
+  const A = pathEnd(model, fromQ);
+  const B = pathEnd(model, toQ);
+  if (!A.syms || !B.syms) {
+    const a = A.t;
+    const b = B.t;
     return { ok: false, state: "not-found", from: a.kind, to: b.kind, candidates: [...(a.candidates || []), ...(b.candidates || [])].map(brief), exit: 4 };
   }
-  const prev = new Map([[a.sym.id, null]]);
-  let frontier = [a.sym];
-  for (let d = 0; d < 8 && frontier.length && !prev.has(b.sym.id); d++) {
+  const goals = new Set(B.syms.map((x) => x.id));
+  const prev = new Map(A.syms.map((x) => [x.id, null]));
+  let frontier = A.syms.slice();
+  let reached = (A.syms.find((x) => goals.has(x.id)) || {}).id || null;
+  for (let d = 0; d < 8 && frontier.length && !reached; d++) {
     const next = [];
     for (const s of frontier) {
       for (const { call, res } of calleesOf(model, s)) {
@@ -1698,11 +1968,16 @@ function pathBetween(model, fromQ, toQ) {
         if (!t) continue;
         prev.set(t.id, { from: s, line: call.line, state: res.state });
         next.push(t);
+        if (!reached && goals.has(t.id)) reached = t.id;
       }
     }
     frontier = next;
   }
-  if (!prev.has(b.sym.id)) return { ok: true, state: "none", from: brief(a.sym), to: brief(b.sym), exit: 4, card: `no confident call path from ${a.sym.qname} to ${b.sym.qname} (AMBIGUOUS edges are not followed)` };
+  if (!reached) {
+    const end = (E) => (E.file ? { file: E.file, kind: "file" } : brief(E.syms[0]));
+    return { ok: true, state: "none", from: end(A), to: end(B), exit: 4, card: `no confident call path from ${A.label} to ${B.label} (AMBIGUOUS edges are not followed)` };
+  }
+  const b = { sym: model.symbols.get(reached) };
   const chain = [];
   for (let id = b.sym.id; id; ) {
     const p = prev.get(id);
@@ -1729,7 +2004,6 @@ function pathBetween(model, fromQ, toQ) {
 // how the list is cut, which is the same contract every other card keeps: rows
 // in a fixed order, the budget cuts from the BOTTOM, and a card that hid
 // something says so.
-const MAP_MAX_ROWS = 200;
 const MAP_FOCUS_MASS = 100;
 const MAP_CAVEAT = "  rank is a HINT about where to look first — it is never proof a file matters to this change";
 
@@ -1784,67 +2058,115 @@ function focusWords(text) {
     .map((w) => focusStem(w.toLowerCase()));
 }
 
+// R4: a focus word matches a path/name segment when they are equal, or one is
+// the other's simple plural (`+s`, `+es`), both ways. Both sides are already
+// lower case and stemmed by focusWords, so this only adds what the light
+// stemmer leaves apart.
+function wordMatch(w, seg) {
+  return seg === w || seg === w + "s" || seg === w + "es" || w === seg + "s";
+}
+
 // ONE index per call, built only when a token needs it: word → the files whose
 // path (directories + basename without its extension) or symbol names hold it.
+// v2.2.0 (D6): word → Map(file → 2 when the word is a PATH segment, 1 when
+// only a symbol name holds it).
 function focusWordIndex(model) {
   const index = new Map();
   for (const rel of model.fileSet) {
-    const words = new Set(focusWords(rel.replace(/\.[^./]+$/, "")));
+    const words = new Map();
+    for (const w of focusWords(rel.replace(/\.[^./]+$/, ""))) words.set(w, { path: true, n: 0 });
     for (const s of (model.byFile[rel] && model.byFile[rel].symbols) || []) {
       if (s.kind === "module") continue;
-      for (const w of focusWords(s.name || s.qname || "")) words.add(w);
+      for (const w of new Set(focusWords(s.name || s.qname || ""))) {
+        const e = words.get(w) || { path: false, n: 0 };
+        e.n++;
+        words.set(w, e);
+      }
     }
-    for (const w of words) {
-      if (!index.has(w)) index.set(w, []);
-      index.get(w).push(rel);
+    for (const [w, x] of words) {
+      if (!index.has(w)) index.set(w, new Map());
+      index.get(w).set(rel, x);
     }
   }
   return index;
 }
 
+// v2.2.0 (D6): a word is never dropped. It is WEIGHTED by how rare it is —
+// log(1 + N/hits) / log(1 + N), so a rare word is near 1 and a word in every
+// file is small but above 0. A file named directly is the strongest (3).
+//
+// v2.2.0 (T6b): a plain lower-case token is ALWAYS a word — `amount` used to
+// be read as a NAME (only the files defining it) and vanished from the words
+// line. A token with `/`, `.` or `#` is a file or a qname; a camelCase,
+// PascalCase or `_` token is a NAME and a word. A PATH-segment hit is worth
+// 2w; a symbol-only hit is worth w × min(1, matched / sqrt(total)), so a
+// constants file with 177 symbols and 6 matches is not a strong hit.
+// `strong` is every file reached by a path segment, a file token or a name —
+// the files hub damping never touches.
+const FOCUS_FILE_MASS = 3;
 function focusFiles(model, tokens) {
-  const files = [];
+  const mass = new Map();
+  const strong = new Set();
+  const add = (rel, m) => mass.set(rel, (mass.get(rel) || 0) + m);
   const missing = [];
   const common = [];
   const words = [];
   const seen = new Set();
   let index = null;
-  // A hint must not become the whole repository: a word in more files than
-  // this is REPORTED and not used.
-  const cap = Math.max(8, Math.ceil(0.1 * model.fileSet.size));
+  const N = model.fileSet.size;
+  const symCount = (rel) => ((model.byFile[rel] && model.byFile[rel].symbols) || []).filter((s) => s.kind !== "module").length;
   for (const t of tokens) {
-    const rel = norm(t).replace(/:\d+$/, "");
+    const raw = String(t);
+    const rel = norm(raw).replace(/:\d+$/, "");
     if (model.fileSet.has(rel)) {
-      files.push(rel);
+      add(rel, FOCUS_FILE_MASS);
+      strong.add(rel);
       continue;
     }
-    const defs = model.byName.get(String(t).split(".").pop()) || [];
-    if (defs.length) {
-      for (const s of defs) files.push(s.file);
+    if (/[\/.#]/.test(raw)) {
+      const defs = model.byName.get(raw.split(/[.#]/).pop()) || [];
+      for (const s of defs) {
+        add(s.file, 1);
+        strong.add(s.file);
+      }
+      if (!defs.length) missing.push(raw);
       continue;
+    }
+    const isName = /[a-z0-9][A-Z]|^[A-Z]|_/.test(raw);
+    let named = false;
+    if (isName) {
+      for (const s of model.byName.get(raw) || []) {
+        add(s.file, 1);
+        strong.add(s.file);
+        named = true;
+      }
     }
     index = index || focusWordIndex(model);
     const none = [];
     let held = false;
-    for (const w of focusWords(t)) {
+    for (const w of focusWords(raw)) {
       if (w.length < 3 || FOCUS_STOP.has(w) || seen.has(w)) continue;
       seen.add(w);
-      const hit = index.get(w) || [];
-      const used = hit.length > 0 && hit.length <= cap;
-      words.push({ word: w, files: hit.length, used });
-      if (!hit.length) none.push(w);
+      const hit = index.get(w) || new Map();
+      const weight = hit.size ? Math.log(1 + N / hit.size) / Math.log(1 + N) : 0;
+      words.push({ word: w, files: hit.size, used: hit.size > 0, weight: Math.round(weight * 1000) / 1000, kind: isName ? "name" : "word" });
+      if (!hit.size) none.push(w);
       else {
         held = true;
-        if (used) files.push(...hit);
-        else common.push(w);
+        for (const [f, x] of hit) {
+          if (x.path) {
+            add(f, weight * 2);
+            strong.add(f);
+          } else add(f, weight * Math.min(1, x.n / Math.sqrt(Math.max(1, symCount(f)))));
+        }
       }
     }
     // A token with no word in the graph is reported WHOLE, as it was typed —
     // the answer a caller got before the word step, unchanged.
     if (held) missing.push(...none);
-    else missing.push(t);
+    else if (!named) missing.push(raw);
   }
-  return { files: [...new Set(files)], missing, common, words };
+  return { files: [...mass.keys()], mass, strong, missing, common, words };
 }
 
 function graphMap(claudeDir, model, opts) {
@@ -1853,7 +2175,7 @@ function graphMap(claudeDir, model, opts) {
   const { files, edges, base, cached } = M.edgesFor(claudeDir, model);
   const idOf = new Map(files.map((f, i) => [f, i]));
   const tokens = (opts.focus || []).filter(Boolean);
-  const foc = tokens.length ? focusFiles(model, tokens) : { files: [], missing: [], common: [], words: [] };
+  const foc = tokens.length ? focusFiles(model, tokens) : { files: [], mass: new Map(), strong: new Set(), missing: [], common: [], words: [] };
 
   let rank;
   if (foc.files.length) {
@@ -1867,19 +2189,37 @@ function graphMap(claudeDir, model, opts) {
     // The mass is FIXED, so a fifth focus file dilutes the other four rather
     // than making the focus louder overall. That is Aider's rule and the reason
     // is the same: a focus list is a hint about where to start, not a filter.
+    //
+    // v2.2.0 (D6): the fixed mass is shared by each file's focus MASS (its
+    // weighted word hits), not in equal parts.
     const pers = new Float64Array(files.length).fill(1);
-    const each = MAP_FOCUS_MASS / foc.files.length;
+    let total = 0;
+    for (const f of foc.files) total += foc.mass.get(f) || 0;
     for (const f of foc.files) {
       const i = idOf.get(f);
-      if (i !== undefined) pers[i] += each;
+      if (i !== undefined && total > 0) pers[i] += (MAP_FOCUS_MASS * (foc.mass.get(f) || 0)) / total;
     }
     rank = M.pageRank(files.length, edges, pers);
   } else rank = base || M.pageRank(files.length, edges, null);
 
-  const scored = files
-    .map((rel, i) => ({ rel, score: rank[i] * M.multiplier(model, rel) }))
-    .sort((a, b) => b.score - a.score || a.rel.localeCompare(b.rel));
-  const candidates = scored.slice(0, MAP_MAX_ROWS);
+  // v2.2.0 (D6): hub damping, focus only. A file the focus never reached that
+  // is a shared hub — by its path, or by an in-degree in the top 2 % — would
+  // otherwise outrank the files the request names.
+  // T6b: only a file the focus reached by a PATH, a file token or a name is
+  // exempt — a file reached by symbol hits alone is damped when it is a hub.
+  const damp = foc.files.length ? M.hubDamping(files, edges, foc.strong) : null;
+  // Every indexed file is ranked — a file with no edge keeps its teleport share.
+  let scored = files.map((rel, i) => ({ rel, score: (rank[i] || 0) * M.multiplier(model, rel) * (damp ? damp[i] : 1) }));
+  // T6b: personalised PageRank sends rank from the focused files into what
+  // they IMPORT — the hubs. With a focus, the final score is half the walk and
+  // half the file's own focus mass, each normalised to [0, 1].
+  if (foc.files.length) {
+    const maxPr = Math.max(...scored.map((x) => x.score), 0) || 1;
+    const maxMass = Math.max(...foc.files.map((f) => foc.mass.get(f) || 0), 0) || 1;
+    scored = scored.map((x) => ({ rel: x.rel, score: 0.5 * (x.score / maxPr) + 0.5 * ((foc.mass.get(x.rel) || 0) / maxMass) }));
+  }
+  scored.sort((a, b) => b.score - a.score || a.rel.localeCompare(b.rel));
+  const candidates = scored;
   const fan = M.fanCounts(model);
   const pre = dirPrefix(candidates.map((c) => c.rel));
   const rows = candidates.map((c, i) => {
@@ -1910,7 +2250,7 @@ function graphMap(claudeDir, model, opts) {
       items.push({
         pri: 0,
         section: "focus",
-        text: `  focus words: ${foc.words.map((w) => (w.files && !w.used ? `${w.word} (too common)` : `${w.word} ${w.files}`)).join(" · ")}`,
+        text: `  focus words: ${foc.words.map((w) => (w.files ? `${w.word} ${w.files}×${w.weight.toFixed(2)}` : `${w.word} ${w.files}`)).join(" · ")}`,
         data: { item: "focus-words" },
       });
     for (let i = 0; i < k; i++) items.push({ pri: 1, section: "files", text: rows[i].text, data: rows[i].data });
@@ -1995,4 +2335,903 @@ function nameHits(model, name) {
   return calls + defs;
 }
 
-module.exports = { loadModel, resolveCall, resolveUrl, routeTable, urlIndex, findTarget, callersOf, nameHits, warmBlobs, ctx, forSlice, impact, graphMap, pathBetween, importsOf, TEST_FILE, SOURCE_DEFAULT, SOURCE_CAP, CALLERS_SOURCE_MAX, CALLERS_SOURCE_LINES };
+// ── v2.2.0 (T6-a): the executor PACK ────────────────────────────────────────
+// On a real Vue repository the executor never used the graph: it read ~180 KB
+// of REFERENCE code (the files it copies behaviour from) through `cat` and
+// `sed`, in about 30 calls. An outside-view card did not change that. The pack
+// is ONE file that holds the outline of each reference file and the exact
+// lines of the ranges the executor was about to go looking for.
+//
+// It is a LOCATOR, not a copy of the repository: the quoted ranges are charged
+// to a budget, a range is at most 80 lines, nothing is quoted twice, and a
+// file whose blob moved since the index says so beside every quote from it.
+const PACK_BIG_LINES = 150;
+const PACK_RANGE_LINES = 80;
+const PACK_MAX_REFS = 8;
+const PACK_AUTO_REFS = 5;
+const PACK_OUTLINE_BUDGET = 2200;
+const PACK_TESTS_BUDGET = 700;
+// R2 (lean pack v2): outline first. Only a short helper is quoted — whole.
+const PACK_QUOTE_BUDGET = 600;
+const PACK_QUOTE_MAX_LINES = 30;
+const PACK_READ_RANGES_LINES = 300;
+const PACK_PARENTS_PER_REF = 2;
+const PACK_PARENTS_MAX = 3;
+// R3: the component NEIGHBOURHOOD — outline-only refs around the given ones.
+const PACK_CHILDREN_PER_REF = 3;
+const PACK_NAME_REFS = 5;
+const PACK_NEIGH_MAX = 12;
+const PACK_SLICE_BUDGET = 600;
+const PACK_QUOTE_KINDS = new Set(["function", "method", "computed", "route"]);
+const PACK_CONTRACT = [["props", "prop"], ["emits", "emit"], ["inject", "inject"]];
+const PACK_NEVER_QUOTE = new Set(["prop", "emit", "inject", "template", "module"]);
+const LANG_FENCE = { vue: "vue", svelte: "svelte", js: "js", mjs: "js", cjs: "js", jsx: "jsx", ts: "ts", tsx: "tsx", mts: "ts", cts: "ts", py: "python", go: "go", java: "java", cs: "csharp", php: "php", rb: "ruby", rs: "rust", kt: "kotlin", kts: "kotlin", c: "c", h: "c", cc: "cpp", cpp: "cpp", hpp: "cpp" };
+
+// A `--refs=` operand: a file, a path suffix, or a symbol (its file).
+function resolveRef(model, q) {
+  const s = norm(q).replace(/:\d+$/, "");
+  if (model.fileSet.has(s)) return { file: s };
+  const t = findTarget(model, s);
+  if (t.kind === "file") return { file: t.rel };
+  if (t.kind === "symbol") return { file: t.sym.file };
+  if (t.kind === "ambiguous-file") return { candidates: t.files };
+  if (t.kind === "ambiguous") {
+    const files = [...new Set(t.candidates.map((c) => c.file))].sort();
+    return files.length === 1 ? { file: files[0] } : { candidates: files };
+  }
+  return { missing: String(q) };
+}
+
+// The top-level blocks of a single-file component, read from the working tree.
+// A block opens on a line that STARTS with `<template`, `<script` or `<style`
+// and closes on the first line that starts with its closing tag.
+function blockRanges(model, rel) {
+  const lines = fileLines(model, rel) || [];
+  const out = [];
+  let open = null;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (!open) {
+      const o = /^<(template|script|style)\b/.exec(l);
+      if (!o) continue;
+      open = { tag: o[1], from: i + 1 };
+      if (new RegExp(`</${open.tag}>\\s*$`).test(l)) {
+        out.push(`${open.tag} ${open.from}-${i + 1}`);
+        open = null;
+      }
+      continue;
+    }
+    if (new RegExp(`^</${open.tag}>`).test(l)) {
+      out.push(`${open.tag} ${open.from}-${i + 1}`);
+      open = null;
+    }
+  }
+  return out;
+}
+
+function packTestsOf(model, rel) {
+  const SIG = require("./graph-signals.js");
+  const syms = ((model.byFile[rel] || {}).symbols || []).filter((s) => s.kind !== "module");
+  return [
+    ...new Set([
+      ...syms.flatMap((s) => callersOf(model, s).confident.map((c) => c.sym.file)).filter((x) => TEST_FILE.test(x)),
+      ...importersOf(model, rel).filter((x) => TEST_FILE.test(x)),
+      ...SIG.testsByName(model, rel),
+    ]),
+  ].sort();
+}
+
+const memberName = (s) => (s.qname.includes(".") ? s.qname.split(".").slice(1).join(".") : s.qname);
+
+// The OUTLINE of one file: a header, then rows that each name the part they
+// are, so the size rule can cut `members` first.
+// T6c: `members` are kept as entries so the OUTLINE budget can drop the
+// smallest first; `routes` (a router edit target) are their own rows.
+const VUE_MEMBER_ORDER = { computed: 1, method: 2, watch: 3 };
+const PACK_ROUTE_ROWS = 40;
+function packOutline(model, rel, withRoutes, tag, focus) {
+  const f = model.byFile[rel] || {};
+  const syms = (f.symbols || []).filter((s) => s.kind !== "module");
+  const sfc = /\.(vue|svelte)$/.test(rel);
+  const blocks = sfc ? blockRanges(model, rel) : [];
+  const nLines = Number(f.lines) || (fileLines(model, rel) || []).length;
+  const head = `${rel} · ${nLines} lines${blocks.length ? " · " + blocks.join(" · ") : ""}${tag ? ` · ${tag}` : ""}${nLines > PACK_READ_RANGES_LINES ? " · read ranges, not the file" : ""}`;
+  const rows = [];
+  const contract = PACK_CONTRACT.map(([label, kind]) => {
+    const n = syms.filter((s) => s.kind === kind).map((s) => s.name);
+    return n.length ? `${label} ${n.join(", ")}` : null;
+  }).filter(Boolean);
+  if (contract.length) rows.push({ part: "contract", text: `  contract  ${contract.join(" · ")}` });
+  const routes = withRoutes ? syms.filter((s) => s.kind === "route").sort((a, b) => a.lines[0] - b.lines[0]) : [];
+  if (routes.length) {
+    // R3: a router-like target (>= 10 routes) keeps the rows whose path or
+    // name holds a focus word, plus 2 rows before and after each hit. No hit
+    // -> the first 10.
+    let keep = routes.slice(0, PACK_ROUTE_ROWS);
+    if (routes.length >= 10) {
+      const words = (focus || []).map((w) => String(w).toLowerCase()).filter((w) => w.length >= 2);
+      const idx = new Set();
+      routes.forEach((r, i) => {
+        const hay = `${r.qname} ${r.route_name || ""}`.toLowerCase();
+        if (words.some((w) => hay.includes(w))) for (let k = i - 2; k <= i + 2; k++) if (k >= 0 && k < routes.length) idx.add(k);
+      });
+      keep = idx.size ? routes.filter((_, i) => idx.has(i)) : routes.slice(0, 10);
+    }
+    for (const s of keep) rows.push({ part: "routes", text: `  ${s.qname}${s.route_name ? ` ${s.route_name}` : ""} ${s.lines[0]}-${s.lines[1]}` });
+    if (routes.length > keep.length) rows.push({ part: "routes", text: `  +${routes.length - keep.length} other routes` });
+  }
+  const contractKinds = new Set(PACK_CONTRACT.map((x) => x[1]));
+  // A component's `data` leads, then computed, methods and watchers.
+  const rank = (s) => (!sfc ? 0 : s.name === "data" ? 0 : VUE_MEMBER_ORDER[s.kind] || 4);
+  const members = syms
+    .filter((s) => !contractKinds.has(s.kind) && s.kind !== "template" && !(routes.length && s.kind === "route") && !(sfc && s.kind === "class" && !s.qname.includes(".")))
+    .sort((a, b) => rank(a) - rank(b) || a.lines[0] - b.lines[0])
+    .map((s) => ({ text: `${memberName(s)} ${s.lines[0]}-${s.lines[1]}`, span: s.lines[1] - s.lines[0], keep: true }));
+  const membersRow = { part: "members", members, text: null };
+  if (members.length) rows.push(membersRow);
+  const firstUse = new Map();
+  for (const s of syms.filter((x) => x.kind === "template"))
+    for (const c of s.calls || []) if (c.ref && /^[A-Z][a-z0-9]/.test(c.name) && (!firstUse.has(c.name) || c.line < firstUse.get(c.name))) firstUse.set(c.name, c.line);
+  if (firstUse.size) rows.push({ part: "uses", text: `  uses      ${[...firstUse].map(([n, l]) => `${n} ${l}`).join(", ")}` });
+  const imports = [...new Set((f.imports || []).flatMap((imp) => importTargets(model, rel, f.lang, imp)))].slice(0, 8);
+  if (imports.length) rows.push({ part: "imports", text: `  imports   ${imports.join(", ")}` });
+  const used = [];
+  for (const s of syms) for (const c of callersOf(model, s).confident) if (c.sym.file !== rel) used.push(`${c.sym.file}:${c.line}`);
+  const usedBy = [...new Set(used)].sort();
+  if (usedBy.length < 5) for (const imp of importersOf(model, rel).sort()) if (!usedBy.some((u) => u.startsWith(imp + ":"))) usedBy.push(imp);
+  if (usedBy.length) rows.push({ part: "used", text: `  used by   ${usedBy.slice(0, 5).join(" ")}` });
+  const tests = packTestsOf(model, rel).slice(0, 3);
+  if (tests.length) rows.push({ part: "tests", text: `  tests     ${tests.join(" ")}` });
+  return { head, rows };
+}
+
+function outlineText(ol) {
+  return ol
+    .map((x) =>
+      [
+        x.head,
+        ...x.rows.map((r) => {
+          if (r.part !== "members") return r.text;
+          const kept = r.members.filter((m) => m.keep);
+          const gone = r.members.length - kept.length;
+          return `  members   ${kept.map((m) => m.text).join(", ")}${gone ? `${kept.length ? ", " : ""}+${gone} members` : ""}`;
+        }),
+      ].join("\n")
+    )
+    .join("\n");
+}
+
+// §4: the first test file's own rows — describe / it / test names, and its
+// top-level helpers — read from the working tree.
+function testRows(model, rel) {
+  const lines = fileLines(model, rel) || [];
+  const out = [];
+  for (let i = 0; i < lines.length && out.length < 12; i++) {
+    const l = lines[i];
+    const t = /^\s*(describe|it|test)(?:\.\w+)?\s*\(\s*(['"`])(.*?)\2/.exec(l);
+    if (t) {
+      out.push(`${t[1]} "${t[3]}" ${i + 1}`);
+      continue;
+    }
+    const h = /^(?:export\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)|^(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/.exec(l);
+    if (h) out.push(`${h[1] || h[2]}() ${i + 1}`);
+  }
+  return out;
+}
+
+// R2: the files whose `template` uses a child component (the `<Tag>` users).
+// R2b: through RESOLVED edges first — the `<Owner>.template` symbols with a
+// confident edge to the child's component class. The tag-name match is the
+// fallback for a ref with no class symbol.
+function templateParents(model, child) {
+  const cls = ((model.byFile[child] || {}).symbols || []).find((x) => x.kind === "class" && !x.qname.includes("."));
+  if (cls) {
+    const files = callersOf(model, cls).confident.filter((c) => c.sym.kind === "template" && c.sym.file !== child && !TEST_FILE.test(c.sym.file)).map((c) => c.sym.file);
+    return [...new Set(files)].sort();
+  }
+  const base = child.split("/").pop().replace(/\.(vue|svelte)$/, "");
+  const kebab = base.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+  const out = [];
+  for (const rel of [...model.fileSet].sort()) {
+    if (rel === child || TEST_FILE.test(rel) || !/\.(vue|svelte)$/.test(rel)) continue;
+    const syms = ((model.byFile[rel] || {}).symbols || []).filter((x) => x.kind === "template");
+    if (syms.some((t) => (t.calls || []).some((c) => c.name === base || c.name === kebab))) out.push(rel);
+  }
+  return out;
+}
+
+// R3: the in-repo components a file's `template` uses — the resolved `ref`
+// edges from `<Owner>.template` to another file's component class.
+function templateChildren(model, rel) {
+  const out = [];
+  for (const t of ((model.byFile[rel] || {}).symbols || []).filter((x) => x.kind === "template")) {
+    for (const { res } of calleesOf(model, t)) {
+      if (!CONFIDENT.has(res.state)) continue;
+      const s = model.symbols.get(res.target);
+      if (s && s.kind === "class" && s.file !== rel && !TEST_FILE.test(s.file) && !out.includes(s.file)) out.push(s.file);
+    }
+  }
+  return out;
+}
+
+// R3b: the CHILDREN of a component — the in-repo `.vue`/`.svelte` files it
+// IMPORTS (resolved import edges) plus its template-tag edges. A dynamic
+// `<component :is>` has no tags, so the imports are the only signal there.
+function componentChildren(model, rel) {
+  const f = model.byFile[rel] || {};
+  const out = [];
+  for (const t of [...new Set((f.imports || []).flatMap((imp) => importTargets(model, rel, f.lang, imp)))])
+    if (/\.(vue|svelte)$/.test(t) && t !== rel && !TEST_FILE.test(t) && !out.includes(t)) out.push(t);
+  for (const t of templateChildren(model, rel)) if (!out.includes(t)) out.push(t);
+  return out;
+}
+
+function packExcerpt(model, ex, fresh) {
+  const lines = fileLines(model, ex.file) || [];
+  const to = Math.min(ex.b, ex.a + PACK_RANGE_LINES - 1);
+  const ext = (ex.file.split(".").pop() || "").toLowerCase();
+  const body = lines.slice(ex.a - 1, to).join("\n");
+  const more = ex.b > to ? `\n… ${ex.b - to} more lines, read ${to + 1}-${ex.b}` : "";
+  const changed = fresh !== "current" ? "  (CHANGED since index — lines may have moved)" : "";
+  return `### ${ex.file}:${ex.a}-${ex.b} · ${ex.names.join(", ")}${changed}\n\`\`\`${LANG_FENCE[ext] || ext}\n${body}\n\`\`\`${more}`;
+}
+
+// R4: the spec closest to a file. By NAME first (`<Name>*.spec.*` /
+// `<Name>*.test.*` under a tests folder), then a test that reaches it.
+const PACK_SPEC_FILES = 2;
+const PACK_SPEC_SETUP_LINES = 45;
+function closestSpec(model, rel) {
+  const name = rel.split("/").pop().replace(/\.[^.]+$/, "");
+  const byName = [...model.fileSet]
+    .filter((f) => /(^|\/)(tests?|__tests__)\//.test(f))
+    .filter((f) => {
+      const b = f.split("/").pop();
+      return b.startsWith(name) && /\.(spec|test)\.[^.]+$/.test(b);
+    })
+    .sort((a, b) => a.length - b.length || a.localeCompare(b));
+  if (byName.length) return byName[0];
+  return packTestsOf(model, rel)[0] || null;
+}
+
+// The end line of a block that opens on line `i` (0-based): bracket balance,
+// strings stripped.
+function blockEnd(lines, i) {
+  let depth = 0;
+  let opened = false;
+  for (let k = i; k < lines.length; k++) {
+    for (const ch of lines[k].replace(/(['"`])(?:\\.|(?!\1).)*\1/g, "")) {
+      if (ch === "{" || ch === "(" || ch === "[") {
+        depth++;
+        opened = true;
+      } else if (ch === "}" || ch === ")" || ch === "]") depth--;
+    }
+    if (opened && depth <= 0) return k;
+  }
+  return i;
+}
+
+// The spec's top-level outline (helpers and `describe` blocks with ranges)
+// and its SETUP quoted: line 1 through the end of the last top-level
+// jest.mock / import / const / let before the first `describe`.
+function specSetup(model, spec, rel) {
+  const lines = fileLines(model, spec) || [];
+  if (!lines.length) return null;
+  const outline = [];
+  let firstDescribe = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const d = /^describe(?:\.\w+)?\s*\(\s*(['"`])(.*?)\1/.exec(l);
+    const h = /^(?:export\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)|^(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/.exec(l);
+    if (d) {
+      if (firstDescribe < 0) firstDescribe = i;
+      const e = blockEnd(lines, i);
+      outline.push(`describe "${d[2]}" ${i + 1}-${e + 1}`);
+      i = e;
+    } else if (h) {
+      const e = blockEnd(lines, i);
+      outline.push(`${h[1] || h[2]}() ${i + 1}-${e + 1}`);
+      i = e;
+    }
+  }
+  const stop = firstDescribe < 0 ? lines.length : firstDescribe;
+  let last = -1;
+  for (let i = 0; i < stop; i++) {
+    if (!/^(jest\.mock\s*\(|import\b|const\b|let\b)/.test(lines[i])) continue;
+    let e = i;
+    if (/^import\b/.test(lines[i])) {
+      while (e < stop - 1 && !/\bfrom\b|^import\s+['"]|;\s*$/.test(lines[e])) e++;
+    } else e = blockEnd(lines, i);
+    last = Math.max(i, e);
+    i = last;
+  }
+  const head = `closest spec for ${rel.split("/").pop()}: ${spec} · ${lines.length} lines${outline.length ? ` — ${outline.join("; ")}` : ""}`;
+  if (last < 0) return head;
+  const to = Math.min(last + 1, PACK_SPEC_SETUP_LINES);
+  const ext = (spec.split(".").pop() || "").toLowerCase();
+  const more = last + 1 > to ? `\n… setup goes on to line ${last + 1}` : "";
+  return `${head}\nsetup 1-${to}:\n\`\`\`${LANG_FENCE[ext] || ext}\n${lines.slice(0, to).join("\n")}\n\`\`\`${more}`;
+}
+
+// `opts`: { declared, refs (null = pick from the map), focus, budget, sliceCard }
+function buildPack(claudeDir, model, opts) {
+  const SIG = require("./graph-signals.js");
+  const o = opts || {};
+  const budget = Math.max(500, Math.min(12000, Number(o.budget) || PACK_QUOTE_BUDGET));
+  const declared = [...new Set((o.declared || []).map(norm))];
+  const known = declared.filter((r) => model.fileSet.has(r));
+  const fresh = declared.filter((r) => !model.fileSet.has(r));
+  const declaredSet = new Set(known);
+  const focusList = (o.focus || []).filter(Boolean);
+
+  // ── refs ──
+  let refs = [];
+  const refMissing = [];
+  if (o.refs && o.refs.length) {
+    for (const q of o.refs) {
+      const r = resolveRef(model, q);
+      if (r.candidates) return { ok: false, state: "ambiguous-target", query: String(q), candidates: r.candidates.map((file) => ({ file })), exit: 4 };
+      if (r.missing) refMissing.push(r.missing);
+      else if (!refs.includes(r.file)) refs.push(r.file);
+    }
+  } else {
+    const m = graphMap(claudeDir, model, { focus: [...known, ...focusList], budget: 8000 });
+    refs = (m.files || []).map((x) => x.file).filter((f) => !declaredSet.has(f) && !TEST_FILE.test(f)).slice(0, PACK_AUTO_REFS);
+  }
+  refs = refs.slice(0, PACK_MAX_REFS);
+  // R3: the NEIGHBOURHOOD — outline only, never quoted. Ranked: children of
+  // the given refs (two hops), their parents, FILE-NAME focus matches, then
+  // the children of a declared component. Tests and files already present
+  // are skipped; cap 12.
+  const parents = [];
+  const isSfc = (f) => /\.(vue|svelte)$/.test(f);
+  const base = (f) => f.split("/").pop();
+  const addNeigh = (file, tag) => {
+    if (parents.length >= PACK_NEIGH_MAX || TEST_FILE.test(file) || refs.includes(file) || declaredSet.has(file) || parents.some((x) => x.file === file)) return false;
+    parents.push({ file, tag });
+    return true;
+  };
+  const addChildren = (rel) => {
+    const got = [];
+    for (const c of componentChildren(model, rel)) {
+      if (got.length >= PACK_CHILDREN_PER_REF) break;
+      if (addNeigh(c, `child of ${base(rel)}`)) got.push(c);
+    }
+    return got;
+  };
+  const hop1 = refs.filter(isSfc).flatMap((rel) => addChildren(rel));
+  for (const c of hop1) addChildren(c);
+  for (const rel of refs.filter(isSfc)) {
+    let n = 0;
+    for (const p of templateParents(model, rel)) if (n < PACK_PARENTS_PER_REF && addNeigh(p, `parent of ${base(rel)}`)) n++;
+  }
+  // R3b: name matches — the focus words found in the file's OWN name (no
+  // folder, no extension). Tie-break: the number of files that import it.
+  let multiHits = [];
+  let fw = [...new Set(focusList.flatMap((w) => focusWords(w)).filter((w) => w.length >= 2))];
+  if (fw.length && parents.length < PACK_NEIGH_MAX) {
+    // R3c: each word weighs IDF_name = log(1 + N / n_word) over the FILE
+    // NAMES of the indexed non-test files, so a word in dozens of names
+    // weighs little. Ties: the number of files that import it.
+    const ownWords = new Map();
+    for (const rel of model.fileSet) if (!TEST_FILE.test(rel)) ownWords.set(rel, new Set(focusWords(base(rel).replace(/\.[^.]+$/, ""))));
+    // R3d: a word in a DECLARED file's own name describes the target — it
+    // only finds siblings, so it does not count.
+    const declWords = new Set(known.flatMap((rel) => focusWords(base(rel).replace(/\.[^.]+$/, ""))));
+    fw = fw.filter((w) => !declWords.has(w));
+    const N = ownWords.size;
+    const idf = new Map(fw.map((w) => [w, Math.log(1 + N / Math.max(1, [...ownWords.values()].filter((o) => [...o].some((seg) => wordMatch(w, seg))).length))]));
+    const hits = [];
+    for (const [rel, own] of ownWords) {
+      if (declaredSet.has(rel) || refs.includes(rel)) continue;
+      const words = fw.filter((w) => [...own].some((seg) => wordMatch(w, seg)));
+      // R4: a file whose name holds several focus words is the likely
+      // copy-from file: (sum of IDF) x (1 + 0.5 x (k - 1)), and k >= 2 always
+      // ranks before any single-word hit.
+      if (words.length) hits.push({ rel, words, score: words.reduce((a, w) => a + idf.get(w), 0) * (1 + 0.5 * (words.length - 1)), imp: importersOf(model, rel).length });
+    }
+    hits.sort((a, b) => (b.words.length >= 2) - (a.words.length >= 2) || b.score - a.score || b.imp - a.imp || a.rel.localeCompare(b.rel));
+    multiHits = hits.filter((h) => h.words.length >= 2).map((h) => h.rel);
+    let n = 0;
+    for (const h of hits) {
+      if (n >= PACK_NAME_REFS) break;
+      if (addNeigh(h.rel, `name match: ${h.words.join(", ")} (${h.score.toFixed(2)})`)) n++;
+    }
+  }
+  for (const rel of known.filter(isSfc)) addChildren(rel);
+  warmFiles(model, new Set([...known, ...refs, ...parents.map((x) => x.file)]));
+
+  // ── §3: the candidates, scored ──
+  const want = new Set(focusList.flatMap((w) => focusWords(w)).filter((w) => w.length >= 2));
+  const cands = new Map();
+  for (const rel of refs) for (const s of model.byFile[rel].symbols || []) if (PACK_QUOTE_KINDS.has(s.kind)) cands.set(s.id, s);
+  for (const s of [...cands.values()]) {
+    for (const { res } of calleesOf(model, s)) {
+      if (!CONFIDENT.has(res.state)) continue;
+      const t = model.symbols.get(res.target);
+      if (t && declaredSet.has(t.file) && !PACK_NEVER_QUOTE.has(t.kind)) cands.set(t.id, t);
+    }
+  }
+  const called = new Set();
+  for (const s of cands.values()) {
+    for (const { res } of calleesOf(model, s)) if (CONFIDENT.has(res.state) && res.target !== s.id && cands.has(res.target)) called.add(res.target);
+  }
+  // R2: only a short helper (<= 30 lines) is quoted, whole; a member of a
+  // big edit target (outlined in §1, read in full anyway) is never quoted.
+  const bigSet = new Set(known.filter((rel) => (Number((model.byFile[rel] || {}).lines) || 0) > PACK_BIG_LINES));
+  for (const [id, s] of [...cands]) if (s.lines[1] - s.lines[0] + 1 > PACK_QUOTE_MAX_LINES || bigSet.has(s.file)) cands.delete(id);
+  const scored = [...cands.values()].map((s) => {
+    const words = new Set(focusWords(s.qname));
+    let score = 0;
+    for (const w of want) if (words.has(w)) score += 3;
+    if (called.has(s.id)) score += 2;
+    if (s.exported || !/^[_#]/.test(s.name)) score += 1;
+    const imp = SIG.importance(model, s, callersOf(model, s).confident.length);
+    const relevance = score - (s.exported || !/^[_#]/.test(s.name) ? 1 : 0);
+    return { s, score, imp, relevance };
+  });
+  scored.sort((a, b) => b.score - a.score || b.imp - a.imp || a.s.file.localeCompare(b.s.file) || a.s.lines[0] - b.s.lines[0]);
+  // T6c: the quotes are SPREAD — round 1 takes the best candidate of EACH ref
+  // file (in ref order), round 2 the second best, and so on. A file whose best
+  // candidate has no focus word and no caller among the candidates gets its
+  // single most important one, in round 1 only.
+  const groupOrder = [...refs, ...known];
+  const groups = groupOrder.map((rel) => {
+    const g = scored.filter((x) => x.s.file === rel);
+    if (g.length && g[0].relevance <= 0) return g.slice().sort((a, b) => b.imp - a.imp || a.s.lines[0] - b.s.lines[0]).slice(0, 1);
+    return g;
+  });
+  const spread = [];
+  for (let round = 0; groups.some((g) => g.length > round); round++) for (const g of groups) if (g[round]) spread.push(g[round]);
+
+  // In score order until the budget is used. A range that overlaps one
+  // already taken is MERGED into it; one that sits inside it is skipped.
+  const chosen = [];
+  let used = 0;
+  let overBudget = 0;
+  const costOf = (ex) => tok(packExcerpt(model, ex, blobState(model, ex.file))) + 1;
+  for (const { s } of spread) {
+    const a = s.lines[0];
+    const b = s.lines[1];
+    const over = chosen.filter((x) => x.file === s.file && x.a <= b && a <= x.b);
+    if (over.some((x) => x.a <= a && b <= x.b)) continue;
+    const merged = {
+      file: s.file,
+      a: Math.min(a, ...over.map((x) => x.a)),
+      b: Math.max(b, ...over.map((x) => x.b)),
+      names: [...over.flatMap((x) => x.names), s.qname],
+    };
+    merged.tokens = costOf(merged);
+    const was = over.reduce((n, x) => n + x.tokens, 0);
+    if (used - was + merged.tokens > budget) {
+      overBudget++;
+      continue;
+    }
+    for (const x of over) chosen.splice(chosen.indexOf(x), 1);
+    chosen.push(merged);
+    used += merged.tokens - was;
+  }
+  const order = new Map([...refs, ...known].map((f, i) => [f, i]));
+  chosen.sort((x, y) => (order.get(x.file) || 0) - (order.get(y.file) || 0) || x.a - y.a);
+
+  // ── §1, §2, §4 ── (T6c: three budgets, never traded)
+  const big = known.filter((rel) => (Number((model.byFile[rel] || {}).lines) || 0) > PACK_BIG_LINES);
+  const outlines1 = big.map((rel) => packOutline(model, rel, true, null, focusList));
+  const outlines2 = [...refs.map((rel) => packOutline(model, rel, false)), ...parents.map((p) => packOutline(model, p.file, false, p.tag))];
+  const outlineBudget = Math.max(200, Math.min(12000, Number(o.outlineBudget) || PACK_OUTLINE_BUDGET));
+  const cut = [];
+  // The OUTLINE budget: outlines are never cut for quotes. Over their own
+  // budget, the SMALLEST members go first, and each row says `+<n> members`.
+  const all = [...outlines1, ...outlines2];
+  let outlineTok = tok(outlineText(all));
+  if (outlineTok > outlineBudget) {
+    // The members get what the fixed rows leave — but never less than 40 % of
+    // the outline budget — shared EQUALLY by the files that have members, so
+    // one long router outline cannot empty every other file's row. Inside a
+    // file the largest members are kept and the smallest go first.
+    const rowsWith = all.flatMap((x) => x.rows.filter((r) => r.part === "members"));
+    const memberTok = rowsWith.reduce((a, r) => a + r.members.reduce((n, m) => n + Math.ceil((m.text.length + 2) / 4), 0), 0);
+    const fixed = outlineTok - memberTok;
+    const share = Math.floor(Math.max(outlineBudget - fixed, Math.ceil(outlineBudget * 0.4)) / Math.max(1, rowsWith.length));
+    let dropped = 0;
+    for (const r of rowsWith) {
+      let used = 0;
+      for (const m of r.members.slice().sort((a, b) => b.span - a.span)) {
+        const c = Math.ceil((m.text.length + 2) / 4);
+        if (used + c <= share) used += c;
+        else {
+          m.keep = false;
+          dropped++;
+        }
+      }
+    }
+    if (dropped) cut.push(`§1/§2 ${dropped} smallest member(s) over the ${outlineBudget}-token outline budget`);
+    // R2b: §1 and §2 outlines share ONE hard budget. Still over → route rows
+    // past the first 10, then the smallest kept members, then the
+    // imports / used-by / tests rows (last file first).
+    let hard = 0;
+    const over = () => tok(outlineText(all)) > outlineBudget;
+    while (over()) {
+      const rt = all.find((x) => x.rows.filter((r) => r.part === "routes" && !/^ {2}\+\d+ (?:other )?routes$/.test(r.text)).length > 10);
+      if (rt) {
+        const rows = rt.rows.filter((r) => r.part === "routes" && !/^ {2}\+\d+ (?:other )?routes$/.test(r.text));
+        rt.rows.splice(rt.rows.indexOf(rows[rows.length - 1]), 1);
+        const more = rt.rows.find((r) => r.part === "routes" && /^ {2}\+\d+ (?:other )?routes$/.test(r.text));
+        if (more) more.text = `  +${Number(/\d+/.exec(more.text)[0]) + 1} other routes`;
+        else rt.rows.splice(rt.rows.indexOf(rows[rows.length - 2]) + 1, 0, { part: "routes", text: "  +1 other routes" });
+        hard++;
+        continue;
+      }
+      const kept = all.flatMap((x) => x.rows.filter((r) => r.part === "members").flatMap((r) => r.members.filter((m) => m.keep)));
+      if (kept.length) {
+        kept.sort((a, b) => a.span - b.span)[0].keep = false;
+        hard++;
+        continue;
+      }
+      const opt = [...all].reverse().find((x) => x.rows.some((r) => ["imports", "used", "tests"].includes(r.part)));
+      if (!opt) break;
+      const i = opt.rows.map((r) => ["imports", "used", "tests"].includes(r.part)).lastIndexOf(true);
+      opt.rows.splice(i, 1);
+      hard++;
+    }
+    if (hard) cut.push(`§1/§2 ${hard} more row(s) or member(s) to keep the ${outlineBudget}-token outline budget`);
+  }
+  const testFiles = [...new Set([...known, ...refs].flatMap((rel) => packTestsOf(model, rel)))].sort();
+  const quoted = chosen.map((ex) => packExcerpt(model, ex, blobState(model, ex.file)));
+  const gen = model.meta.generation || 0;
+  const nFiles = new Set([...declared, ...refs]).size;
+
+  // R4: the CLOSEST spec's setup. For each given ref and each name match of
+  // >= 2 words (max 2 files): its spec's top-level outline and the setup lines
+  // (top of file through the last top-level jest.mock / import / const before
+  // the first describe), max 45 lines.
+  const specFor = [...(o.refs && o.refs.length ? refs : []), ...multiHits.filter((f) => parents.some((p) => p.file === f))].slice(0, PACK_SPEC_FILES);
+  const specBlocks = [];
+  const specSeen = new Set();
+  for (const rel of specFor) {
+    const spec = closestSpec(model, rel);
+    if (!spec || specSeen.has(spec)) continue;
+    specSeen.add(spec);
+    const b = specSetup(model, spec, rel);
+    if (b) specBlocks.push(b);
+  }
+
+  // The TESTS budget (700 tokens): rows go from the end.
+  let testLines = [];
+  if (testFiles.length) {
+    const rows = testRows(model, testFiles[0]);
+    testLines = [`${testFiles[0]}${rows.length ? ` — ${rows.join("; ")}` : ""}`, ...testFiles.slice(1, 5)];
+    let n = 0;
+    while (testLines.length > 1 && tok([...specBlocks, ...testLines].join("\n")) > PACK_TESTS_BUDGET) {
+      testLines.pop();
+      n++;
+    }
+    if (tok(testLines.join("\n")) > PACK_TESTS_BUDGET) {
+      testLines = [testFiles[0]];
+      n++;
+    }
+    if (n) cut.push(`§4 ${n} row(s) over the ${PACK_TESTS_BUDGET}-token tests budget`);
+  }
+  while (specBlocks.length && tok([...specBlocks, ...testLines].join("\n")) > PACK_TESTS_BUDGET) {
+    specBlocks.pop();
+    cut.push(`§4 a spec setup over the ${PACK_TESTS_BUDGET}-token tests budget`);
+  }
+
+  const parts = [
+    `# graph pack · gen ${gen} · ${nFiles} files`,
+    "Read this pack ALONE, with the Read tool, before anything else. It is a map: file outlines with line",
+    "ranges, plus a few short helpers quoted whole. Then read ONLY the ranges you need, with Read",
+    "offset/limit or `sed -n a,bp` — one range per member you need, never a whole file over 300 lines",
+    "that the outline covers. A file you will EDIT: read it in full first (read-ladder exception 1).",
+    "",
+    "## 1. Files to change — outside view",
+  ];
+  // R2b: inside a pack the outside view gets at most ${PACK_SLICE_BUDGET} tokens in total.
+  if (o.sliceCard) {
+    const sc = known.length ? forSlice(model, known, { budget: PACK_SLICE_BUDGET }) : null;
+    parts.push(sc && sc.ok ? sc.card : o.sliceCard);
+  }
+  if (outlines1.length) parts.push(outlineText(outlines1));
+  if (fresh.length) parts.push(`new (no record yet): ${fresh.join(", ")}`);
+  if (!o.sliceCard && !outlines1.length && !fresh.length) parts.push("(no declared file)");
+  parts.push("", "## 2. Reference files — outline");
+  parts.push(outlines2.length ? outlineText(outlines2) : "(no reference file)");
+  if (refMissing.length) parts.push(`not in the graph: ${refMissing.join(", ")}`);
+  parts.push("", "## 3. Quoted ranges");
+  parts.push(quoted.length ? quoted.join("\n\n") : "(nothing quoted)");
+  parts.push("", "## 4. Tests that reach these files");
+  parts.push(testLines.length ? testLines.join("\n") : "(no test reaches these files)");
+  if (specBlocks.length) parts.push("", specBlocks.join("\n\n"));
+  let text = parts.join("\n");
+  // §3 keeps to its own budget; a range the budget left out is named.
+  if (overBudget) cut.push(`§3 ${overBudget} range(s) over the ${budget}-token quote budget`);
+  if (cut.length) text += `\n\ncut: ${cut.join(", ")}`;
+  text += "\n";
+  return {
+    ok: true,
+    files: nFiles,
+    refs,
+    parents: parents.map((p) => ({ file: p.file, tag: p.tag })),
+    refs_missing: refMissing,
+    excerpts: chosen.length,
+    quoted: chosen.map((x) => ({ file: x.file, from: x.a, to: x.b, names: x.names })),
+    tokens: tok(text),
+    cut,
+    big_declared: big,
+    budget,
+    text,
+  };
+}
+
+// ── v2.2.0 (R6): the executor ANCHORS ───────────────────────────────────────
+// The pack file was read first but did not shorten the search: it STEERED the
+// first calls toward the files it outlined, and it rode along every later
+// turn. Turns, not bytes, drive cost. The anchors are the opposite shape: at
+// most 12 `path:a-b` ranges INLINE in the slice, and ONE shell command that
+// prints them all — one call, then the executor reads on from there.
+//
+// Never a whole file, never a test helper, ranked by focus score, overlapping
+// ranges in one file merged. No file is written.
+const ANCHOR_MAX = 12;
+const ANCHOR_REF_MEMBERS = 3;
+const ANCHOR_DECL_MEMBERS = 2;
+const ANCHOR_RANGE_LINES = 80;
+// v2.2.0 (R8): the card carries the code inline, so its cap follows the read cap.
+const ANCHOR_CARD_BYTES = 11264;
+// v2.2.0 (R7): five-line ranges were not enough to copy from; executors
+// `cat` the whole file. Each range is padded, and the read is capped.
+const ANCHOR_PAD = 6;
+const ANCHOR_READ_TOKENS = 2500;
+const ANCHOR_CALLERS = 6;
+const ANCHOR_CALLER_PAD = 4;
+const ANCHOR_CALLER_SCORE = 10;
+// v2.2.0 (R10): the caller cap when a focus word names a declared export.
+const ANCHOR_FOCUS_CALLERS = 8;
+const ANCHOR_NEVER = new Set(["module", "template", "prop", "emit", "inject"]);
+const SAFE_PATH = /^[A-Za-z0-9._@+\/-]+$/;
+
+// v2.2.0: a declared file with this many route records is a ROUTER.
+const ANCHOR_ROUTER_MIN = 10;
+const ANCHOR_COMMENT_REACH = 15;
+const QUOTED_PATH_COMMENT = /(\/\/|\/\*|^\s*\*).*['"`][^'"`\s]*\/[^'"`\s]*['"`]/;
+
+// The top feature folder: the first segment after `src/views/`, else after `src/`.
+function featureOf(rel) {
+  const m = rel.match(/(?:^|\/)src\/views\/([^/]+)\//) || rel.match(/(?:^|\/)src\/([^/]+)\//);
+  return m ? m[1] : "";
+}
+
+function anchorHits(want, s) {
+  const words = focusWords(`${s.qname} ${s.route_name || ""}`);
+  return [...want].filter((w) => words.some((seg) => wordMatch(w, seg)));
+}
+
+function anchorMembers(model, rel) {
+  const f = model.byFile[rel] || {};
+  const nLines = Number(f.lines) || (fileLines(model, rel) || []).length;
+  const sfc = /\.(vue|svelte)$/.test(rel);
+  return (f.symbols || []).filter((s) => {
+    if (ANCHOR_NEVER.has(s.kind)) return false;
+    if (sfc && s.kind === "class" && !s.qname.includes(".")) return false;
+    const span = s.lines[1] - s.lines[0] + 1;
+    return !(nLines && span >= Math.max(10, nLines * 0.9));
+  });
+}
+
+// `opts`: { declared, refs (null = name match), focus }
+function buildAnchors(claudeDir, model, opts) {
+  const SIG = require("./graph-signals.js");
+  const o = opts || {};
+  const declared = [...new Set((o.declared || []).map(norm))];
+  const known = declared.filter((r) => model.fileSet.has(r) && !TEST_FILE.test(r));
+  const declaredSet = new Set(known);
+  const focusList = (o.focus || []).filter(Boolean);
+  const want = new Set(focusList.flatMap((w) => focusWords(w)).filter((w) => w.length >= 2));
+  const base = (f) => f.split("/").pop();
+  const tokens = new Set(focusList.flatMap((w) => String(w).split(/[\s,]+/)).map((w) => w.toLowerCase()).filter(Boolean));
+  const focusCallees = [];
+  for (const rel of known) {
+    for (const s of (model.byFile[rel] || {}).symbols || []) {
+      // R10b: CALLABLE only — a function or method, or an exported const with a
+      // confident caller (an arrow helper). Never a class (a Vue SFC component).
+      if (!s.exported || !(s.kind === "function" || s.kind === "method" || (s.kind === "const" && callersOf(model, s).confident.length))) continue;
+      const nm = s.name || String(s.qname || "").split(".").pop();
+      const nw = focusWords(nm);
+      if (tokens.has(String(nm).toLowerCase()) || (nw.length >= 2 && nw.every((w) => [...want].some((x) => wordMatch(x, w))))) focusCallees.push({ rel, s, nm });
+    }
+  }
+  const focusMode = focusCallees.length > 0;
+
+  // ── refs: given, else a name match of >= 2 focus words, else the best one ──
+  let refs = [];
+  const refMissing = [];
+  if (o.refs && o.refs.length) {
+    for (const q of o.refs) {
+      const r = resolveRef(model, q);
+      if (r.candidates) return { ok: false, state: "ambiguous-target", query: String(q), candidates: r.candidates.map((file) => ({ file })), exit: 4 };
+      if (r.missing) refMissing.push(r.missing);
+      else if (!refs.includes(r.file) && !TEST_FILE.test(r.file)) refs.push(r.file);
+    }
+  } else if (want.size && !focusMode) {
+    // R10b: in focus mode the call sites are the work; no auto name-matched refs.
+    const declWords = new Set(known.flatMap((rel) => focusWords(base(rel).replace(/\.[^.]+$/, ""))));
+    const fw = [...want].filter((w) => !declWords.has(w));
+    const hits = [];
+    for (const rel of model.fileSet) {
+      if (TEST_FILE.test(rel) || declaredSet.has(rel)) continue;
+      const own = focusWords(base(rel).replace(/\.[^.]+$/, ""));
+      const words = fw.filter((w) => own.some((seg) => wordMatch(w, seg)));
+      if (words.length) hits.push({ rel, n: words.length, imp: importersOf(model, rel).length });
+    }
+    const featA = new Set(known.map(featureOf).filter(Boolean));
+    const xf = (rel) => (featA.has(featureOf(rel)) ? 0 : 1);
+    hits.sort((a, b) => xf(a.rel) - xf(b.rel) || b.n - a.n || b.imp - a.imp || a.rel.localeCompare(b.rel));
+    const multi = hits.filter((h) => h.n >= 2).map((h) => h.rel);
+    refs = multi.length ? multi.slice(0, PACK_AUTO_REFS) : hits.slice(0, 1).map((h) => h.rel);
+  }
+  refs = refs.slice(0, PACK_MAX_REFS);
+  warmFiles(model, new Set([...known, ...refs]));
+
+  // ── candidates ──
+  const cands = [];
+  const add = (s, score, why) => {
+    const a = s.lines[0];
+    const b = Math.min(s.lines[1], a + ANCHOR_RANGE_LINES - 1);
+    cands.push({ file: s.file, a, b, names: [s.kind === "route" && !/^VIEW\b/.test(s.qname) ? `VIEW ${s.qname}` : s.qname], score, why: [why] });
+  };
+  // v2.2.0: a ROUTER edit target always gives the route record nearest the
+  // change, plus any comment within reach that quotes a path.
+  for (const rel of known) {
+    const routes = ((model.byFile[rel] || {}).symbols || []).filter((x) => x.kind === "route");
+    if (routes.length < ANCHOR_ROUTER_MIN) continue;
+    const best = routes
+      .map((r) => ({ r, n: anchorHits(want, r).length }))
+      .sort((x, y) => y.n - x.n || x.r.lines[0] - y.r.lines[0])[0].r;
+    const src = fileLines(model, rel) || [];
+    let a = Math.max(1, best.lines[0] - ANCHOR_PAD);
+    let b = Math.min(src.length || best.lines[1], best.lines[1] + ANCHOR_PAD);
+    const lo = Math.max(1, best.lines[0] - ANCHOR_COMMENT_REACH);
+    const hi = Math.min(src.length, best.lines[1] + ANCHOR_COMMENT_REACH);
+    for (let i = lo; i <= hi; i++) {
+      if (QUOTED_PATH_COMMENT.test(src[i - 1] || "")) { a = Math.min(a, i); b = Math.max(b, i); }
+    }
+    const hits = anchorHits(want, best);
+    cands.push({ file: rel, a, b, names: [/^VIEW\b/.test(best.qname) ? best.qname : `VIEW ${best.qname}`], score: 1000, why: [`router: ${hits.length ? hits.join(", ") : "nearest route"}`], fixed: true });
+  }
+  for (const rel of focusMode ? [] : known) {
+    // R10b: in focus mode the call sites ARE the edit targets — no generic member scan.
+    if ((Number((model.byFile[rel] || {}).lines) || 0) <= PACK_BIG_LINES) continue;
+    const scored = anchorMembers(model, rel)
+      .map((s) => ({ s, hits: anchorHits(want, s) }))
+      .filter((x) => x.hits.length)
+      .sort((x, y) => y.hits.length - x.hits.length || (x.s.kind === "route") - (y.s.kind === "route") || x.s.lines[0] - y.s.lines[0]);
+    for (const { s, hits } of scored.slice(0, ANCHOR_DECL_MEMBERS)) add(s, hits.length * 3 + 1, `edit target: ${hits.join(", ")}`);
+  }
+  // v2.2.0: a declared file's exported symbols called from OTHER files give up
+  // to 6 CALLER anchors (the call line +-4, inside the caller's own symbol) —
+  // the edit sites of a signature change. Ranked by focus words, then file.
+  // v2.2.0 (R10): FOCUS CALLEES — an export of a declared file whose name IS a
+  // focus token, or whose >= 2 name words are all focus words. When one exists,
+  // only its callers count, declared files INCLUDED (those are the call sites a
+  // signature change edits), up to 8, above every edit-target hit, and its own
+  // definition comes first. With none, the rule above holds unchanged.
+  for (const { rel, s, nm } of focusCallees) {
+    const a = s.lines[0];
+    cands.push({ file: rel, a, b: Math.min(s.lines[1], a + ANCHOR_RANGE_LINES - 1), names: [s.qname], score: ANCHOR_CALLER_SCORE + 30, why: [`edit target: ${nm}`], fixed: true });
+  }
+  const callerSrc = focusMode
+    ? focusCallees.map((x) => ({ rel: x.rel, syms: [x.s] }))
+    : known.map((rel) => ({ rel, syms: ((model.byFile[rel] || {}).symbols || []).filter((s) => s.exported && !ANCHOR_NEVER.has(s.kind) && s.kind !== "route") }));
+  const callerC = [];
+  for (const { rel, syms } of callerSrc) {
+    for (const s of syms) {
+      for (const c of callersOf(model, s).confident) {
+        const cs = c.sym;
+        if (!cs || !cs.file || cs.file === rel || (!focusMode && declaredSet.has(cs.file)) || TEST_FILE.test(cs.file) || !c.line) continue;
+        const hits = anchorHits(want, cs).concat(focusWords(base(cs.file).replace(/\.[^.]+$/, "")).filter((w) => want.has(w)));
+        const a = Math.max(1, cs.lines[0], c.line - ANCHOR_CALLER_PAD);
+        const b = Math.min(cs.lines[1], c.line + ANCHOR_CALLER_PAD);
+        callerC.push({ file: cs.file, a, b: Math.max(a, b), names: [cs.qname], score: ANCHOR_CALLER_SCORE + (focusMode ? 20 : 0) + new Set(hits).size, why: [`caller of ${s.qname}`], fixed: true });
+      }
+    }
+  }
+  callerC.sort((x, y) => y.score - x.score || x.file.localeCompare(y.file) || x.a - y.a);
+  const callerSeen = new Set();
+  for (const c of callerC) {
+    const k = `${c.file}:${c.a}`;
+    if (callerSeen.has(k) || callerSeen.size >= (focusMode ? ANCHOR_FOCUS_CALLERS : ANCHOR_CALLERS)) continue;
+    callerSeen.add(k);
+    cands.push(c);
+  }
+  const featD = new Set(known.map(featureOf).filter(Boolean));
+  const given = new Set(o.refs && o.refs.length ? refs : []);
+  for (const rel of refs) {
+    // v2.2.0: a cross-feature copy-from ranks after a same-feature one, unless given.
+    const pen = !given.has(rel) && featD.size && !featD.has(featureOf(rel)) ? 100 : 0;
+    const scored = anchorMembers(model, rel)
+      .map((s) => ({ s, hits: anchorHits(want, s), imp: SIG.importance(model, s, callersOf(model, s).confident.length) }))
+      .sort((x, y) => y.hits.length - x.hits.length || y.imp - x.imp || x.s.lines[0] - y.s.lines[0]);
+    for (const { s, hits } of scored.slice(0, ANCHOR_REF_MEMBERS)) add(s, hits.length * 3 - pen, hits.length ? `copy-from: ${hits.join(", ")}` : "copy-from");
+    // v2.2.0 (R7): a .vue ref also gives its CONTRACT, the props/emits lines merged.
+    if (/\.vue$/.test(rel)) {
+      const con = ((model.byFile[rel] || {}).symbols || []).filter((x) => x.kind === "prop" || x.kind === "emit");
+      if (con.length) {
+        const a = Math.min(...con.map((x) => x.lines[0]));
+        const b = Math.max(...con.map((x) => x.lines[1]));
+        cands.push({ file: rel, a, b: Math.min(b, a + ANCHOR_RANGE_LINES - 1), names: ["props/emits"], score: 1 - pen, why: ["contract"] });
+      }
+    }
+  }
+
+  // v2.2.0 (R7): pad every range, clipped to the file and to its owner block.
+  for (const c of cands) {
+    if (c.fixed) continue;
+    const f = model.byFile[c.file] || {};
+    const n = Number(f.lines) || (fileLines(model, c.file) || []).length || c.b;
+    let lo = 1;
+    let hi = n;
+    const owner = (f.symbols || [])
+      .filter((x) => x.lines[0] <= c.a && x.lines[1] >= c.b && x.lines[1] - x.lines[0] > c.b - c.a)
+      .sort((x, y) => (x.lines[1] - x.lines[0]) - (y.lines[1] - y.lines[0]))[0];
+    if (owner) { lo = owner.lines[0]; hi = owner.lines[1]; }
+    c.a = Math.max(1, lo, c.a - ANCHOR_PAD);
+    c.b = Math.min(n, hi, c.b + ANCHOR_PAD);
+    if (c.b < c.a) c.b = c.a;
+  }
+
+  // Rank, merge overlapping ranges in one file, then keep the best 12.
+  cands.sort((x, y) => y.score - x.score || x.file.localeCompare(y.file) || x.a - y.a);
+  let chosen = [];
+  for (const c of cands) {
+    if (!SAFE_PATH.test(c.file)) continue;
+    const over = chosen.find((x) => x.file === c.file && x.a <= c.b && c.a <= x.b);
+    if (over) {
+      over.a = Math.min(over.a, c.a);
+      over.b = Math.max(over.b, c.b);
+      for (const n of c.names) if (!over.names.includes(n)) over.names.push(n);
+      continue;
+    }
+    if (chosen.length < ANCHOR_MAX) chosen.push({ ...c });
+  }
+  const gen = model.meta.generation || 0;
+  const inlineOf = (x) => /^(edit target|router|caller)/.test(x.why[0]);
+  const render = (list) => {
+    const lines = list.map((x) => {
+      const changed = blobState(model, x.file) !== "current" ? ", CHANGED since index" : "";
+      return `${x.file}:${x.a}-${x.b}  ${x.names.join(", ")}  (${x.why[0]}${changed})`;
+    });
+    const readCmd = list.length ? `for r in ${list.map((x) => `"${x.file} ${x.a} ${x.b}"`).join(" ")}; do set -- $r; echo "== $1:$2-$3"; sed -n "$2,$3p" "$1"; done` : "";
+    // v2.2.0 (R8): the code of the EDIT-SITE ranges (edit target, router, caller)
+    // INLINE — the same bytes `read all` prints. Copy-from and contract ranges stay
+    // `path:a-b` lines: the executor reads those wider anyway.
+    const code = list.filter(inlineOf).map((x) => `== ${x.file}:${x.a}-${x.b} · ${x.names[0]}\n${(fileLines(model, x.file) || []).slice(x.a - 1, x.b).join("\n")}`).join("\n");
+    const ticks = Math.max(2, ...((code.match(/`+/g) || []).map((t) => t.length))) + 1;
+    const fence = "`".repeat(ticks);
+    const card = list.length ? `${lines.join("\n")}\nread all: ${readCmd}${code ? `\n${fence}\n${code}\n${fence}` : ""}` : "";
+    return { lines, readCmd, code, card };
+  };
+  const readOf = (list) => list.filter(inlineOf).reduce((n, x) => n + tok((fileLines(model, x.file) || []).slice(x.a - 1, x.b).join("\n")), 0);
+  while (chosen.length > 1 && readOf(chosen) > ANCHOR_READ_TOKENS) chosen = chosen.slice(0, -1);
+  let out = render(chosen);
+  while (chosen.length > 1 && Buffer.byteLength(out.card) > ANCHOR_CARD_BYTES) {
+    chosen = chosen.slice(0, -1);
+    out = render(chosen);
+  }
+  const files = new Set(chosen.map((x) => x.file)).size;
+  const readTok = readOf(chosen);
+  return {
+    ok: true,
+    refs,
+    refs_missing: refMissing,
+    ranges: chosen.length,
+    files,
+    lines: out.lines,
+    read_cmd: out.readCmd,
+    code: out.code,
+    read_tokens: readTok,
+    tokens: tok(out.card),
+    card: out.card,
+    gen,
+  };
+}
+
+module.exports = { buildPack, buildAnchors, loadModel, resolveCall, resolveUrl, routeTable, urlIndex, findTarget, callersOf, nameHits, warmBlobs, ctx, forSlice, impact, graphMap, pathBetween, importsOf, TEST_FILE, SOURCE_DEFAULT, SOURCE_CAP, CALLERS_SOURCE_MAX, CALLERS_SOURCE_LINES };

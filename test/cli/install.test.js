@@ -390,6 +390,7 @@ const GRAPH_ENTRIES = [
   ["PreToolUse", "Grep|Glob"],
   ["PreToolUse", "Bash|Read"],
   ["PostToolUse", "Read"],
+  ["PostToolUse", "Task|Agent"],
 ];
 
 const graphWiring = (claudeDir) => {
@@ -421,7 +422,7 @@ test("install: a v1.8.1 settings.json keeps its four graph entries and gains the
   settings.hooks.PreToolUse = (settings.hooks.PreToolUse || []).filter((e) => e.matcher !== "Bash|Read");
   const kept = JSON.stringify(settings.hooks.PreToolUse);
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-  assert.equal(graphWiring(claudeDir).length, 4);
+  assert.equal(graphWiring(claudeDir).length, 5);
 
   assert.equal(cli(["update", "--dir", root]).status, 0);
   const after = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
@@ -446,7 +447,7 @@ test("doctor: graph-hook-unwired counts five entries, not four events", () => {
   const broken = JSON.parse(cli(["doctor", "--dir", root, "--json"]).stdout);
   const f = (broken.findings || []).find((x) => x.id === "graph-hook-unwired");
   assert.ok(f, JSON.stringify((broken.findings || []).map((x) => x.id)));
-  assert.match(f.message, /wired on 4 of 5 entries/);
+  assert.match(f.message, /wired on 5 of 6 entries/);
   assert.equal(f.fix_command, "orc update");
 });
 

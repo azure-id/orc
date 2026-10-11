@@ -53,7 +53,7 @@ Phase 1  planning (dispatch orc-planner-mini; analyst first only on real docs)
 Phase 3  dispatch ONE executor (orc-executor-sonnet-5-high) — slice carries the
          standing `house_rules` card (../_shared/phases/house-rules.md, literal) +
          the `rules_card` under it (`orc rules slice` → `text`, verbatim) + the cached
-         `postgres` pattern (HIT only) + the --for-slice card + wiki PATHS
+         `postgres` pattern (HIT only) + graph_anchors (inline) + wiki PATHS
 Phase M  SMOKE GATE — run build+test → GREEN proceed · RED block ship + surface
 Phase X  MOCK EXAMPLE (config mock_example) — offer/build after a GREEN gate
 Phase T  TEST-AUTHORING ASK (opt-in) — offer to write test cases (never run them)
@@ -72,13 +72,13 @@ returned `gotcha_recorded` YOURSELF. `.claude/orc/gotchas.md` and the mechanics:
 
 ## Code graph cache — consult, build, use, update (`../_shared/code-graph.md` §0)
 
-Never skipped. Every call carries `--if-enabled`: exit 3 = off → print `graph: off` once, make no other graph call. Print each JSON `line` in chat; put each `trace` in the next packet VERBATIM.
-1. **Preflight, with the probes, before the planner:** `orc graph status --if-enabled --heal --json --brief` — it builds or updates the cache itself.
-2. **Phase 0, before the tiered round:** `orc graph map --focus "<3–6 words from the request>" --budget 800 --if-enabled --json --brief`. Its ranked files pre-fill Q4's `➡️` recommendation. Never ask what the map already answered.
-3. **Phase 1, ONE call:** `orc graph impact <declared_files> --complexity --risk=<facets.risk[] as class[@file:line],…> --if-enabled --json --brief`. Its `complexity.line` IS the complexity line — print it VERBATIM (`risk not given` → append the classes yourself); its `facts{}` IS `graph_facts` — paste it, then set `facts.map` to the `map --focus` card you already hold. No `complexity` in the answer (an older CLI) → count as `references/complexity.md` §2 says.
-4. **Phase 3 slice:** ONE `orc graph ctx <declared_files> --for-slice --if-enabled --json --brief` → its `card` is the `graph` block, the OUTSIDE view. No card when the change stays inside one named file with no signature change (`../_shared/code-graph.md` §7). The return carries `graph_used`.
-5. **Phase M, before the suite:** `orc graph changes --files=<actual_files> --if-enabled --json --brief` — print its `tests_line`, run the files its `tests[]` names first, then the suite, then its `blast_line` VERBATIM. The CLI attaches every `risk` word's `why`.
-6. **Phase M GREEN:** `orc graph update --notes-pending --files <actual_files> --if-enabled --json --brief` — ONE call for the update AND the notes batch (§6) — then `orc graph gain --run <this run> --if-enabled --json --brief`, `line` copied VERBATIM into the card's `graph` row.
+Never skipped. Every call carries `--if-enabled`. Exit 3 (`off` or `semi`) → print the probe line once, make no other graph call. Print each JSON `line` in chat; put each `trace` in the next packet VERBATIM.
+1. **Consult — preflight, before the planner:** print `probes["graph-status"].line` from `orc lane config orc-mini --json`. Run `orc graph status --if-enabled --heal --json --brief` only when `heal_needed` is true.
+2. **Orient — Phase 0, before the tiered round:** `orc graph map --focus=<3–6 words from the request> --budget 800 --if-enabled --json --brief`, ONCE. Its ranked files pre-fill Q4's `➡️` pick. Never re-ask it.
+3. **Phase 1, ONE call:** `orc graph impact <declared_files> --complexity --risk=<facets.risk[] as class[@file:line],…> --if-enabled --json --brief`. Its `complexity.line` IS the complexity line — print it VERBATIM (`risk not given` → append the classes yourself); its `facts{}` IS `graph_facts` — paste it, then set `facts.map` to the map card you already hold. No `complexity` in the answer → count as `references/complexity.md` §2 says.
+4. **Anchors — Phase 3 slice:** `orc graph ctx --for-slice <declared_files> --focus=<same words> [--refs=<task.precedent>] --anchors --if-enabled --json --brief`. Print its `line`; its WHOLE `card` (`read all:` + code) goes VERBATIM in the slice as `graph_anchors`. With `graph_anchors` in the slice, list at most ONE wiki page path (the one about the feature's intent), not 1–3. Exit 3/4, or one named file, no outside change → none; the return carries `graph_used`.
+5. **Affected tests — Phase M, before the suite:** `orc graph changes --files=<actual_files> --if-enabled --json --brief` — print its `tests_line`, run the files its `tests[]` names first, then the suite, then its `blast_line` VERBATIM. The CLI attaches every `risk` word's `why`.
+6. **Phase M GREEN:** `orc graph update --notes-pending --files <actual_files> --if-enabled --json --brief` ONLY when `probes["graph-status"].update_step` is `lane`. Else none; never a gain call.
 
 ## Phase M — Smoke gate (build + test; blocks ship on red)
 
@@ -148,9 +148,9 @@ mini skipped. Record the switch in the decision log.
 
 ## Dispatch via named agents (canonical name-map — dispatch BY these names)
 
-Models pinned in `.claude/agents/`; look one up here, never reconstruct a name (agent = skill-name + model-effort suffix). See `.claude/agents/MODEL-MAPPING.md`. `opus5_only: true` FORCES the right column and needs an Opus 5.5 main session — mini's cheap-lane premise is off while it is on (`../_shared/opus5-only.md`).
+Models pinned in `.claude/agents/`; never reconstruct a name. See `.claude/agents/MODEL-MAPPING.md`. `opus5_only: true` FORCES the right column and needs an Opus 5.5 main session (`../_shared/opus5-only.md`).
 
-**Extra (`extra_enabled`, `../_shared/extra-dispatch.md` — the procedure):** mini's ONE executor may run off Claude. Resolve the pinned executor's **BAND, both edges, and require them to agree** — else the run stays on Claude and the preflight says so. Print the `extra:` line at intake whenever the gate is on (P0: `a lane that sends work off Claude without saying so`). The IDENTICAL slice goes via `orc extra dispatch --task <file> --json`; validate with `return-validation.md` **§2b, not §2** (⛔ SUBSTITUTION); a failure runs `orc extra reconcile <task_id>` FIRST (a moved worktree is RESUMED, never re-done), then the pinned Claude agent, announced. `extra_risk_tasks` still keeps a cited-risk change on Claude — the complexity read never replaces that gate.
+**Extra (`extra_enabled`, `../_shared/extra-dispatch.md` — the procedure):** mini's ONE executor may run off Claude. Resolve the pinned executor's **BAND, both edges, and require them to agree** — else the run stays on Claude and the preflight says so. Print the `extra:` line at intake whenever the gate is on (P0: `a lane that sends work off Claude without saying so`). The IDENTICAL slice goes via `orc extra dispatch --task <file> --json`; validate with `return-validation.md` **§2b, not §2** (⛔ SUBSTITUTION); a failure runs `orc extra reconcile <task_id>` FIRST (a moved worktree is RESUMED, never re-done), then the pinned Claude agent, announced. `extra_risk_tasks` still keeps a cited-risk change on Claude.
 
 | Role | Agent (dispatch this) | Model / effort | When `opus5_only` |
 |------|-----------------------|----------------|-------------------|

@@ -31,7 +31,7 @@ const STANDALONE = {
   "review-policy": ["review", "policy"],
 };
 // Fields the probe DERIVES from the answer rather than copies.
-const DERIVED = { "pattern-status": ["langs"], "graph-status": ["heal_needed"] };
+const DERIVED = { "pattern-status": ["langs"], "graph-status": ["heal_needed", "update_step"] };
 // The probe set each lane is REQUIRED to carry (W0's measured preflight calls).
 const EXPECT = {
   orc: ["wiki-status", "pattern-status", "gotcha-status", "pact-status", "boundary-status", "aftermath-status", "graph-status", "rules-slice", "review-policy"],

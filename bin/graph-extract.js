@@ -56,7 +56,7 @@ const { spawnSync } = require("child_process");
 // @3 (W9): route handlers are symbols, and a function passed BY NAME is a `ref`.
 // @4 (EW1): every record says how much of the file the extractor actually saw.
 // @5 (v1.8.2 W1): urls, mounts, decorator routes, `handler` on a route alias.
-const HEURISTIC = "heuristic@6";
+const HEURISTIC = "heuristic@7";
 const MAX_CALLS_PER_SYMBOL = 200;
 const MAX_EFFECTS_PER_SYMBOL = 12;
 const MAX_URLS_PER_SYMBOL = 200;
@@ -1258,6 +1258,8 @@ function objectDefs(c, have, sfc) {
     const top = close > open ? objectMembers(m, open, close).map(([a, b]) => ({ a, b, mem: memberOf(m, a, b) })).filter((x) => x.mem) : [];
     const shaped = top.some(
       (x) => x.mem.type === "fn" || (OBJ_SECTIONS.has(x.mem.name) && (x.mem.type === "obj" || x.mem.type === "short")) || x.mem.name === "mixins" || x.mem.name === "extends"
+        // v2.2.0 T3: inside an SFC, a props-only component is still a component.
+        || (sfc && /^(props|emits|inject|components)$/.test(x.mem.name))
     );
     if (shaped) {
       const nameMem = top.find((x) => x.mem.type === "val" && x.mem.name === "name");
@@ -1273,6 +1275,27 @@ function objectDefs(c, have, sfc) {
         }
       }
       owner = add({ name: oname, qname: oname, kind: "class", from: dx.index, to: close, exported: true, ...(bases.length ? { bases: bases.slice(0, 8) } : {}) });
+      // v2.2.0 T3: the component CONTRACT — `props`, `emits`, `inject`. Each
+      // member is a name-only symbol; like a `const`, it owns no call.
+      for (const x of top) {
+        const kind = CONTRACT_OF[x.mem.name];
+        if (!kind || x.mem.close == null || x.mem.close <= x.mem.open) continue;
+        if (x.mem.type === "arr") {
+          const STR = /(['"`])([A-Za-z_$][\w$-]*)\1/g;
+          const body = src.slice(x.mem.open, x.mem.close);
+          let q;
+          while ((q = STR.exec(body))) {
+            const at = x.mem.open + q.index;
+            if (m[at] !== src[at]) continue;
+            add({ name: q[2], qname: `${oname}.${q[2]}`, kind, from: at, to: at + q[0].length - 1, exported: false });
+          }
+        } else if (x.mem.type === "obj") {
+          for (const [a, b] of objectMembers(m, x.mem.open, x.mem.close)) {
+            const mem = memberOf(m, a, b);
+            if (mem && mem.name) add({ name: mem.name, qname: `${oname}.${mem.name}`, kind, from: a, to: trim(b), exported: false });
+          }
+        }
+      }
       const method = (name, from, to, paren) => {
         if (paren != null) defParens.add(paren);
         add({ name, qname: `${oname}.${name}`, kind: "method", from, to, exported: false });
@@ -1340,7 +1363,271 @@ function objectDefs(c, have, sfc) {
     // visible to every function below it, exactly as it was before W5b.
     if (!taken.has(name)) add({ name, qname: name, kind: "class", from, to, exported: true, nameOnly: true });
   }
-  return { defs, defParens };
+  const ownerName = owner ? owner.name : sfc ? ownerStem(rel) : null;
+  return { defs, defParens, ownerName };
+}
+
+// ── v2.2.0 T3: what a Vue / SPA codebase says outside a function body ───────
+// Runs on BOTH rungs, right after the W5b object pass: the template (its
+// handlers, bindings and child components), lazy `import()`, SPA route
+// records, router navigation by route NAME, and the string values of an
+// exported constant object. It edits `defs` and `calls` in place and returns
+// the import list with the lazy imports appended.
+const CONTRACT_OF = { props: "prop", emits: "emit", inject: "inject" };
+const CONTRACT_KINDS = new Set(["prop", "emit", "inject"]);
+const TPL_SKIP_TAGS = new Set(["router-link", "router-view", "transition", "transition-group", "keep-alive", "component", "slot", "template", "RouterLink", "RouterView", "Transition", "TransitionGroup", "KeepAlive", "Component", "Slot", "Template"]);
+const TPL_WORDS = new Set(["true", "false", "null", "undefined", "in", "of", "typeof", "instanceof", "new", "void", "this", "NaN", "Infinity"]);
+const STR_LIT = /^\s*(['"`])([^'"`\n]*)\1/;
+
+// Blank the inside of every string literal of a template expression, so an
+// identifier scan never reads a word inside quotes. Length is kept.
+function blankStrings(e) {
+  return e.replace(/(['"`])((?:\\.|(?!\1)[^\\])*)\1/g, (s, q, b) => q + " ".repeat(b.length) + q);
+}
+
+function vuePass(c, raw, sfc, defs, calls, imports, ownerName) {
+  const { m, starts } = c;
+  const src = c.src;
+  const lineAt = (p) => lineOf(starts, p);
+  const imps = (imports || []).slice();
+  const code = (p) => m[p] === src[p];
+
+  // ── shape 5: lazy imports ──
+  const lazyAt = new Set();
+  const lazyNames = new Map();
+  const LAZY = /\b(?:const|let|var)[ \t]+([A-Za-z_$][\w$]*)[ \t]*(?::[^=\n]+)?=[ \t]*(?:async[ \t]*)?(?:\([ \t]*\)|_)[ \t]*=>[ \t\r\n]*\(?[ \t\r\n]*import[ \t]*\([ \t]*(['"])([^'"\n]+)\2[ \t]*\)/g;
+  let x;
+  while ((x = LAZY.exec(src))) {
+    if (!code(x.index)) continue;
+    const ip = x.index + x[0].lastIndexOf("import");
+    lazyAt.add(ip);
+    const line = lineAt(x.index);
+    lazyNames.set(x[1], line);
+    imps.push({ from: x[3], line, bindings: [{ local: x[1], orig: "default", kind: "default" }] });
+  }
+  const DYN = /\bimport[ \t]*\([ \t]*(['"])([^'"\n]+)\1[ \t]*\)/g;
+  while ((x = DYN.exec(src))) {
+    if (!code(x.index) || lazyAt.has(x.index)) continue;
+    imps.push({ from: x[2], line: lineAt(x.index), bindings: [] });
+  }
+  for (let i = defs.length - 1; i >= 0; i--) {
+    const d = defs[i];
+    if (lazyNames.get(d.name) === d.s && d.kind !== "route" && d.kind !== "class") defs.splice(i, 1);
+  }
+
+  // `const N = 'literal'` in THIS file, for a route name given by constant.
+  const constStr = (name) => {
+    const re = new RegExp(`\\b(?:const|let|var)[ \\t]+${name.replace(/\$/g, "\\$")}[ \\t]*(?::[^=\\n]+)?=[ \\t]*(['"\`])([^'"\`\\n]*)\\1`);
+    const q = re.exec(src);
+    return q && code(q.index) ? q[2] : null;
+  };
+  // A route NAME expression → the call record shape 7 writes.
+  const navCall = (expr, line) => {
+    const e = String(expr).trim();
+    const lit = /^(['"`])([^'"`\n]*)\1$/.exec(e);
+    if (lit) return lit[2] ? { name: lit[2], line, route: true } : null;
+    if (/^[A-Za-z_$][\w$]*$/.test(e)) {
+      const v = constStr(e);
+      return v ? { name: v, line, route: true } : null;
+    }
+    if (/^[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*$/.test(e)) return { name: e, line, route: true, via: true };
+    return null;
+  };
+  const NAME_IN = /(?:^|[{,\s])name[ \t]*:[ \t]*((['"`])[^'"`\n]*\2|[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)/;
+
+  // ── shape 7: `router.push({ name: … })` / `this.$router.replace(…)` ──
+  const NAV = /(?:^|[^\w$])((?:[A-Za-z_$][\w$]*[ \t]*\.[ \t]*)*\$?router)[ \t]*\.[ \t]*(?:push|replace)[ \t]*\([ \t\r\n]*\{/g;
+  while ((x = NAV.exec(src))) {
+    const open = x.index + x[0].length - 1;
+    if (!code(open)) continue;
+    const close = matchPairQuiet(m, open, "{", "}");
+    if (close < 0) continue;
+    const n = NAME_IN.exec(src.slice(open + 1, close));
+    if (!n) continue;
+    const rec = navCall(n[1], lineAt(open));
+    if (rec) calls.push(rec);
+  }
+
+  // ── shape 6: SPA route records (js/ts files) ──
+  if (!sfc) {
+    const seenObj = new Set();
+    const PATH = /\bpath[ \t]*:[ \t]*['"`]/g;
+    while ((x = PATH.exec(m))) {
+      // the enclosing `{`
+      let d = 0;
+      let open = -1;
+      for (let k = x.index - 1; k >= 0; k--) {
+        const ch = m[k];
+        if (ch === "}" || ch === "]" || ch === ")") d++;
+        else if (ch === "{" || ch === "[" || ch === "(") {
+          if (d === 0) {
+            open = ch === "{" ? k : -1;
+            break;
+          }
+          d--;
+        }
+      }
+      if (open < 0 || seenObj.has(open)) continue;
+      seenObj.add(open);
+      const close = matchPairQuiet(m, open, "{", "}");
+      if (close < 0) continue;
+      const mems = objectMembers(m, open, close)
+        .map(([a, b]) => ({ a, b, mem: memberOf(m, a, b) }))
+        .filter((y) => y.mem);
+      const get = (k) => mems.find((y) => y.mem.name === k);
+      const pm = get("path");
+      if (!pm || pm.mem.type !== "val") continue;
+      const pl = STR_LIT.exec(src.slice(pm.mem.v, pm.mem.v + 300));
+      if (!pl) continue;
+      const comp = get("component");
+      const compId = comp && comp.mem.type === "val" ? m.slice(comp.mem.v, comp.b).trim() : "";
+      const hasComp = IDENT_RE.test(compId);
+      const nm = get("name");
+      const nl = nm && nm.mem.type === "val" ? STR_LIT.exec(src.slice(nm.mem.v, nm.mem.v + 200)) : null;
+      const ok = hasComp || (get("components") && get("components").mem.type === "obj") || (nl && (get("meta") || get("children") || get("redirect")));
+      if (!ok) continue;
+      let to = close;
+      const def = { kind: "route", method: "VIEW", path: pl[2], name: "route", from: open, to, exported: false, s: lineAt(open), e: lineAt(to) };
+      if (nl) def.route_name = nl[2];
+      defs.push(def);
+      if (hasComp) calls.push({ name: compId, line: lineAt(comp.mem.v), ref: true });
+    }
+  }
+
+  // ── shape 8: the string values of an exported constant object ──
+  for (const d of defs) {
+    if (d.kind !== "const" || !d.exported || d.values) continue;
+    const re = new RegExp(`^[ \\t]*(?:export[ \\t]+)?(?:const|let|var)[ \\t]+${d.name.replace(/\$/g, "\\$")}[ \\t]*(?::[^=\\n]+)?=[ \\t]*\\{`, "m");
+    const q = re.exec(m);
+    if (!q) continue;
+    const open = q.index + q[0].length - 1;
+    const close = matchPairQuiet(m, open, "{", "}");
+    if (close < 0) continue;
+    const values = {};
+    let n = 0;
+    for (const [a, b] of objectMembers(m, open, close)) {
+      if (n >= 64) break;
+      const mem = memberOf(m, a, b);
+      if (!mem || mem.type !== "val") continue;
+      const s = /^(['"`])([^'"`\n]*)\1\s*$/.exec(src.slice(mem.v, b).trim());
+      if (!s) continue;
+      values[mem.name] = s[2].slice(0, 80);
+      n++;
+    }
+    if (n) d.values = values;
+  }
+
+  // ── shapes 1 + 2: the template of a `.vue` file ──
+  if (sfc && !sfc.svelte && raw) {
+    // the outer <template>, outside every <script>
+    const inScript = (p) => sfc.blocks.some(([a, b]) => p >= a && p < b);
+    const TAG = /<(\/?)template\b[^>]*?(\/?)>/gi;
+    let tOpen = -1;
+    let tEnd = -1;
+    let depth = 0;
+    while ((x = TAG.exec(raw))) {
+      if (inScript(x.index) || x[2] === "/") continue;
+      if (!x[1]) {
+        if (depth === 0) tOpen = x.index;
+        depth++;
+      } else if (depth > 0 && --depth === 0) {
+        tEnd = x.index + x[0].length - 1;
+        break;
+      }
+    }
+    if (tOpen >= 0 && tEnd > tOpen && ownerName) {
+      const tdef = { name: "template", qname: `${ownerName}.template`, kind: "template", from: tOpen, to: tEnd, exported: false, s: lineAt(tOpen), e: lineAt(tEnd), _raw: raw.slice(starts[lineAt(tOpen) - 1] || 0, tEnd + 1) };
+      defs.push(tdef);
+      const body = raw.slice(tOpen, tEnd + 1);
+      const base = tOpen;
+      const seen = new Set();
+      const push = (rec) => {
+        const k = `${rec.name}|${rec.line}|${rec.self ? 1 : 0}|${rec.ref ? 1 : 0}|${rec.route ? 1 : 0}`;
+        if (seen.has(k)) return;
+        seen.add(k);
+        calls.push(rec);
+      };
+      const bad = (w) => !w || w[0] === "$" || KW.has(w) || TPL_WORDS.has(w) || REF_WORDS.has(w) || /^\d/.test(w);
+      // v-for aliases are template locals, never a member of the component.
+      const locals = new Set();
+      const VFOR = /\sv-for[ \t]*=[ \t]*(["'])([^"']*?)\s+(?:in|of)\s/g;
+      while ((x = VFOR.exec(body))) for (const w of x[2].replace(/[()]/g, " ").split(/[\s,]+/)) if (w) locals.add(w);
+      const refsOf = (expr, at) => {
+        const e = blankStrings(expr);
+        const ID = /[A-Za-z_$][\w$]*/g;
+        let q;
+        while ((q = ID.exec(e))) {
+          const w = q[0];
+          let p = q.index - 1;
+          while (p >= 0 && /\s/.test(e[p])) p--;
+          if (p >= 0 && (e[p] === "." || /[\w$]/.test(e[p]))) continue;
+          let n = q.index + w.length;
+          while (n < e.length && /\s/.test(e[n])) n++;
+          // an object key: `{ name: … }`
+          if (e[n] === ":" && (p < 0 || e[p] === "{" || e[p] === ",")) continue;
+          if (bad(w) || locals.has(w)) continue;
+          push({ name: w, line: lineAt(at + q.index), self: true, ref: true });
+        }
+      };
+      const ATTR = /\s(@[\w.:\-[\]]+|v-on:[\w.:\-[\]]+|:[\w.\-[\]]+|v-bind:[\w.\-[\]]+|v-(?:if|else-if|show|model|html|text|for)(?::[\w-]+)?(?:\.[\w-]+)*)[ \t]*=[ \t]*(?:"([^"]*)"|'([^']*)')/g;
+      while ((x = ATTR.exec(body))) {
+        const attr = x[1];
+        const val = x[2] != null ? x[2] : x[3];
+        const at = base + x.index + x[0].length - 1 - val.length;
+        if (attr[0] === "@" || attr.startsWith("v-on:")) {
+          const t = val.trim();
+          if (/^[A-Za-z_$][\w$]*$/.test(t)) {
+            if (!bad(t)) push({ name: t, line: lineAt(at + val.indexOf(t)), self: true });
+            continue;
+          }
+          const e = blankStrings(val);
+          const CALLRE = /[A-Za-z_$][\w$]*(?=[ \t]*\()/g;
+          let q;
+          while ((q = CALLRE.exec(e))) {
+            let p = q.index - 1;
+            while (p >= 0 && /\s/.test(e[p])) p--;
+            if (p >= 0 && (e[p] === "." || /[\w$]/.test(e[p]))) continue;
+            if (bad(q[0])) continue;
+            push({ name: q[0], line: lineAt(at + q.index), self: true });
+          }
+          continue;
+        }
+        if (attr.startsWith("v-for")) {
+          const f = /^([\s\S]*?\s)(?:in|of)\s([\s\S]*)$/.exec(val);
+          if (f) refsOf(f[2], at + f[1].length + 3);
+          continue;
+        }
+        refsOf(val, at);
+      }
+      const MUS = /\{\{([\s\S]*?)\}\}/g;
+      while ((x = MUS.exec(body))) refsOf(x[1], base + x.index + 2);
+      // child components, and <router-link :to="{ name: … }">
+      const local = new Set();
+      for (const imp of imps) for (const b of imp.bindings || []) local.add(b.local);
+      const OPEN = /<([A-Za-z][\w-]*)\b([^>]*)>/g;
+      while ((x = OPEN.exec(body))) {
+        const tag = x[1];
+        const line = lineAt(base + x.index);
+        if (tag === "router-link" || tag === "RouterLink") {
+          const to = /\s(?::to|v-bind:to)[ \t]*=[ \t]*(?:"([^"]*)"|'([^']*)')/.exec(x[2]);
+          const v = to ? (to[1] != null ? to[1] : to[2]) : null;
+          const n = v ? NAME_IN.exec(v) : null;
+          const rec = n ? navCall(n[1], line) : null;
+          if (rec) push(rec);
+          continue;
+        }
+        if (TPL_SKIP_TAGS.has(tag)) continue;
+        if (!/^[A-Z]/.test(tag) && !tag.includes("-")) continue;
+        const pascal = tag
+          .split("-")
+          .filter(Boolean)
+          .map((w) => w[0].toUpperCase() + w.slice(1))
+          .join("");
+        if (local.has(pascal)) push({ name: pascal, line, ref: true });
+      }
+    }
+  }
+  return imps;
 }
 
 // ── declarations: Python (indentation) ──────────────────────────────────────
@@ -1633,6 +1920,10 @@ function normCall(name) {
       sup = true;
     }
   }
+  // v2.2.0 T3: `this.$t(…)`, `this.$router.push(…)`, `this.$emit(…)` — a
+  // framework built-in hung on the instance. Stripping the `$` made `this.$t`
+  // a call to `t`, which then resolved into whatever file defined a `t`.
+  if (self && /^\$[A-Za-z_]/.test(n)) return null;
   n = n.replace(/^\$/, "").replace(/\.\$/g, ".");
   const last = n.split(".").pop();
   // A keyword after a dot is a METHOD name — `router.delete(`, `promise.catch(` —
@@ -2301,7 +2592,7 @@ function finalize(c, lang, defs, calls, imports, exportsSet, extractor) {
   // stays with whatever holds the constant — the module, most often — so a
   // constant symbol always carries `calls: []`.
   for (const i of order) {
-    if (defs[i].kind === "const" || defs[i].nameOnly) continue;
+    if (defs[i].kind === "const" || CONTRACT_KINDS.has(defs[i].kind) || defs[i].nameOnly) continue;
     for (let L = defs[i].s; L <= defs[i].e && L <= nLines; L++) owner[L] = i;
   }
 
@@ -2409,6 +2700,8 @@ function finalize(c, lang, defs, calls, imports, exportsSet, extractor) {
       effects: [],
       ...(doc ? { doc } : {}),
       ...(d.route ? { route: d.route } : {}),
+      ...(d.route_name ? { route_name: d.route_name } : {}),
+      ...(d.values ? { values: d.values } : {}),
       ...(d.bases && d.bases.length ? { bases: d.bases } : {}),
     };
   });
@@ -2441,6 +2734,8 @@ function finalize(c, lang, defs, calls, imports, exportsSet, extractor) {
         ...(cc.sup ? { sup: true } : {}),
         ...(cc.ref ? { ref: true } : {}),
         ...(cc.alias ? { alias: cc.alias } : {}),
+        ...(cc.route ? { route: true } : {}),
+        ...(cc.via ? { via: true } : {}),
       });
     else cut(t, cc.line);
     if (cc.ref || !cc.args) continue;
@@ -2491,6 +2786,8 @@ function finalize(c, lang, defs, calls, imports, exportsSet, extractor) {
     s.body_hash = hash(src.slice(a, b));
     assignId(s);
   }
+  // v2.2.0 T3: a template is blanked in `src`; its hash comes from the markup.
+  for (let i = 0; i < defs.length; i++) if (defs[i]._raw != null && syms[i]) syms[i].body_hash = hash(defs[i]._raw);
   // W1: the alias ROUTE symbol for a decorated handler. Same lines and the same
   // body hash as the handler; it CALLS the handler (one LOCAL edge on read), so
   // `impact` and `ctx` walk test → route → handler with no special case.
@@ -2576,6 +2873,7 @@ function sfcSource(src) {
 
 function extractOne(item, borrowed) {
   let { lang, src } = item;
+  const raw = src;
   resetCoverage();
   let sfc = null;
   if (lang === "vue" || lang === "svelte") {
@@ -2609,14 +2907,19 @@ function extractOne(item, borrowed) {
       // W5b: the walker records a method only inside a class. An object's
       // members, the constants and an SFC's component come from the same pass
       // the heuristic rung runs, so both rungs name the same symbols.
-      if (lang === "js" || lang === "ts") defs.push(...objectDefs(c, defs, sfc).defs);
+      let imps = borrowed.imports;
+      if (lang === "js" || lang === "ts") {
+        const o = objectDefs(c, defs, sfc);
+        defs.push(...o.defs);
+        imps = vuePass(c, raw, sfc, defs, calls, imps, o.ownerName);
+      }
       for (const p of regParens) reg.add(lineOf(c.starts, p));
       for (const cc of calls) if (reg.has(cc.line) && ARGS_WORTH.test(cc.name)) cc.reg = true;
       defs.sort((a, b) => a.from - b.from);
       // `module.exports = { … }` is not in the AST walk; the heuristic half
       // that just ran read it out of the source, so the two sets are merged.
       const exp = new Set([...(borrowed.exportsSet || []), ...(hexports || [])]);
-      return finalize(c, lang, defs, calls, borrowed.imports, exp.size ? exp : null, borrowed.extractor);
+      return finalize(c, lang, defs, calls, imps, exp.size ? exp : null, borrowed.extractor);
     }
     // Django routes are module-level calls the ast visitor reports with their
     // argument pieces; the heuristic finds them by regex. Same shape either way.
@@ -2636,15 +2939,20 @@ function extractOne(item, borrowed) {
     return finalize(c, lang, defs, scanCalls(c, defParens, regParens), importsFor(lang, c.src, c.m, c.starts), null, HEURISTIC);
   }
   const { defs, defParens, regParens, exportsSet } = braceDefs(c, lang);
+  let ownerNameOf = null;
   if (lang === "js" || lang === "ts") {
     const o = objectDefs(c, defs, sfc);
+    ownerNameOf = o.ownerName;
     defs.push(...o.defs);
     // APPENDED, never sorted in: a file with no object keeps every symbol in
     // the order 1.9.0 wrote it, so its record is the same bytes.
     for (const p of o.defParens) defParens.add(p);
   }
   braceDecorators(c, lang, defs);
-  return finalize(c, lang, defs, scanCalls(c, defParens, regParens), importsFor(lang, c.src, c.m, c.starts), exportsSet, HEURISTIC);
+  const calls = scanCalls(c, defParens, regParens);
+  let imps = importsFor(lang, c.src, c.m, c.starts);
+  if (lang === "js" || lang === "ts") imps = vuePass(c, raw, sfc, defs, calls, imps, ownerNameOf);
+  return finalize(c, lang, defs, calls, imps, exportsSet, HEURISTIC);
 }
 
 // ── the borrowed Python parser ──────────────────────────────────────────────

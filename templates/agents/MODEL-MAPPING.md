@@ -17,10 +17,10 @@ Score→executor mapping lives in config.md (one canonical 5-band table;
 `rubric_bands` is granularity only, not a preset selector).
 
 **Executors no band names — they still ship.**
-`orc-executor-haiku-4-5`, `orc-executor-sonnet-4-6-med`,
+`orc-executor-haiku-5-high`,
 `orc-executor-sonnet-4-6-high`, `orc-executor-opus-4-7-med`,
 `orc-executor-opus-4-7-high`, `orc-executor-opus-4-8-high` and
-`orc-executor-opus-5-high` — seven agents — are still generated
+`orc-executor-opus-5-high` — six agents — are still generated
 and still installed. They are reachable only when a user names one
 explicitly: `rubric_bands_override`, `orc diy`'s `fixed_executor`, or
 `extra_fallback_agent`. They are not deleted because a table change is not a
@@ -63,8 +63,8 @@ model change, and an agent's model change is always a RENAME.
 | orc-doc-checker-opus-5-low | claude-opus-5-5 | low | read ONE LINE RANGE of a document and report anchored findings (/orc-doc only; read-only). LOW ON PURPOSE — the same reasoning that pins the challenge cold reader: a harder-thinking checker reasons its way past a gap a real reader would trip on |
 | orc-test-designer-opus-5-high | claude-opus-5-5 | high | fill the GAPS the free case matrix could not derive, and author the front-end journey SCRIPT (/orc-test only). HIGH IS THE INSTRUMENT: a shallow designer returns the three obvious cases the deterministic expansion already covered, which is the one output that costs money and adds nothing |
 | orc-test-interpreter-opus-5-low | claude-opus-5-5 | low | read ONLY a run’s evidence files and say whether what is in them is a finding (/orc-test only; SEALED slice, `Read` and nothing else). LOW IS A MEASUREMENT CHOICE, NOT A COST ONE, and nothing may ever upgrade it: a harder-thinking interpreter reasons its way to why a leaked stack trace is probably fine in staging |
-| orc-trace-writer-haiku-4-5 | claude-haiku-4-5 | — (no ladder) | append one phase block of behavior-trace narration from an orchestrator packet (every trace-owning lane; append-only, never reads source) |
-| orc-graph-noter-sonnet-4-6-med | claude-sonnet-4-6 | medium | write ONE sentence per changed function for the local code graph (`orc graph` Layer 2). Reads line RANGES only, pipes its notes to `orc graph notes apply -` (the CLI validates and stores), returns ONE line. Dispatched by code-changing lanes only when `code_graph_notes` is on and a batch reaches its minimum |
+| orc-trace-writer-haiku-5-high | claude-haiku-5-5 | high | append one phase block of behavior-trace narration from an orchestrator packet (every trace-owning lane; append-only, never reads source) |
+| orc-graph-noter-haiku-5-high | claude-haiku-5-5 | high | write ONE sentence per changed function for the local code graph (`orc graph` Layer 2). Reads line RANGES only, pipes its notes to `orc graph notes apply -` (the CLI validates and stores), returns ONE line. Dispatched by code-changing lanes only when `code_graph_notes` is on and a batch reaches its minimum |
 
 ## Opus-5-only mode agents (hard-gated; dispatched only when `opus5_only: true`)
 
@@ -88,9 +88,9 @@ these. Full mapping + precedence:
 The eleven roles already on `claude-opus-5-5` — analyst, planner, reviewer,
 verifier, test-author, combiner, learn-writer, advisor, judge, CLAUDE.md
 writer, deep wiki scanner — dispatch
-unchanged under this mode. **Never forced:** `orc-trace-writer-haiku-4-5` (it
+unchanged under this mode. **Never forced:** `orc-trace-writer-haiku-5-high` (it
 transcribes a packet, no reasoning) and orc-diy (its table is compile-owned).
-**Not dispatched at all:** `orc-graph-noter-sonnet-4-6-med` has NO Opus 5.5
+**Not dispatched at all:** `orc-graph-noter-haiku-5-high` has NO Opus 5.5
 variant. Under this mode a lane skips graph notes and prints
 `graph notes: skipped (opus5_only)` — a one-sentence summary does not justify an
 Opus 5.5 dispatch, and the graph's structure layer costs no model at all.
@@ -141,14 +141,14 @@ The orchestrator (main session) is NOT an agent file.
 
 Model IDs use the Platform/API dateless format (confirmed at
 platform.claude.com/docs/en/about-claude/models/model-ids-and-versions):
-claude-haiku-4-5, claude-sonnet-4-6, claude-sonnet-5-5, claude-opus-4-7,
+claude-haiku-5-5, claude-sonnet-4-6, claude-sonnet-5-5, claude-opus-4-7,
 claude-opus-4-8 and claude-opus-5-5 (the top executor band + the core fixed
 roles). **Sonnet 5 runs on `claude-sonnet-5-5` since v2.1.0** — the agent names
 keep `-sonnet-5-` (a point release in one family keeps the name, as Opus did in
 v1.9.2), and `claude-sonnet-5` stays a valid config value.
 
 1. **Run `/agents`** to confirm Claude Code accepts these full IDs in agent
-   frontmatter — in particular `claude-haiku-4-5` and `claude-opus-5-5`. If it
+   frontmatter — in particular `claude-haiku-5-5` and `claude-opus-5-5`. If it
    wants short aliases (opus/sonnet/haiku) or dated IDs, adjust
    each `model:` field. The full IDs are valid at the API level but Claude Code
    may normalize differently.

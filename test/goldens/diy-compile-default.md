@@ -97,7 +97,7 @@ its REAL timestamp into a phase packet (`PHASE`, `DISPATCH`/`VERIFY` per spawn �
 `actual_model`/`actual_effort` vs expected, surface any ⛔ DOWNGRADE to the user
 — `SCORE`, `OUTCOME`, `GATE`, `FINDING`/`VERDICT` for whichever gates this flow
 enabled, `FINISH`, plus `decisions` = the WHY), then pipe it to
-`orc trace write --packet -` (exit ≠ 0 → `orc-trace-writer-haiku-4-5`), PAIRED
+`orc trace write --packet -` (exit ≠ 0 → `orc-trace-writer-haiku-5-high`), PAIRED
 with the next phase's first dispatch. **One packet per ENABLED phase group, minimum 2** — the flow shape is
 composed, so the packet count is too; a phase this flow turned OFF owes nothing.
 A phase ending with `zero new trace lines is a protocol violation`.
@@ -134,6 +134,21 @@ TDD is ON for this flow: the plan must carry a `tdd_spec` per requirement
 `tdd: exempt — <reason>`; schema in
 `.claude/skills/orc/schemas/planning-output.md`). No test runner in the
 project → whole-run exemption, stated once at preflight.
+
+Code graph — consult (before the first dispatch): print `probes["graph-status"].line` from
+`orc lane config orc-diy --json`. Run `orc graph status --if-enabled --heal --json --brief` only
+when `heal_needed` is true. Put the `trace` (`GRAPH-CONSULT …`) in the next packet as it is.
+Exit 3 (`off` or `semi`) → make NO other graph call in this run.
+
+Code graph — orient (once, before the planner chooses files): run
+`orc graph map --focus=<3–6 words from the request> --budget 800 --if-enabled --json --brief`
+FIRST, once; print its `line` and emit `GRAPH-MAP`. Rank is a HINT about where to look first,
+never proof a file matters. Never call `map` twice. Then run
+`orc graph impact <candidate declared_files> --if-enabled --json --brief` and hand its callers to
+the planner. Also run `orc graph cochange <each candidate file> --if-enabled --json --brief`:
+a HINT about people, never a dependency; a short history answers exit 4 at once. Exit 3 or 4 →
+plan exactly as before. A task's optional `precedent[]` becomes that task's pack `--refs=`.
+Canonical: `.claude/skills/_shared/code-graph.md`.
 
 ## Phase: Code-pattern findings
 
@@ -196,11 +211,12 @@ per `.claude/skills/_shared/return-validation.md` — including §6's worktree
 delta: `git status --short` before/after each dispatch, any changed path
 outside `declared_files` (a revert included) gates the wave close.
 
-Code graph cache (never skipped): each slice gets ONE `orc graph ctx --for-slice <the task's
-declared_files> --if-enabled --json --brief` `card` as its `graph` block, and the return
-carries `graph_used`. After each wave's worktree audit run ONE call —
+Code graph anchors (never skipped): each slice that writes code carries `graph_anchors` (the `card`, inline) from
+ONE call — `orc graph ctx --for-slice <the task's declared_files> --focus=<the planning words> [--refs=<task.precedent>] --anchors --if-enabled --json --brief`
+(print its `line`; exit 3 or 4 → none), and the return carries `graph_used`. ONLY when
+`update_step` is `lane`, after each wave's worktree audit run ONE call —
 `orc graph update --notes-pending --files <the wave's changed paths> --at wave --if-enabled --json --brief`
-(copy its `trace` verbatim); `notes_pending.exit` 0 → dispatch `orc-graph-noter-sonnet-4-6-med` paired
+(copy its `trace` verbatim); `notes_pending.exit` 0 → dispatch `orc-graph-noter-haiku-5-high` paired
 with the next wave's first dispatch, exit 3 or 5 → nothing. Canonical:
 `.claude/skills/_shared/code-graph.md`.
 Repair memory: probe `orc gotcha status` once at preflight (exit 0 = entries,
@@ -220,9 +236,10 @@ of `.claude/skills/orc/subskills/orc-review-verify/SKILL.md` (reviewer agent
 `orc-reviewer-opus-5-low`; findings ride the severity ladder from the
 locked rules, blocking and advisory findings both surfaced). Build its slice
 from `.claude/skills/_shared/review-slice.md` (§1 free check, §3 after-filter).
-With the code graph on, the reviewer also gets the callers from
-`orc graph changes --if-enabled --json` — an unchanged caller of a
-changed signature is a finding candidate (`.claude/skills/_shared/code-graph.md` §7).
+With the code graph on, run ONCE
+`orc graph changes --files=<the changed paths> --if-enabled --json --brief`: print its `tests_line`,
+run its `tests[]` first, print its `blast_line`, and hand the reviewer its callers — an unchanged
+caller of a changed signature is a finding candidate (`.claude/skills/_shared/code-graph.md` §0 step 4).
 
 ## Phase: Security pass
 
@@ -259,8 +276,9 @@ unresolved report). `mock-examples/` is NEVER staged by the ship phase.
 State the current branch and the change summary BEFORE any git action, and
 never ship on a red build (locked rule).
 
-Before the ship action, run `orc graph update --if-enabled` once more — fix rounds
-move code (`.claude/skills/_shared/code-graph.md` §5).
+Before the ship action, ONLY when `update_step` is `lane`, run
+`orc graph update --notes-pending --files <every path the run changed> --at end --if-enabled --json --brief`
+once more — fix rounds move code (`.claude/skills/_shared/code-graph.md` §5).
 Ask the user how to ship: commit, PR (via
 `.claude/skills/orc/subskills/orc-pr/SKILL.md`), or leave the working tree
 as-is. Default when auto-accepted by autonomy: leave as-is and report.

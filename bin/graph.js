@@ -45,7 +45,7 @@ const SCHEMA = 1;
 //     symbols, and a `<script setup>` component is one `class`. No record FIELD
 //     changed: a 1.9.0 store reads DRIFTED and the next `status --heal`
 //     re-extracts once, the same path 1.8.1 → 1.8.2 took.
-const ENGINE = "graph@6";
+const ENGINE = "graph@7";
 const GIT_MAX_BUFFER = 256 * 1024 * 1024;
 const MAX_BYTES = 512 * 1024;
 const LOCK_STALE_MS = 10 * 60 * 1000;
@@ -514,7 +514,10 @@ function graphUpdate(claudeDir, root, opts) {
       // EW3: how long the last real update took, end to end. A read that may
       // heal uses it as the estimate for the next one — the only honest
       // estimate available, because an update cannot be stopped half way.
-      update_ms: unchanged && prevMeta ? prevMeta.update_ms || 0 : 0,
+      // v2.2.0 (G-13): a COLD build is not an estimate for an incremental
+      // update, so it writes `build_ms` and leaves `update_ms` absent.
+      ...(first ? {} : { update_ms: unchanged && prevMeta ? prevMeta.update_ms || 0 : 0 }),
+      ...(prevMeta && prevMeta.build_ms ? { build_ms: prevMeta.build_ms } : {}),
       // A1: computed from the index this update just built, so it costs one
       // pass over what is already in memory and no file is opened for it.
       density: unchanged && prevMeta && prevMeta.density ? prevMeta.density : densityOf(index, filesOut),
@@ -540,7 +543,8 @@ function graphUpdate(claudeDir, root, opts) {
     // so a crash between the two leaves a valid meta that only lacks an
     // estimate, and a missing estimate simply means "heal, and find out".
     if (!unchanged) {
-      meta.update_ms = Date.now() - t0;
+      if (first) meta.build_ms = Date.now() - t0;
+      else meta.update_ms = Date.now() - t0;
       atomicWrite(p.meta, JSON.stringify(meta, null, 2) + "\n");
     }
     return {

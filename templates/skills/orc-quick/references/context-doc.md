@@ -86,7 +86,7 @@ dispatch of either pinned recon agent is a normal row with the agent's name.
 **repro** red → green · `npm test -- tests/orders.search.test.js` (before: exit 1 · after: exit 0)
 **blast radius** 3 symbols · callers 7 in 4 files · tests reach 2 · risk high: searchByItemPrefix (exported, fan-in 4, no test reaches it)
 **tests** reached 12 passed · suite 41 passed
-**graph** gen 42 · cards 2 · <the `orc graph gain` line, word for word>
+**graph** gen 42 · <the pack `line`, word for word>
 
 **how it was resolved** a short, plain explanation of the fix and WHY this way.
 Say what you did not do, and why. This is the most useful part later.
@@ -118,8 +118,8 @@ Leave out the ones that do not apply:
   the entry tidy: an unreproduced fix is the thing the reader most needs to know.
 - **`blast radius`** — a `risk` word NEVER appears without its `why`. Nothing in
   the graph → `none indexed (<n> files not in the graph)`.
-- **`graph`** — the gain line is an estimate with a range. Copy it; never turn
-  it into a saving.
+- **`graph`** — the pack `line`, as the CLI printed it. Copy it; never
+  change it.
 
 ## A read-only entry
 
