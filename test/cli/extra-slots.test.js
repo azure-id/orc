@@ -364,11 +364,12 @@ test("GOLDEN: EXTRA_SLOTS matches the markdown slot table, in BOTH directions", 
 // v2.1.2 F64 — `claude_opus5` was derived by hand, and the fast executor's twin
 // drifted to `-med` while the canonical table said `-low`. The table decides.
 test("slots: every `claude_opus5` equals its row in `_shared/opus5-only.md`", () => {
-  const cliSrc = fs.readFileSync(path.join(__dirname, "..", "..", "bin", "cli.js"), "utf8");
-  const md = fs.readFileSync(
-    path.join(__dirname, "..", "..", "templates", "skills", "_shared", "opus5-only.md"),
-    "utf8"
-  );
+  const cliSrc = fs.readFileSync(path.join(__dirname, "..", "..", "bin", "cli.js"), "utf8").replace(/\r\n/g, "\n");
+  // CRLF → LF first: a Windows checkout (`text=auto`) writes CRLF, and the row
+  // regex below anchors on `|$` and the table end on a blank line.
+  const md = fs
+    .readFileSync(path.join(__dirname, "..", "..", "templates", "skills", "_shared", "opus5-only.md"), "utf8")
+    .replace(/\r\n/g, "\n");
   const table = (md.match(/\*\*Fixed roles\*\*([\s\S]*?)\n\n(?!\|)/) || ["", ""])[1];
   const twin = new Map(
     [...table.matchAll(/^\| [^|]+ \| `(orc-[a-z0-9-]+)`[^|]*\| `(orc-[a-z0-9-]+)` \|$/gm)].map((m) => [m[1], m[2]])

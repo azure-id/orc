@@ -568,10 +568,12 @@ test("R11 — quick names `ctx <symbol> --anchors` in the spine and in look.md, 
     assert.ok(text.includes("anchors_card"), `${name} names anchors_card`);
     assert.ok(text.includes("--for-slice"), `${name} keeps the --for-slice path`);
   }
-  assert.ok(Buffer.byteLength(spine) < 16384, `quick SKILL.md is ${Buffer.byteLength(spine)} bytes`);
-  assert.ok(spine.split("\n").length <= 325, "quick SKILL.md ≤ 325 lines");
+  // DE-21: the cap is in LF bytes (CRLF counts as LF), so a Windows checkout measures the same.
+  const lf = (s) => s.replace(/\r\n/g, "\n");
+  assert.ok(Buffer.byteLength(lf(spine)) < 16384, `quick SKILL.md is ${Buffer.byteLength(lf(spine))} LF bytes`);
+  assert.ok(lf(spine).split("\n").length <= 325, "quick SKILL.md ≤ 325 lines");
   const mini = fs.readFileSync(path.join(T, "orc-mini", "SKILL.md"), "utf8");
-  assert.ok(Buffer.byteLength(mini) <= 16384, "orc-mini SKILL.md did not grow past its cap");
+  assert.ok(Buffer.byteLength(lf(mini)) <= 16384, "orc-mini SKILL.md did not grow past its cap");
 });
 
 // R11c — the announce lines a lane prints first must name the one-call path.
