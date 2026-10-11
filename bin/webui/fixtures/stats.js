@@ -82,7 +82,7 @@ const budgetForecast = {
   fixed_roles: [
     { role: "orc-system-analyst-opus-5-high", samples: 11, p50: { input: 6100, cache_write: 41000, cache_read: 82000, output: 9000 }, p90: { input: 8600, cache_write: 58000, cache_read: 116000, output: 13000 } },
     { role: "orc-planner-opus-5-med", samples: 11, p50: { input: 5000, cache_write: 33000, cache_read: 68000, output: 7400 }, p90: { input: 7100, cache_write: 47000, cache_read: 96000, output: 10500 } },
-    { role: "orc-trace-writer-haiku-4-5", samples: 41, p50: { input: 900, cache_write: 3000, cache_read: 5400, output: 700 }, p90: { input: 1300, cache_write: 4400, cache_read: 7800, output: 1000 } },
+    { role: "orc-trace-writer-haiku-5-high", samples: 41, p50: { input: 900, cache_write: 3000, cache_read: 5400, output: 700 }, p90: { input: 1300, cache_write: 4400, cache_read: 7800, output: 1000 } },
   ],
   low_confidence_bands: 1,
   min_samples: 5,
@@ -117,7 +117,7 @@ const budgetRates = {
   },
   roles: {
     "orc-system-analyst-opus-5-high": { samples: 11, p50: { input: 6100, cache_write: 41000, cache_read: 82000, output: 9000 }, p90: { input: 8600, cache_write: 58000, cache_read: 116000, output: 13000 }, peak_p50: 88000, peak_p90: 131000 },
-    "orc-trace-writer-haiku-4-5": { samples: 41, p50: { input: 900, cache_write: 3000, cache_read: 5400, output: 700 }, p90: { input: 1300, cache_write: 4400, cache_read: 7800, output: 1000 }, peak_p50: 9000, peak_p90: 14000 },
+    "orc-trace-writer-haiku-5-high": { samples: 41, p50: { input: 900, cache_write: 3000, cache_read: 5400, output: 700 }, p90: { input: 1300, cache_write: 4400, cache_read: 7800, output: 1000 }, peak_p50: 9000, peak_p90: 14000 },
   },
   lanes: {},
   unattributed: { blocks: 12, tokens: { input: 900, cache_write: 12000, cache_read: 24000, output: 1100 } },

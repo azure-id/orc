@@ -1,6 +1,6 @@
 # Phase — Behavior trace   (id: `trace`)
 
-> **Library file.** `orc lane phases <lane> --json` → `trace_grammar` gives this lane's verbs. **A verb not in `trace_grammar` → read `trace-verbs.md`** (the CLOSED set, on demand). Never invent a verb.
+> **Library file.** `orc lane phases <lane> --json` gives `trace_grammar` (the verbs) and `ask_ids` (the ASK question ids) at the top level. **A verb not in `trace_grammar` → read `trace-verbs.md`** (the CLOSED set, on demand). Never invent a verb.
 
 <!-- orc:layer core -->
 
@@ -13,7 +13,7 @@ dispatch and writes the `SPAWN`/`RETURN`/`PHASE-EDGE` skeleton itself. Only
 ## Narration is WRITTEN BY THE CLI, not remembered (v2.0.0 — the core rule)
 
 > **Phase close = pipe the phase packet to `orc trace write --packet -`.**
-> Exit ≠ 0 → dispatch `orc-trace-writer-haiku-4-5` with the SAME packet.
+> Exit ≠ 0 → dispatch `orc-trace-writer-haiku-5-high` with the SAME packet.
 
 You supply the facts; the CLI holds the pen. You never append lines by hand.
 
@@ -125,7 +125,7 @@ its REAL timestamp into a phase packet (`PHASE`, `DISPATCH`/`VERIFY` per spawn �
 `actual_model`/`actual_effort` vs expected, surface any ⛔ DOWNGRADE to the user
 — `SCORE`, `OUTCOME`, `GATE`, `FINDING`/`VERDICT` for whichever gates this flow
 enabled, `FINISH`, plus `decisions` = the WHY), then pipe it to
-`orc trace write --packet -` (exit ≠ 0 → `orc-trace-writer-haiku-4-5`), PAIRED
+`orc trace write --packet -` (exit ≠ 0 → `orc-trace-writer-haiku-5-high`), PAIRED
 with the next phase's first dispatch. **One packet per ENABLED phase group, minimum 2** — the flow shape is
 composed, so the packet count is too; a phase this flow turned OFF owes nothing.
 A phase ending with `zero new trace lines is a protocol violation`.

@@ -30,7 +30,7 @@ O: GATE complexity :: complexity: mini-ok — 2 files · confident callers 1 in 
     3+ co-commits would have made this "recommend /orc" — an offer, never a switch.)
 
 ## Phase 3 — Execute (ONE subagent)
-O: graph: --for-slice card (2 files) · wiki: 1 path (pointer, body never read here)
+O: graph: graph_anchors (2 files) · wiki: 1 path (pointer, body never read here)
 O: → claude-sonnet-5-5 / high :: DISPATCH orc-executor-sonnet-5-high :: add --json flag
    [executor edits cli/report.py + updates tests, returns actual_files + actual_model
    + evidence {`pytest tests/test_report.py`, exit 0, tail quoted} + empty unmet[]]
@@ -43,8 +43,7 @@ O: GRAPH-CHANGES found :: symbols=1 high=0 medium=0 low=1 gen=7 → tests reache
    [re-run] ✅ GREEN — tests reached 1 file → 4 passed · suite 12 passed · build ok.
    blast radius   1 symbol touched · callers 1 in 1 file · tests reach 1 · risk none
    VERDICT pass
-O: GRAPH-UPDATE :: gen 8 · 2 files · 1 note pending → noter batch dispatched
-   graph gain: paid 0.8K tokens · avoided an estimated 2–5K · measured: not yet (N=1)
+O: graph update: none — update_step is `hook` (the graph hook updates the index)
 
 ## Phase T — Test-authoring ask (opt-in; writes, never runs)
 O: Write test cases for these changes? (I author them — files + TEST-PLAN.md — but

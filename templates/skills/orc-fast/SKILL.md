@@ -73,11 +73,14 @@ hand off to orc-mini via the fallback contract below. Never stop the chat.
 **c. Gotchas — NOT a gate.** Two prerequisites stay two: a missing `.claude/orc/gotchas.md` never forces a fallback. Fast READS repair memory (`orc gotcha status`, then inject the SCOPE-MATCHING entries into the F2 slice, cap 3) and never WRITES it — `../_shared/gotchas.md` §10. The code graph is NOT a gate either (e. below).
 
 **e. Code graph cache — NOT a gate, and never skipped** (`../_shared/code-graph.md` §0). Every call carries
-`--if-enabled`: exit 3 = off → print `graph: off` once, make no other graph call. Print each JSON `line`; put
-each `trace` in the next packet VERBATIM. (1) **Here:** `orc graph status --if-enabled --heal --json --brief` builds or
-updates the cache itself. (2) **F2 slice:** ONE `orc graph ctx <declared files> --if-enabled --json --brief` → its `card`
-is the `graph` block; the return carries `graph_used`. (3) **F3 GREEN:** `orc graph update --if-enabled --json --brief`,
-then one `orc graph notes pending` batch — the next run starts from this cache. A missing graph never falls back.
+`--if-enabled`: exit 3 (`off` or `semi`) → print the probe line once, make no other graph call. Print each JSON `line`; put
+each `trace` in the next packet VERBATIM. (1) **Consult, here:** print `probes["graph-status"].line`; run
+`orc graph status --if-enabled --heal --json --brief` only when `heal_needed` is true. (2) **F2 anchors:** ONE
+`orc graph ctx --for-slice <declared files> --focus=<3–6 words> [--refs=<copy-from files>] --anchors --if-enabled --json --brief` (a request that names one symbol: `ctx <symbol> --anchors` gives the card and the anchors in one call)
+→ print its `line`; paste its `card` into the slice VERBATIM as `graph_anchors`, with its `read all: …` line and its code block — never shorten it (exit 3 or 4, or one named file with no outside change → none); the return carries `graph_used`.
+(3) **F3, before the suite:** `orc graph changes --files=<actual files> --if-enabled --json --brief` → print `tests_line`,
+run its `tests[]` first, then the suite, then print `blast_line`. (4) **F3 GREEN:** `orc graph update --notes-pending --files
+<actual files> --if-enabled --json --brief` ONLY when `update_step` is `lane`. No lane runs the gain meter. A missing graph never falls back.
 
 **d. Extra — a PROBE, not a gate (P0).** Run `orc extra resolve --slot fast-executor --json` (0 = extra, 1 = Claude) — **a gate that is never probed is a gate that is always off**, and without this step the lane silently runs on Claude however `extra_enabled` and `orc extra role` were set. `extra` → print the `extra:` line HERE and carry the answer into F2; `claude` → print nothing, never fall back, never stop.
 
@@ -105,7 +108,7 @@ pinned in the agent file). **Under `opus5_only` it is `orc-executor-opus-5-low`*
 - the task (intent spec) + acceptance bullets as definition-of-done
 - **wiki pointers, not content** (fast's lane-delta in
   `../_shared/phases/wiki-consult.md`): the PATHS of 1–3 relevant pages
-  selected from `wiki/INDEX.md` by keyword match — prefer the cross-cutting
+  selected from `wiki/INDEX.md` by keyword match (With `graph_anchors` in the slice, list at most ONE wiki page path (the one about the feature's intent), not 1–3) — prefer the cross-cutting
   maps (`orc-reference-api-surface` etc.) when the domain matches. Instruct
   the executor to READ them first, and include the precedence line verbatim:
   `code > fresh wiki > stale wiki (hints) > model priors`. Never paste wiki
@@ -126,7 +129,7 @@ pinned in the agent file). **Under `opus5_only` it is `orc-executor-opus-5-low`*
   codifies and never falls back on this.
 - **the read ladder** (`../_shared/read-ladder.md`): read only as far up as the
   question needs — a file the task will EDIT is read in full first. Precomputed
-  knowledge REPLACING exploration is this lane; a directory sweep is not. With the graph on, `orc graph ctx` cards locate first.
+  knowledge REPLACING exploration is this lane; a directory sweep is not. With the graph on, the `graph_anchors` locate first.
 - the standing `house_rules` card (`../_shared/phases/house-rules.md`, literal,
   same as full/mini) + the `rules_card` under it (`orc rules slice` → `text`, verbatim)
 - constraints from the intent spec
@@ -146,7 +149,7 @@ return = failure (one re-dispatch, then fallback offer).
 Run the gate per `../_shared/smoke-gate.md`, sourcing commands **from
 `wiki-meta.json`'s `commands` block** (recorded at wiki scan — don't
 rediscover tooling; manifest lacks them → detect once and say so). **GREEN**
-→ code-graph step e.(3) (never a gate) → ship. **RED** → the flaky check, then one repair round; second red → STOP and offer: escalate to
+→ code-graph step e.(4) (never a gate) → ship. **RED** → the flaky check, then one repair round; second red → STOP and offer: escalate to
 orc-mini (reason `smoke-red-escalation`) / switch to full `/orc` / stop.
 Docs-only → gate N/A, say so.
 

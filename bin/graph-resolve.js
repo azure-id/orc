@@ -53,7 +53,7 @@ const G = require("./graph.js");
 
 // 3 (v1.8.2 W1): ROUTE rows. A 1.8.1 cache is refused by the schema check and
 // recomputed on read until the next `update` rewrites it — no answer changes.
-const RESOLVE_SCHEMA = 3;
+const RESOLVE_SCHEMA = 4;
 const CONFIDENT = new Set(["LOCAL", "IMPORT", "UNIQUE", "ROUTE"]);
 const NAMES_PER_KEY = 5;
 

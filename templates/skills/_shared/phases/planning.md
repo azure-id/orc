@@ -20,20 +20,22 @@ task (advisory) and print + emit `CROSSLINK <state> :: boundaries=<n> peers=<nam
 only pre-built needs/cache, never peer source live). **Gotchas (repair memory,
 config `gotchas`):** probe ONCE with `orc gotcha status` (exit 0 = entries exist,
 1 = none — never a `find`); canonical `_shared/gotchas.md`.
-**Code graph (`../code-graph.md` §3b and §7):** with the graph on, run
-`orc graph map --focus <every file or symbol the request NAMES> --if-enabled --json --brief`
+**Code graph (`../code-graph.md` §0 step 2, §3b):** with the graph on, run
+`orc graph map --focus=<3–6 words from the request> --budget 800 --if-enabled --json --brief`
 **FIRST, once** — before any Glob and before `impact`. It ranks the repository
-around the request and names the files worth reading, which is the question
-`impact` cannot answer because `impact` needs the files already chosen. Print its
+around the request and names the files worth reading; `impact` cannot answer that,
+because it needs the files already chosen. Print its
 `line` and emit `GRAPH-MAP`. Rank is a HINT about where to look first, never
 proof a file matters — and never a reason to skip reading a range you will edit.
-Exit 1 or 3 → orient exactly as before. Then run
+Never call `map` twice. Exit 1 or 3 → orient exactly as before. Then run
 `orc graph impact <candidate declared_files> --if-enabled --json --brief` and hand its
 callers to the planner — they sharpen `declared_files` and the `fan` and risk
-facets. Also run `orc graph cochange <each candidate file> --if-enabled --json --brief`:
-it answers "what else will I have to touch" from HISTORY, which a static edge
-cannot see. Co-change is a HINT about people, never a dependency — exit 4 means
-this file changes alone, which is an answer. Exit 3 or 4 → plan exactly as before.
+facets. `/orc`, `/orc-ultra` and `/orc-diy` also run
+`orc graph cochange <each candidate file> --if-enabled --json --brief`: it answers
+"what else will I have to touch" from HISTORY. Co-change is a HINT about people,
+never a dependency. A short history answers exit 4 at once — this file changes
+alone, which is an answer. Exit 3 or 4 → plan exactly as before. A task's optional
+`precedent[]` (the planner's copy-from files) becomes that task's pack `--refs=`.
 **Pact / boundary / aftermath / wiki debt (all CONSUMED here, never
 written here):** probe `orc pact status --json` (`pact_gate`, default `warn`),
 `orc boundary status --json` (`boundary_gate`, default `warn`), `orc wiki debt
@@ -136,4 +138,20 @@ TDD is ON for this flow: the plan must carry a `tdd_spec` per requirement
 project → whole-run exemption, stated once at preflight.
 <!-- /diy:when -->
 
+<!-- diy:when code_graph=on -->
+Code graph — consult (before the first dispatch): print `probes["graph-status"].line` from
+`orc lane config orc-diy --json`. Run `orc graph status --if-enabled --heal --json --brief` only
+when `heal_needed` is true. Put the `trace` (`GRAPH-CONSULT …`) in the next packet as it is.
+Exit 3 (`off` or `semi`) → make NO other graph call in this run.
+
+Code graph — orient (once, before the planner chooses files): run
+`orc graph map --focus=<3–6 words from the request> --budget 800 --if-enabled --json --brief`
+FIRST, once; print its `line` and emit `GRAPH-MAP`. Rank is a HINT about where to look first,
+never proof a file matters. Never call `map` twice. Then run
+`orc graph impact <candidate declared_files> --if-enabled --json --brief` and hand its callers to
+the planner. Also run `orc graph cochange <each candidate file> --if-enabled --json --brief`:
+a HINT about people, never a dependency; a short history answers exit 4 at once. Exit 3 or 4 →
+plan exactly as before. A task's optional `precedent[]` becomes that task's pack `--refs=`.
+Canonical: `.claude/skills/_shared/code-graph.md`.
+<!-- /diy:when -->
 <!-- /orc:layer -->

@@ -146,7 +146,7 @@ $ orc stats --since 2026-07-01
 
 ```
 Lanes          runs        Agents                          dispatches
-  orc            12          orc-executor-sonnet-4-6-med       41
+  orc            12          orc-executor-haiku-5-high       41
   quick          31          orc-executor-sonnet-5-high        22
   mini            9          orc-planner-opus-5-med            21
   wiki            3          orc-reviewer-opus-5-low           12

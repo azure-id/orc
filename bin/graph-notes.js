@@ -2,7 +2,7 @@
 // ── orc graph — NOTES (v1.8.0 W4) ───────────────────────────────────────────
 //
 // Layer 2: one sentence per function or method, written by
-// `orc-graph-noter-sonnet-4-6-med`, stored by THIS module and nothing else.
+// `orc-graph-noter-haiku-5-high`, stored by THIS module and nothing else.
 //
 // THE RULES THIS FILE HOLDS
 //

@@ -213,13 +213,13 @@ test("a NON-retryable failure goes to Claude — and STILL as a resume slice", a
     const res = JSON.parse(fs.readFileSync(rp, "utf8"));
     res.reason = "authentication_failed";
     res.retry = false;
-    res.fallback_to = { agent: "orc-executor-sonnet-4-6-med" };
+    res.fallback_to = { agent: "orc-executor-haiku-5-high" };
     res.attribution = { verdict: "provider", why: "the endpoint rejected the credential.", evidence: [], fallback_would_also_fail: false };
     fs.writeFileSync(rp, JSON.stringify(res));
 
     const v = json(resumeSlice(p, ["--json"]));
     assert.equal(v.resume_target.kind, "claude");
-    assert.equal(v.resume_target.agent, "orc-executor-sonnet-4-6-med");
+    assert.equal(v.resume_target.agent, "orc-executor-haiku-5-high");
     // THE CASE THAT FIXES GAP 1. A Claude executor landing on a two-thirds
     // written file with a from-scratch slice is what this release removes.
     const derived = JSON.parse(fs.readFileSync(outPath(p), "utf8"));

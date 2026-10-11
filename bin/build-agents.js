@@ -36,7 +36,7 @@ const OUT_DIR = path.join(ROOT, "templates", "agents");
 //
 // v1.0.0 W4 — the table was SIX bands, not eight, and the `opus5_only` ladder is
 // TWO, not three. v2.1.0 made the table FIVE bands (Sonnet 5 low/med/high, then
-// Opus 5.5 low/med). Seven of these agents are named by NO default row:
+// Opus 5.5 low/med). Six of these agents are named by NO default row:
 // names them, and they ship anyway (D14). They stay reachable through
 // `rubric_bands_override`, `orc diy` `fixed_executor` and `extra_fallback_agent`,
 // and deleting a generated file that no row happens to name today would be a
@@ -52,8 +52,10 @@ const VARIANTS = [
   // NAMED BY NO BAND since v1.0.0 W4 / v2.1.0 (D14) — kept on disk, dispatched
   // only when a user names one explicitly.
   { name: "orc-executor-sonnet-4-6-high", model: "claude-sonnet-4-6", effort: "high",  band: "none (opt-in only, see MODEL-MAPPING.md)" },
-  { name: "orc-executor-sonnet-4-6-med", model: "claude-sonnet-4-6", effort: "medium", band: "none (opt-in only, see MODEL-MAPPING.md)" },
-  { name: "orc-executor-haiku-4-5",      model: "claude-haiku-4-5",  effort: null,     band: "none (opt-in only, see MODEL-MAPPING.md)" },
+  // v2.2.0 — `haiku-4-5` and `sonnet-4-6-med` were RENAMED into this one row
+  // (an identical twin would have been the result). cli.js LEGACY_AGENTS maps
+  // the old names for configs that still write them.
+  { name: "orc-executor-haiku-5-high",   model: "claude-haiku-5-5",   effort: "high",   band: "none (opt-in only, see MODEL-MAPPING.md)" },
   { name: "orc-executor-opus-5-high",    model: "claude-opus-5-5",    effort: "high",   band: "none (opt-in only, see MODEL-MAPPING.md)" },
   { name: "orc-executor-opus-4-8-high",  model: "claude-opus-4-8",  effort: "high",   band: "none (opt-in only, see MODEL-MAPPING.md)" },
   { name: "orc-executor-opus-4-7-high",  model: "claude-opus-4-7",  effort: "high",   band: "none (opt-in only, see MODEL-MAPPING.md)" },

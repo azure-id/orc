@@ -470,9 +470,9 @@ const required = [
   "templates/agents/orc-judge-opus-5-xhigh.md",
   "templates/agents/orc-claude-writer-opus-5-low.md",
   "templates/agents/orc-learn-writer-opus-5-low.md",
-  "templates/agents/orc-trace-writer-haiku-4-5.md",
+  "templates/agents/orc-trace-writer-haiku-5-high.md",
   // v1.8.0 — the code graph's notes writer (Layer 2).
-  "templates/agents/orc-graph-noter-sonnet-4-6-med.md",
+  "templates/agents/orc-graph-noter-haiku-5-high.md",
   // Core non-generated agents — named explicitly so a dropped file is REPORTED
   // by name, not merely absorbed by the count floor. (The 10 executor agents are
   // checked separately by `build-agents.js --check`. v2.0.0 T15: the 16 model

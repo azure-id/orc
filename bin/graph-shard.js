@@ -279,13 +279,36 @@ function fastModel(claudeDir, root, query, opts) {
   };
 
   // The target's own shard holds its callers AND its ambiguous-caller counts.
-  // `ctx` asks for callers of the TARGET and of nothing else, so one shard is
-  // the whole reverse half of this card.
   const s0 = shardFor(rel);
-  const callersCache = Object.create(null);
-  const maybeCache = Object.create(null);
-  for (const [k, v] of Object.entries(s0.callers)) callersCache[k] = v;
-  for (const [k, v] of Object.entries(s0.maybe || {})) maybeCache[k] = v;
+  const callersRows = Object.create(null);
+  const maybeRows = Object.create(null);
+  const merged = new Set();
+  const merge = (r, sh) => {
+    merged.add(r);
+    for (const [k, v] of Object.entries(sh.callers || {})) callersRows[k] = v;
+    for (const [k, v] of Object.entries(sh.maybe || {})) maybeRows[k] = v;
+  };
+  merge(rel, s0);
+  // R11 (v2.2.0): the card also asks for the callers of the target's CALLERS
+  // (the tests that reach it through one). Those rows live in the shard of the
+  // caller's file, so that shard is read on first ask. A shard that will not
+  // read sends the whole card back to the full model, never a shorter card.
+  const ensure = (k) => {
+    if (typeof k !== "string" || !k.includes("#")) return;
+    const r = k.split("#")[0];
+    if (merged.has(r) || !files[r]) return;
+    const sh = shardFor(r);
+    if (!sh) throw new FastUnavailable("shard-stale:" + r);
+    merge(r, sh);
+  };
+  const lazy = (t) =>
+    new Proxy(t, {
+      get: (o, k) => (ensure(k), o[k]),
+      has: (o, k) => (ensure(k), k in o),
+      getOwnPropertyDescriptor: (o, k) => (ensure(k), Reflect.getOwnPropertyDescriptor(o, k)),
+    });
+  const callersCache = lazy(callersRows);
+  const maybeCache = lazy(maybeRows);
 
   return {
     model: {

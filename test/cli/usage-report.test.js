@@ -52,8 +52,8 @@ const TRACE_TEXT = [
   "[030926 19:49:08.852] hook     SPAWN orc-executor-opus-5-low :: Repair findings",
   "[030926 19:54:28.672] hook     RETURN orc-executor-opus-5-low :: Repair findings dur=9m3s",
   "[030926 20:36:23.220] hook     RETURN ~agent :: unattributed",
-  "[030926 22:42:41.248] hook     SPAWN orc-executor-sonnet-4-6-med :: Map fields",
-  "[030926 22:45:59.966] hook     RETURN orc-executor-sonnet-4-6-med :: Map fields dur=3m19s",
+  "[030926 22:42:41.248] hook     SPAWN orc-executor-haiku-5-high :: Map fields",
+  "[030926 22:45:59.966] hook     RETURN orc-executor-haiku-5-high :: Map fields dur=3m19s",
   "",
 ].join("\n");
 
@@ -113,7 +113,7 @@ test("top rows rank by measured wall time and mark what is still RUNNING", () =>
   // 12m43s + 9m3s = 1306s, plus ~300s still running.
   assert.ok(json.top[0].wall_seconds >= 1306, "returned dispatches are summed");
   assert.equal(json.top[0].running, 1, "an open dispatch is real spend happening now");
-  assert.equal(json.top[1].agent, "orc-executor-sonnet-4-6-med");
+  assert.equal(json.top[1].agent, "orc-executor-haiku-5-high");
   assert.equal(json.top[1].wall_seconds, 199);
   // `RETURN ~agent :: unattributed` is a >=2-in-flight artefact, not a dispatch.
   assert.ok(!json.top.some((t) => t.agent === "agent"));

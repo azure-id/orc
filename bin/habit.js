@@ -140,7 +140,7 @@ const QUESTION_RE = /(?:^|\s)QUESTION\s+count=(\d+)/;
 const AGENT_RE = /^[a-z0-9][a-z0-9.:-]*$/;
 
 // v2.1.0 (A1) — ONE agent, ONE spelling. A live gate wrote the same executor
-// three ways (`orc-executor-sonnet-4-6-med`, `sonnet-4-6-med`, `sonnet`), so a
+// three ways (`orc-executor-haiku-5-high`, `haiku-5-high`, `haiku`), so a
 // 15-of-15 choice read as 5/7 and was never proposed. A short form is mapped to
 // the full SHIPPED agent name only when it can mean exactly one agent of the
 // gate's role (a family word like `sonnet` is settled by the `offered=` list);

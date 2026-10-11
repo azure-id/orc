@@ -91,7 +91,7 @@
  * Rich run filenames (v0.32.0): the canonical trace name is
  * `run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`, written by the orchestrating lane at
  * run start. The hook still bootstraps its own generic `run-<DDMMYY>-<HHMMSS>.txt`
- * when the pointer is missing; the first `orc-trace-writer-haiku-4-5` dispatch
+ * when the pointer is missing; the first `orc-trace-writer-haiku-5-high` dispatch
  * RENAMES that bootstrap file (+ sidecars) and rewrites `.current`. The hook is
  * name-agnostic (rotation/STALE logic is pointer-based) and holds no open
  * handles, so a rename between two hook events is safe.

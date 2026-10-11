@@ -12,7 +12,7 @@ description: >
 
 The quick lane. You ask for something. It looks, asks you **one** set of
 questions, dispatches one agent, and writes down what happened. **Three steps
-per request, one user turn. Fewer than any other lane. Do not add steps.**
+per request, one user turn. Do not add steps.**
 
 **You never implement — you spawn.** You read only to FIND the right files. To
 UNDERSTAND something, you dispatch an agent.
@@ -21,7 +21,7 @@ UNDERSTAND something, you dispatch an agent.
 decide if it only READS or also WRITES → pick what to dispatch → **ask the
 user** → dispatch → check the return → write the doc entry. No request is "not
 supported"; a request can only be **too big**, and then you OFFER `/orc-mini`.
-**What this lane is NOT** — no teaching doc, no repo scan, no spec, no plan, no
+**What this lane is NOT** — no repo scan, no spec, no plan, no
 waves, no scoring, no acceptance pass (`README.md` §2).
 
 ---
@@ -34,10 +34,9 @@ without the manifest (`../_shared/lane-contract.md` §Phases).
 
 ## Q0 — Preflight (ONE time per session, silent, nothing can stop the run)
 
-1. **Config.** Read `log_dir` only. Read no other key. **One exception, and it
+1. **Config.** Read `log_dir` only. **One exception, and it
    is a PROBE, not a key read:** `probes["extra-slot"]` in the `orc lane config`
-   answer (`resolved`: extra or claude) answers the master gate, the position and the
-   routing in one, so the code-writing menu can offer line 3. Do not call
+   answer (`resolved`: extra or claude) answers the gate and the routing, so the code-writing menu can offer line 3. Do not call
    `orc extra resolve --slot quick-executor`. **A gate that is never probed is a
    gate that is always off.** Keep the answer for this session; it is an OPTION
    on a menu, never a default (`references/dispatch-gate.md`). **`habits{}` in
@@ -61,7 +60,7 @@ without the manifest (`../_shared/lane-contract.md` §Phases).
 4. **Code graph cache — never skipped** (`../_shared/code-graph.md` §0). Print
    `probes["graph-status"].line`; run
    `orc graph status --if-enabled --heal --json --brief` only when `heal_needed` is true. Put the `trace` (`GRAPH-CONSULT …`) in
-   the packet VERBATIM. Exit 3 = off → no other graph call this session. Every graph
+   the packet VERBATIM. Exit 3 (`off` or `semi`) → no other graph call this session. Every graph
    call carries `--if-enabled`, so the CLI reads the `code_graph` keys —
    this lane still reads `log_dir` and nothing else.
 5. **`gh` probe — only when the request names a PR** (`pr <n>`, `PR <n>`, a
@@ -96,16 +95,15 @@ Print it on ONE line:
 
 **The dig — graph first** (`references/look.md`). Ask the graph BEFORE any
 Grep; Grep only for what the graph does not know.
-- Names a file or symbol → `orc graph ctx <targets> --if-enabled --json --brief`, 5 at
-  most. Names none → `orc graph map --focus "<3–6 words>" --budget 800
-  --if-enabled --json --brief`, then `ctx` on the files it ranks first. Asks what breaks
-  or who uses something → `ctx <symbol> --depth 2` and `orc graph coverage
-  <files> --if-enabled --json --brief` before you call anything absent. Exit 3 →
-  Grep/Glob. Exit 4 → Grep the name, carry EVERY candidate into your question.
-  Copy each `line` into chat, each `trace` into the running record. A `map`
-  answer is ONE call; a card never replaces reading the range it names.
+- Names a symbol → ONE `orc graph ctx <symbol> --anchors --focus=<words> --if-enabled
+  --json --brief`: callers, tests (also via a caller), coverage — no Grep of that name,
+  `coverage` only on `partial`; `anchors_card` = the slice's `graph_anchors` (no
+  `--for-slice`), declared = target file + its caller files. Files → `ctx <files>` (≤ 5).
+  None → `orc graph map --focus=<3–6 words> --budget 800 …`, then ONE `ctx` (≤ 5), not
+  `cat`/`grep`. Exit 3 → Grep/Glob. Exit 4 → Grep the name, carry EVERY candidate.
+  `line` → chat, `trace` → the record. A card never replaces reading its range.
 - Wiki exists → pick 1–3 pages from `wiki/INDEX.md` and keep their **PATHS**
-  only. Never paste wiki text into a slice. Emit
+  only. With `graph_anchors` in the slice, list at most ONE wiki page path (the one about the feature's intent), not 1–3. Never paste wiki text into a slice. Emit
   `WIKI-CONSULT <tier> :: docs=<paths>`.
 - Pattern cached → keep it for the slice.
 - Always put this line in every slice, word for word:
@@ -157,12 +155,14 @@ Rules:
 
 ### 3.1 Dispatch and check the return
 
-Put in the slice: the change sketch, the Q2 answers, 2–3 acceptance bullets, the
-`graph` block from `orc graph ctx <declared files> --for-slice --if-enabled
---json --brief` (the OUTSIDE view — `references/look.md` §5), the wiki **paths**, the
-cached pattern (whole text), the `house_rules` card
-(`../_shared/phases/house-rules.md`, whole text), the `rules_card` under it
-(`orc rules slice --lane orc-quick --json` → `text`, whole text), PR comments
+Put in the slice: the change sketch, Q2 answers, 2–3 acceptance bullets, the
+`graph_anchors` (WHOLE `card` VERBATIM, `read all:` + code) from ONE `orc graph ctx --for-slice <declared files>
+--focus=<3–8 words: request, doc, copy-from name> [--refs=<copy-FROM files,
+found first>] --anchors --if-enabled --json --brief`
+(print `line`; exit 3/4 or one file, no outside change → none — `references/look.md`
+§5), the wiki **paths**, the cached pattern, the `house_rules` card
+(`../_shared/phases/house-rules.md`), the `rules_card` under it
+(`orc rules slice --lane orc-quick --json` → `text`) — all three whole text, PR comments
 with their `file:line`, and a short-return rule. A `kind: defect` entry also
 carries `repro` — the EXECUTOR writes it red, then fixes it green, never you
 (`references/defect.md`). An **ad-hoc** dispatch is also told to report its own
@@ -170,7 +170,7 @@ carries `repro` — the EXECUTOR writes it red, then fixes it green, never you
 
 Check the return with `../_shared/return-validation.md` §1–§3 + each injected
 field's §: honest `unmet[]`, `pattern_version` + `invariants_checked`,
-`graph_used` (absent on a slice that carried a card = malformed), `repro` when
+`graph_used` (absent on a slice that carried `graph_anchors` = malformed), `repro` when
 the slice asked for it, and `actual_model` / `actual_effort` → emit `VERIFY`, which names
 `graph_used=<n> targets gen <n>` and `repro red→green` beside the model match,
 and show ⛔ DOWNGRADE if they differ. Also compare `git status --short`
@@ -209,16 +209,13 @@ Never offer commit while tests are red.
 
 ### 3.3 Write the doc — ALWAYS, and BEFORE any offer
 
-**After a request that WROTE code** (never after a read-only one), so the next
-request and the next session start from a current cache, in this order:
+**After a request that WROTE code** (never after a read-only one), and ONLY
+when `probes["graph-status"].update_step` is `lane`:
 `orc graph update --notes-pending --files <actual_files> --if-enabled --json --brief`
 — ONE call that answers both (print its `line`, copy its `trace`). Exit 0 on
-`notes` → dispatch `orc-graph-noter-sonnet-4-6-med` in the SAME tool block as
-this doc write. It is ORC bookkeeping, like the trace writer — not a Q2 gate
-dispatch (`references/dispatch-gate.md` rule 8). Exit 3 or 5 → nothing. Then,
-after the entry is appended, `orc graph gain --run <this run> --if-enabled
---json --brief` → print its `line` VERBATIM into chat and the entry. It is an estimate
-with a range; never restate it as a saving.
+`notes` → dispatch `orc-graph-noter-haiku-5-high` in the SAME tool block as
+this doc write — bookkeeping, not a Q2 gate dispatch (`references/dispatch-gate.md` rule 8). Exit 3 or 5 → nothing.
+`hook`, `preflight` or `none` → no update call. No lane runs the gain meter.
 
 Append entry N to `orc-quick/<slug>/quick-context.md`
 (`references/context-doc.md`, only `## Entry shape` or `## A read-only entry`).

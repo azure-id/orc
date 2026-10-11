@@ -28,7 +28,7 @@
     "it has no rate for. A pair with no rate reports `usd: null` forever, never a",
     "guess and never a family fallback."
   ],
-  "as_of": "2026-10-01",
+  "as_of": "2026-10-09",
   "currency": "USD",
   "unit": "per_million_tokens",
   "server_tools": {
@@ -83,6 +83,12 @@
       "cache_write": 3.75,
       "cache_read": 0.3,
       "output": 15
+    },
+    "claude-haiku-5-5": {
+      "input": 0.1,
+      "cache_write": 0.125,
+      "cache_read": 0.01,
+      "output": 0.5
     },
     "claude-haiku-4-5": {
       "input": 1,
@@ -151,6 +157,7 @@
     "claude-sonnet-5-5": 200000,
     "claude-sonnet-5": 200000,
     "claude-sonnet-4-6": 200000,
+    "claude-haiku-5-5": 1000000,
     "claude-haiku-4-5": 200000
   },
   "providers": {

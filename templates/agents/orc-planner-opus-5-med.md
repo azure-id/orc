@@ -147,7 +147,9 @@ The ORC planning-output object + a one-line summary + `coverage:
 recomputes it at Phase 1 exit alongside the grounding Glob, cycle, and
 same-file collision checks, and bounces failures back to you, one retry). Every
 task carries its `facets` block (the orchestrator scores from it and re-validates
-breadth + fan + risk citation); the top level carries `plan_head`,
+breadth + fan + risk citation). A task MAY carry an OPTIONAL `precedent[]` —
+read-only files this task copies behaviour or style from (max 5); the lane passes
+them as the pack's `--refs=`. Absent is fine. The top level carries `plan_head`,
 `plan_confidence`, and `open_questions[]`. Also
 report `actual_model` (quoted verbatim from your system prompt's "The exact
 model ID is …" line; `unknown` if absent, never guessed) and `actual_effort`

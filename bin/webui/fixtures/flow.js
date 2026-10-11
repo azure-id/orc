@@ -31,7 +31,7 @@ const diy = {
     { key: "planning", value: "own-planner", default: "auto", is_set: true, desc: "Planning route.", options: ["auto", "own-planner", "superpowers", "openspec"] },
     { key: "pattern", value: "ask", default: "ask", is_set: false, desc: "Code-pattern gate on a cache miss.", options: ["ask", "off", "on"] },
     { key: "scoring", value: "on", default: "on", is_set: false, desc: "Rubric scoring.", options: ["on", "off"] },
-    { key: "fixed_executor", value: "", default: "", is_set: false, desc: "Executor used for every task when scoring is off.", options: ["orc-executor-haiku-4-5", "orc-executor-sonnet-4-6-med", "orc-executor-sonnet-5-high", "orc-executor-opus-4-8-high", "orc-executor-opus-5-high"] },
+    { key: "fixed_executor", value: "", default: "", is_set: false, desc: "Executor used for every task when scoring is off.", options: ["orc-executor-haiku-5-high", "orc-executor-sonnet-5-high", "orc-executor-opus-4-8-high", "orc-executor-opus-5-high"] },
     { key: "review", value: "blocking-only", default: "full", is_set: true, desc: "Review phase depth.", options: ["on", "off", "blocking-only"] },
     { key: "security", value: "off", default: "off", is_set: false, desc: "Security pass.", options: ["off", "ask", "on", "always"] },
     { key: "verify", value: "smoke", default: "full", is_set: true, desc: "Verification depth.", options: ["full", "off", "smoke"] },

@@ -191,9 +191,27 @@ test("graph changes and cochange — off with --if-enabled is exit 3, and no gra
   assert.equal(graph(root, "changes", "--json").status, 1, "changes needs an index");
 });
 
+// v2.2.0 (G-15): under 20 commits `cochange` answers nothing, so a test that
+// wants an answer pads the history with EMPTY commits — they touch no file.
+const padHistory = (git) => {
+  for (let i = 0; i < 20; i++) git("commit", "--allow-empty", "-qm", `pad ${i}`);
+};
+
+test("graph cochange — a short history is exit 4 at once, with its own line and trace", () => {
+  const { root } = repo();
+  built(root);
+  const r = graph(root, "cochange", "src/routes/orders.js", "--json");
+  assert.equal(r.status, 4);
+  const j = json(r);
+  assert.match(j.line, /^cochange: history too short \(\d+ commits?\) — no answer$/);
+  assert.match(j.trace, /^GRAPH-COCHANGE none :: history=\d+$/);
+  assert.ok(!fs.existsSync(path.join(root, ".claude", "orc", "graph", "cochange.json")), "no `git log` was paid for");
+});
+
 test("graph cochange — files that really change together, and silence for a file that does not", () => {
   const { root, git } = repo();
   built(root);
+  padHistory(git);
   // Three commits that touch the route and the service together, and one that
   // touches the repo alone.
   for (let i = 0; i < 3; i++) {
@@ -221,6 +239,7 @@ test("graph cochange — files that really change together, and silence for a fi
 test("graph cochange — the answer is cached per HEAD, and a new commit rebuilds it", () => {
   const { root, git } = repo();
   built(root);
+  padHistory(git);
   graph(root, "cochange", "src/routes/orders.js", "--json");
   const cache = path.join(root, ".claude", "orc", "graph", "cochange.json");
   assert.ok(fs.existsSync(cache), "history does not move under a working-tree edit — cache it");

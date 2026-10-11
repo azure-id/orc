@@ -5,6 +5,8 @@
   "knowledge.graph.unknownHint": "CLI tidak menjawab. Jalankan perintahnya di terminal untuk melihat penyebabnya.",
   "knowledge.graph.off": "Graf kode mati.",
   "knowledge.graph.offHint": "Default-nya mati. Jika menyala, lane kode membuat peta kode lokal secara gratis dan menjaganya tetap baru.",
+  "knowledge.graph.semi": "semi — selalu diperbarui, lane tidak membacanya",
+  "knowledge.graph.semiHint": "Graph selalu diperbarui, tetapi tidak ada lane yang membacanya. Untuk mengaktifkan pembacaan, jalankan perintah ini:",
   "knowledge.graph.none": "Graf menyala, tetapi indeksnya belum ada. Lane kode berikutnya akan membuatnya, atau tekan tombolnya.",
   "knowledge.graph.files": "File",
   "knowledge.graph.symbols": "Simbol",

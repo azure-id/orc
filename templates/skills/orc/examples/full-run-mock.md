@@ -25,8 +25,8 @@ O: Facet scoring (planner facets → formula → band; facet gate: breadth + fan
    T2 3·imitate·branching·new-tests·fan1/0·low = 6+8+8+8+5 = 35 → sonnet-5-high
    T3 3·imitate·branching·update-existing·fan1/0·low = 6+8+8+4+5 = 31 → sonnet-5-high
    T4 2·imitate·branching·update-existing·fan1/0·low = 6+8+8+4+5 = 31 → sonnet-5-high
-   T5 1·mechanical·none·update-existing·fan0/0·low = 2+0+0+4 = 6 → haiku-4-5
-   T6 1·mechanical·none·none·fan0/0·low = 2+0+0+0 = 2 → haiku-4-5
+   T5 1·mechanical·none·update-existing·fan0/0·low = 2+0+0+4 = 6 → haiku-5-high
+   T6 1·mechanical·none·none·fan0/0·low = 2+0+0+0 = 2 → haiku-5-high
    Plan: 6 tasks, 3 waves W1{T1} W2{T2,T3,T4} W3{T5,T6}, all spawned. Anticipated escalations? U: none, go.
 
 ## Phase 3 — Execution (ALL spawned; orchestrator coordinates only)
@@ -46,7 +46,7 @@ O: [checkpoint + state-of-play written into run/merchant-notifications/ BEFORE d
 
 U: [next day, FRESH session, pastes block]
 O: [state-of-play → checkpoint → re-anchored] "Resuming: merchant notifications (in-app+digest+prefs). Still correct?" U: yes.
-▶ W3: spawn T5+T6 (haiku-4-5) → done. All 6 complete.
+▶ W3: spawn T5+T6 (haiku-5-high) → done. All 6 complete.
 
 ## Phase 5 — Review (spawned worker, Opus 5.5 medium)
 O: Code pattern? U: none. Findings (P0–P3 ladder, each P0–P2 anchored file:line + verbatim quote):

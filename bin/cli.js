@@ -475,6 +475,9 @@ function installGuards(claudeDir) {
   wireGraph("PreToolUse", "Grep|Glob");
   wireGraph("PreToolUse", "Bash|Read");
   wireGraph("PostToolUse", "Read");
+  // R13 (v2.2.0): an executor returning to the main session gets the
+  // touchpoint-4 `changes` card. A new entry of its own; no other hook is touched.
+  wireGraph("PostToolUse", "Task|Agent");
 
   // 7) The session hook (v2.0.0 Q8/Q9) — TWO entries, one file. `Stop` rings
   // the terminal bell when a turn of an ORC run ends, and only under
@@ -1155,6 +1158,8 @@ const KNOWN_MODELS = [
   // Kept so a config written before v2.1.0 still validates.
   "claude-sonnet-5",
   "claude-sonnet-4-6",
+  "claude-haiku-5-5",
+  // Kept so a config written before v2.2.0 still validates.
   "claude-haiku-4-5",
   "claude-fable-5",
 ];
@@ -1201,7 +1206,7 @@ const vModel = tag((raw) => {
 // would go stale the next time a band moves. `orc-` is required so a typo lands
 // as a refusal rather than as a dispatch to a name nothing answers to.
 const vFallbackAgent = tag((raw) => {
-  const v = String(raw || "").trim();
+  const v = resolveLegacyAgents(String(raw || "").trim());
   if (v === "band" || v === "ask") return { value: v };
   if (!/^orc-[a-z0-9-]+$/.test(v))
     return { err: 'must be "band", "ask", or an ORC agent name (e.g. orc-executor-opus-5-med)' };
@@ -1510,11 +1515,11 @@ const CONFIG_META = [
   // reason: no lane reads this key. Every lane calls `orc graph … --if-enabled`
   // and the CLI resolves it, which is how /orc-quick takes part while its Q0
   // still reads `log_dir` and nothing else.
-  { key: "code_graph", def: "off", tier: "common", answers: [{ family: "graph", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether code-changing lanes (orc, ultra, diy, mini, fast, quick) build and read a local code graph under .claude/orc/graph/. The structure is extracted by the CLI from git blob SHAs and costs no model tokens; a teammate's change is found and healed at the next preflight. Off means no lane reads or writes it. See `orc graph status`." },
+  { key: "code_graph", def: "off", tier: "common", answers: [{ family: "graph", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "semi", "on"), options: ["off", "semi", "on"], desc: "Whether code-changing lanes (orc, ultra, diy, mini, fast, quick) build and read a local code graph under .claude/orc/graph/. The structure is extracted by the CLI from git blob SHAs and costs no model tokens; a teammate's change is found and healed at the next preflight. Off means no lane reads or writes it. Semi keeps it built and current (preflight heal and the SubagentStop hook) but no lane reads it and nothing goes into any context. See `orc graph status`." },
   // v1.8.0 W7 — the graph's operating keys. All `lanes: []` for the same reason
   // as `code_graph`: the CLI resolves them behind `--if-enabled`. All gated by
   // `code_graph`, so turning the graph off makes every one of them INERT, out loud.
-  { key: "code_graph_notes", def: "off", tier: "common", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vEnum("off", "wave", "end"), options: ["off", "wave", "end"], desc: "Whether a code lane pays for one-sentence notes on the functions it changed (orc-graph-noter-sonnet-4-6-med). `wave` = one batch per wave (per code-writing request in /orc-quick); `end` = one batch at the end of the run. The structure layer is free either way — notes are the only part of the graph that costs tokens. Inert while code_graph is off." },
+  { key: "code_graph_notes", def: "off", tier: "common", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vEnum("off", "wave", "end"), options: ["off", "wave", "end"], desc: "Whether a code lane pays for one-sentence notes on the functions it changed (orc-graph-noter-haiku-5-high). `wave` = one batch per wave (per code-writing request in /orc-quick); `end` = one batch at the end of the run. The structure layer is free either way — notes are the only part of the graph that costs tokens. Inert while code_graph is off." },
   { key: "code_graph_notes_min", def: 5, tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vInt(1), options: [3, 5, 10], desc: "Fewest changed functions worth a notes dispatch. Below it nothing is dispatched and the functions wait for a later batch: a subagent's fixed start-up cost (~5.7K tokens) makes a one-function batch the most expensive note there is." },
   { key: "code_graph_notes_cap", def: 40, tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vInt(1), options: [20, 40, 80], desc: "Most functions one notes dispatch covers. The rest wait for the next batch." },
   { key: "code_graph_card_budget", def: 1200, tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vRange(300, 4000), options: [600, 1200, 2400], desc: "Token budget for one `orc graph ctx` card. A card never exceeds it and always says what it hid — and every card is sent again on each later turn of the agent that received it." },
@@ -1665,6 +1670,36 @@ const overridePath = (claudeDir) => path.join(claudeDir, "orc.config.yaml");
 const LEGACY_KEYS = {
   opus5_executor_only: "opus5_only", // v0.36.0 — widened from executors to every role
 };
+
+// v2.2.0 — the agent RENAMES. An agent's model change is always a rename, so a
+// config or flow written before 2.2.0 can still name an agent that no longer
+// ships (`rubric_bands_override`, `orc diy` `fixed_executor`,
+// `extra_fallback_agent`). Every place that READS an agent name from a user
+// file resolves it through this map: the old name becomes the new agent, with
+// ONE notice line on stderr, never a crash.
+const LEGACY_AGENTS = {
+  "orc-executor-haiku-4-5": "orc-executor-haiku-5-high",
+  "orc-executor-sonnet-4-6-med": "orc-executor-haiku-5-high",
+  "orc-trace-writer-haiku-4-5": "orc-trace-writer-haiku-5-high",
+  "orc-graph-noter-sonnet-4-6-med": "orc-graph-noter-haiku-5-high",
+};
+const LEGACY_AGENT_RE = new RegExp(`(?<![\\w-])(${Object.keys(LEGACY_AGENTS).join("|")})(?![\\w-])`, "g");
+const legacyAgentNoticed = new Set();
+function legacyAgentNotice(old) {
+  if (legacyAgentNoticed.has(old)) return;
+  legacyAgentNoticed.add(old);
+  process.stderr.write(`agent ${old} is now ${LEGACY_AGENTS[old]} (2.2.0)\n`);
+}
+// One name, or a text that holds names (a hand-written block such as
+// rubric_bands_override). Anything that is not a string comes back unchanged.
+function resolveLegacyAgents(v) {
+  if (typeof v !== "string" || !v) return v;
+  return v.replace(LEGACY_AGENT_RE, (old) => {
+    legacyAgentNotice(old);
+    return LEGACY_AGENTS[old];
+  });
+}
+const LEGACY_AGENT_KEYS = new Set(["rubric_bands_override", "extra_fallback_agent", "fixed_executor"]);
 
 // A key ORC used to have and REMOVED. Distinct from LEGACY_KEYS, which is a
 // RENAME and resolves to a live key: a retired key resolves to nothing, so
@@ -1830,7 +1865,7 @@ function readOverride(claudeDir) {
   for (const e of doc.entries) {
     if (!e.key) continue;
     if (e.key !== e.wrote && Object.prototype.hasOwnProperty.call(map, e.key)) continue;
-    map[e.key] = e.value;
+    map[e.key] = LEGACY_AGENT_KEYS.has(e.key) ? resolveLegacyAgents(e.value) : e.value;
   }
   return { path: doc.path, map };
 }
@@ -2648,7 +2683,7 @@ function opus5Notice(on, claudeDir) {
       "\n  Fixed roles now dispatched instead of their defaults:\n\n" + roleRows + "\n" +
       "\n  Already Opus 5.5, unchanged: analyst · planner · reviewer · verifier · test-author\n" +
       "  · combiner · learn-writer · advisor · judge.\n" +
-      "  NEVER forced: orc-trace-writer-haiku-4-5 (it transcribes a packet, no reasoning)\n" +
+      "  NEVER forced: orc-trace-writer-haiku-5-high (it transcribes a packet, no reasoning)\n" +
       "  and orc-diy (its table is compile-owned — re-run `orc diy compile` to change it).\n" +
       "\n  " + ui.mark.warn("Tier requirement — read this one:") + "\n" +
       "  Today only the [90,100] executor band needs an Opus 5.5 main session. With this ON,\n" +
@@ -3391,13 +3426,17 @@ function laneAnnounce(lane, map, claudeDir, families) {
   // sat in the spine, and the spine was skipped. This line comes from the
   // resolver every lane already obeys and prints VERBATIM at preflight, so the
   // three steps are in front of the lane whatever the spine said.
-  const graphOn = String(Object.prototype.hasOwnProperty.call(map, "code_graph") ? map.code_graph : metaFor("code_graph").def) === "on";
+  const graphModeL = String(Object.prototype.hasOwnProperty.call(map, "code_graph") ? map.code_graph : metaFor("code_graph").def).toLowerCase();
+  const graphOn = graphModeL === "on";
+  // v2.2.0 semi: the graph is kept current, never read — ONE line, no steps.
+  if (graphModeL === "semi" && LANE_CALLS["graph-status"].lanes.includes(lane)) out.push("graph: semi — kept current, not read");
+  // v2.2.0: the four touchpoints, one line each (`_shared/code-graph.md` §0).
   if (graphOn && LANE_CALLS["graph-status"].lanes.includes(lane))
     out.push(
-      "graph: on — use the code-graph cache: (1) now: `orc graph status --if-enabled --heal --json --brief` (builds or updates it); " +
-        "(2) every code-writing slice: `orc graph ctx <declared files> --if-enabled --json --brief` cards; " +
-        "(3) after every code change: `orc graph update --if-enabled --json --brief` (keeps it for the next run). " +
-        "Copy each `line` and `trace` verbatim; `--brief` drops the rows you never print"
+      "graph: on (1/4) consult — print probes[\"graph-status\"].line; run `orc graph status --if-enabled --heal --json --brief` only when heal_needed; exit 3 → no other graph call",
+      "graph: on (2/4) orient — once, before you choose files: the request names ONE symbol → `orc graph ctx <symbol> --anchors --focus=<words> --if-enabled --json --brief` (callers, tests, coverage AND the slice anchors in ONE call: no Grep of that name, no `coverage`, no 3/4 call); else `orc graph map --focus=<3–6 words> --budget 800 --if-enabled --json --brief`, or `orc graph ctx <names, max 5> --if-enabled --json --brief` when it names files",
+      "graph: on (3/4) anchors — every dispatch that writes code: the 2/4 `anchors_card` when you ran `ctx <symbol> --anchors`; else ONE `orc graph ctx --for-slice <declared files> --focus=<words> [--refs=<files>] --anchors --if-enabled --json --brief`; the slice carries the card inline as graph_anchors",
+      "graph: on (4/4) affected tests — after the code: the hook prints a `graph changes` card when the executor returns; run its tests[] first. No card → `orc graph changes --files=<actual files> --if-enabled --json --brief`. Update only when update_step is lane; no lane calls `orc graph gain`. Copy each `line` and `trace` verbatim"
     );
   // A shadowed setting must never be silent, and neither must an inert one.
   const shadowed = [];
@@ -3584,7 +3623,7 @@ const LANE_CALLS = {
     states: null,
     cost: "free",
     when: "at every phase close, in the same tool block as the next phase's first dispatch",
-    on_absent: "exit ≠ 0 → dispatch `orc-trace-writer-haiku-4-5` with the SAME packet (the fallback)",
+    on_absent: "exit ≠ 0 → dispatch `orc-trace-writer-haiku-5-high` with the SAME packet (the fallback)",
     canonical: "_shared/phases/trace.md",
     never: "never append trace lines by hand, and never retry a refused packet with a \"now\" timestamp",
     lanes: ["orc", "orc-fast", "orc-mini", "orc-quick", "orc-test"],
@@ -3686,7 +3725,7 @@ const LANE_CALLS = {
     exits: { 0: "FRESH (after a heal, too)", 1: "NONE — no index and it could not be built, or unavailable (not a git repository)", 2: "DRIFTED — and it could not be healed (locked, or `code_graph_auto_update: false`)", 3: "OFF — `code_graph` is off" },
     states: ["fresh", "none", "drifted", "off", "unavailable"],
     cost: "free",
-    when: "once, at preflight, in a code-changing lane — BEFORE the first dispatch",
+    when: "touchpoint 1 (consult), at preflight BEFORE the first dispatch: print `probes[\"graph-status\"].line` from `orc lane config`; run this call ONLY when that probe says `heal_needed`. Exit 3 (off or semi) → no other graph call this run",
     on_absent: "exit 3 is an ANSWER — print `graph: off` once and make no other graph call; any other exit never blocks: print its `line`, copy its `trace`, continue",
     canonical: "_shared/code-graph.md",
     never: "never read `code_graph` from the config yourself — `--if-enabled` is how a lane takes part without reading a key",
@@ -3698,7 +3737,7 @@ const LANE_CALLS = {
     exits: { 0: "built, updated or unchanged", 1: "unavailable — not a git repository, or another update holds the lock", 3: "off — `code_graph` is off" },
     states: ["built", "updated", "unchanged", "unavailable", "off"],
     cost: "free",
-    when: "at preflight when status was 1 or 2; after every wave's worktree audit; after a green smoke gate; after a code-writing /orc-quick request; at ship. v1.8.0 EW3 adds two paths that need no lane step: a READ heals what it is about to answer for, and the installed graph hook updates once when an ORC executor finishes",
+    when: "only when `update_step` is `lane` (`probes[\"graph-status\"].update_step`; hooks off, or notes on): after every wave's worktree audit; after a green smoke gate; after a code-writing /orc-quick request; at ship. `hook`, `preflight` or `none` → no update call: the graph hook updates when an ORC executor finishes, and a READ heals what it is about to answer for",
     on_absent: "exit 1 never blocks a phase — say it once and continue; the next preflight heals it",
     canonical: "_shared/code-graph.md",
     never: "never run it from a WATCHER or a background process — a continuous rebuild is how graph tools freeze a machine. A one-shot update at a discrete event (an executor finishing, a read that found its own target stale) is not that: it takes the same lock, it is bounded by `code_graph_heal_ms`, and a second one that finds the lock held SKIPS rather than queues",
@@ -3710,7 +3749,7 @@ const LANE_CALLS = {
     exits: { 0: "found (at least one target)", 1: "no graph index", 3: "off — `code_graph` is off", 4: "not found or ambiguous — nearest names or every candidate listed" },
     states: null,
     cost: "free",
-    when: "at slice build (the declared files, one call), in /orc-quick's Q1 look, and by the executor itself — the read ladder's step 0",
+    when: "touchpoint 3 (anchors): ONE `ctx --for-slice <declared files> --focus=<words> [--refs=<files>] --anchors` per dispatch that writes code — the slice carries its `card` inline as `graph_anchors`; a request that names ONE symbol: `ctx <symbol> --anchors --focus=<words>` is orient + anchors in one call (its `anchors_card` is the `graph_anchors`); touchpoint 2 (orient) when the request names files or symbols (max 5); and by the executor itself — the read ladder's step 0",
     on_absent: "exit 4 → back to read ladder step 1; an unknown symbol is never a reason to guess",
     canonical: "_shared/code-graph.md",
     never: "never act on behaviour from a card alone — read the RANGE it names; a card whose header says CHANGED is hints only",
@@ -3744,29 +3783,19 @@ const LANE_CALLS = {
   },
   // EW5 — the cheap signals. All three read what is already on disk (the index,
   // and git's own history), so all three cost zero model tokens.
-  "graph-coverage": {
-    cmd: "orc graph coverage <file…> --if-enabled [--json]",
-    what: "how much of each file the extractor actually saw — `full` · `partial` with the line ranges it did not finish · `skipped:<reason>` · `excluded`",
-    exits: { 0: "answered — ALWAYS, when a graph exists; a gap is an answer, never an error", 1: "no graph index", 3: "off — `code_graph` is off" },
-    states: null,
-    cost: "free",
-    when: "before you trust a card's SILENCE about a file — one batch call for every file in the slice",
-    on_absent: "exit 1 or 3 → read the source, exactly as before the graph existed",
-    canonical: "_shared/code-graph.md",
-    never: "never read `no recorded gap` as proof of completeness — a file marked `full` was fully PARSED, not fully understood",
-    lanes: ["orc", "orc-diy", "orc-quick"],
-  },
+  // v2.2.0: `graph-coverage` left the catalogue — only /orc-quick still names
+  // it, and a call one lane makes belongs to that lane.
   "graph-changes": {
     cmd: "orc graph changes [--base <ref>] --if-enabled [--json]",
     what: "the symbols THIS diff's hunks overlap, each with its callers, its tests, and a risk word that carries its own reason",
     exits: { 0: "answered (an empty answer is an answer)", 1: "no graph index, or not a git repository", 3: "off — `code_graph` is off" },
     states: null,
     cost: "free",
-    when: "at review, instead of `impact` on the declared files — and in a verify or ship summary",
+    when: "touchpoint 4 (affected tests): after the code, before the suite — `--files=<actual files>`; print `tests_line`, run `tests[]` first, then the suite, then print `blast_line`. At review, instead of `impact` on the declared files",
     on_absent: "exit 1 or 3 → review from the diff alone, exactly as before",
     canonical: "_shared/code-graph.md",
     never: "never report `risk` without the `why` beside it — a rating nobody can check is a rating nobody should act on",
-    lanes: ["orc", "orc-diy", "orc-mini", "orc-quick"],
+    lanes: ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-quick"],
   },
   "graph-cochange": {
     cmd: "orc graph cochange <file> --if-enabled [--json]",
@@ -3803,11 +3832,11 @@ const LANE_CALLS = {
     exits: { 0: "a line", 1: "no ledger, or no rows yet", 3: "off" },
     states: null,
     cost: "free",
-    when: "ONCE, at the close of a code-writing request (quick) or after a green smoke gate (mini)",
+    when: "by hand — a USER command (the Code graph tab reads the same ledger). No lane calls it",
     on_absent: "exit 1 is an ANSWER — there is nothing to report yet, so report nothing",
     canonical: "_shared/code-graph.md",
     never: "never restate the line as a saving, never drop the word estimate or the range, and never let this call block or fail a run",
-    lanes: ["orc-mini", "orc-quick"],
+    lanes: [],
   },
   "graph-notes-pending": {
     cmd: "orc graph notes pending --files <a,b> [--at wave|end] --if-enabled [--json]",
@@ -3823,7 +3852,9 @@ const LANE_CALLS = {
     // both stopped making a SECOND call for them: each now runs
     // `update --notes-pending`, which answers the update and the pending batch
     // in one, and still dispatches the noter when the answer has rows.
-    lanes: ["orc", "orc-diy", "orc-fast"],
+    // v2.2.0: no lane names it any more — every lane asks for the batch
+    // INSIDE `update --notes-pending`; the noter agent makes this call itself.
+    lanes: [],
   },
   "gotcha-list": {
     cmd: "orc gotcha list [--archived] [--json]",
@@ -4453,7 +4484,7 @@ const PHASE_FILES = {
   },
   "ship": {
     file: "_shared/phases/ship.md",
-    trace_verbs: ["PHASE", "GATE", "GRAPH-UPDATE", "GRAPH-GAIN"],
+    trace_verbs: ["PHASE", "GATE", "GRAPH-UPDATE"],
     layers: ["full", "composed"],
     // v1.0.0 W13 — orc-diy became the second reader, so the phase left
     // orc/references/phases/ for the library. `full` is /orc's procedure;
@@ -4583,7 +4614,21 @@ const PROBE_DEFS = {
     argv: () => ["graph", "status", "--if-enabled", "--brief"],
     run: () => graphCmd(),
     pick: ["state", "enabled", "exists", "files", "symbols", "generation", "auto_update", "notes", "trace"],
-    derive: (j) => ({ heal_needed: !!(j.enabled && j.auto_update && (j.state === "none" || j.state === "drifted")) }),
+    // v2.2.0: `update_step` names WHO keeps the graph current after a code
+    // change — none (off), the SubagentStop hook, the lane's own update step,
+    // or only the preflight heal (semi with the hooks off). A semi answer says
+    // state "semi" AFTER its own heal, so heal_needed reads the config too.
+    derive: (j) => {
+      const { map } = readOverride(resolveClaudeDir());
+      const get = (k) => String(Object.prototype.hasOwnProperty.call(map, k) ? map[k] : metaFor(k).def).toLowerCase();
+      const mode = get("code_graph");
+      const hooksOn = get("code_graph_hooks").split(",")[0].trim() === "on";
+      const notesOff = get("code_graph_notes") === "off";
+      const update_step =
+        mode === "on" ? (hooksOn && notesOff ? "hook" : "lane") : mode === "semi" ? (hooksOn ? "hook" : "preflight") : "none";
+      const maintained = mode === "on" || mode === "semi";
+      return { heal_needed: !!(maintained && j.auto_update && (j.state === "none" || j.state === "drifted" || (j.state === "semi" && (j.index_state === "none" || j.index_state === "drifted")))), update_step };
+    },
     line: (j) => j.line,
   },
   "rules-slice": {
@@ -4711,9 +4756,9 @@ const LANE_TRACE = {
   "orc-mini": {
     tier: "Build lanes",
     token: "mini",
-    spine_verbs: ["PHASE", "GATE", "OUTCOME", "DRIFT", "TDD-RED", "TDD-GREEN", "FINDING", "FINDING-OUTCOME", "REVIEW-WHICH", "GRAPH-CONSULT", "GRAPH-MAP", "GRAPH-UPDATE", "GRAPH-COMPLEXITY", "GRAPH-CHANGES", "GRAPH-NOTES", "GRAPH-GAIN"],
+    spine_verbs: ["PHASE", "GATE", "OUTCOME", "DRIFT", "TDD-RED", "TDD-GREEN", "FINDING", "FINDING-OUTCOME", "REVIEW-WHICH", "GRAPH-CONSULT", "GRAPH-MAP", "GRAPH-UPDATE", "GRAPH-COMPLEXITY", "GRAPH-CHANGES", "GRAPH-NOTES"],
   },
-  "orc-fast": { tier: "Build lanes", token: "fast", spine_verbs: ["GRAPH-UPDATE", "GRAPH-NOTES"] },
+  "orc-fast": { tier: "Build lanes", token: "fast", spine_verbs: ["GRAPH-UPDATE", "GRAPH-NOTES", "GRAPH-CHANGES"] },
   "orc-wiki": { tier: "Multi-dispatch", token: "wiki" },
   "orc-pr-driver": { tier: "Multi-dispatch", token: "prdriver" },
   "orc-diy": { tier: "Composed", token: "diy" },
@@ -4758,15 +4803,15 @@ const TRACE_VERBS = {
   CONFIG: { grammar: "CONFIG <key=value …>", emitter: "orc → writer", meaning: "Phase 1 — the resolved config values this run will consume, ALWAYS with opus5_only", owner: "_shared/phases/trace-verbs.md" },
   "WIKI-CONSULT": { grammar: "WIKI-CONSULT <fresh|aging|stale|absent|empty> :: docs=<list|none>", emitter: "orc → writer", meaning: "project wiki consulted for grounding, with its staleness tier", owner: "_shared/phases/wiki-consult.md" },
   CROSSLINK: { grammar: "CROSSLINK <cached|configured-no-cache|none> :: boundaries=<n> peers=<names> · CROSSLINK inject task=<id> :: <boundary>", emitter: "orc → writer", meaning: "cross-repo peer-knowledge state at the consult point; `inject` when a slice receives a linked contract", owner: "_shared/phases/wiki-consult.md" },
-  "GRAPH-CONSULT": { grammar: "GRAPH-CONSULT <fresh|updated|built|drifted|none|off> :: files=<n> symbols=<n>[ density=<n>[ thin=1]] · GRAPH-CONSULT card task=<id> :: targets=<…>", emitter: "orc → writer", meaning: "the code graph's preflight state, copied VERBATIM from the CLI `trace` field", owner: "_shared/code-graph.md" },
+  "GRAPH-CONSULT": { grammar: "GRAPH-CONSULT <fresh|updated|built|drifted|none|semi|off|pack|anchors> :: files=<n> symbols=<n>[ density=<n>[ thin=1]] · GRAPH-CONSULT card task=<id> :: targets=<…> · GRAPH-CONSULT pack :: files=<n> refs=<n> excerpts=<n> tokens=<n> gen=<n> · GRAPH-CONSULT anchors :: ranges=<n> files=<n> gen=<n>", emitter: "orc → writer", meaning: "the code graph's preflight state, copied VERBATIM from the CLI `trace` field", owner: "_shared/code-graph.md" },
   "GRAPH-UPDATE": { grammar: "GRAPH-UPDATE <state> :: parsed=<n> reused=<n> deleted=<n> gen=<n> route=<n> ms=<n>", emitter: "orc → writer", meaning: "one graph update, the `trace` field of `orc graph update --json`, verbatim", owner: "_shared/phases/trace-verbs.md" },
   "GRAPH-MAP": { grammar: "GRAPH-MAP <repo|focused> :: files=<shown>/<total> [focus=<a,b>] gen=<n>", emitter: "orc → writer", meaning: "ONE line at the start of planning, the `trace` field of `orc graph map --json`, verbatim", owner: "_shared/phases/trace-verbs.md" },
   "GRAPH-CHANGES": { grammar: "GRAPH-CHANGES <found|none> :: symbols=<n> high=<n> medium=<n> low=<n> gen=<n>", emitter: "orc → writer", meaning: "one line at review, the `trace` field of `orc graph changes --json`, verbatim", owner: "_shared/phases/trace-verbs.md" },
   "GRAPH-COMPLEXITY": { grammar: "GRAPH-COMPLEXITY <mini-ok|recommend-orc> :: files=<n> callers=<n> caller_files=<n> maybe=<n> tests=<n> risk=<n> cochange=<n> gen=<n>", emitter: "orc → writer", meaning: "one line per /orc-mini run, the `trace` field of the `--complexity` impact call, verbatim", owner: "_shared/phases/trace-verbs.md" },
-  "GRAPH-COCHANGE": { grammar: "GRAPH-COCHANGE <found|none> :: rows=<n> commits=<n>", emitter: "orc → writer", meaning: "one line per planning batch, for the file that produced the widest answer", owner: "_shared/phases/trace-verbs.md" },
+  "GRAPH-COCHANGE": { grammar: "GRAPH-COCHANGE <found|none> :: rows=<n> commits=<n> · GRAPH-COCHANGE none :: history=<n>", emitter: "orc → writer", meaning: "one line per planning batch, for the file that produced the widest answer", owner: "_shared/phases/trace-verbs.md" },
   "GRAPH-COVERAGE": { grammar: "GRAPH-COVERAGE <clean|gaps> :: paths=<n> gaps=<n> gen=<n>", emitter: "orc → writer", meaning: "the `trace` field of `orc graph coverage --json` — which files a card's silence can be trusted on", owner: "_shared/phases/trace-verbs.md" },
   "GRAPH-HINT": { grammar: "GRAPH-HINT injected=<n> subagent_start=<n> read_notes=<n> updates=<n>", emitter: "orc → writer", meaning: "ONE line per phase close, the graph hook's counters; omitted when the counter file does not exist", owner: "_shared/phases/trace-verbs.md" },
-  "GRAPH-GAIN": { grammar: "GRAPH-GAIN paid=<n> low=<n> high=<n> calls=<n>", emitter: "orc → writer", meaning: "ONE line per run at ship; `paid` is exact, `low`/`high` are an estimate never collapsed into one number", owner: "_shared/phases/trace-verbs.md" },
+  "GRAPH-GAIN": { grammar: "GRAPH-GAIN paid=<n> low=<n> high=<n> calls=<n>", emitter: "orc → writer", meaning: "OLD traces only — no lane emits it now (`orc graph gain` is a user command); `paid` is exact, `low`/`high` are an estimate never collapsed into one number", owner: "_shared/phases/trace-verbs.md" },
   "GRAPH-NOTES": { grammar: "GRAPH-NOTES <applied|below-min|none|deferred|off|skipped> :: <detail>", emitter: "orc → writer", meaning: "one notes batch; `applied` copies the noter's one-line return verbatim", owner: "_shared/phases/trace-verbs.md" },
   SPAWN: { grammar: "SPAWN <agent>", emitter: "hook", meaning: "an agent dispatch was observed (skeleton)", owner: "hooks/orc-trace.js" },
   RETURN: { grammar: "RETURN <agent> :: <desc> dur=<m>m<s>s [model=<id>]", emitter: "hook", meaning: "a subagent finished (skeleton) — not an orchestrator obligation; the model check is VERIFY", owner: "hooks/orc-trace.js" },
@@ -4791,7 +4836,7 @@ const TRACE_VERBS = {
   "TDD-RED": { grammar: "TDD-RED task=<id> iter=<n> :: <failing tests>", emitter: "executor→orc → writer", meaning: "TDD repair-loop iteration — the plan's acceptance tests still red", owner: "_shared/phases/trace-verbs.md" },
   "TDD-GREEN": { grammar: "TDD-GREEN task=<id> iter=<n>", emitter: "executor→orc → writer", meaning: "the task's TDD acceptance tests pass", owner: "_shared/phases/trace-verbs.md" },
   REPRO: { grammar: "REPRO red|green :: <cmd> exit=<n> · REPRO none :: <reason>", emitter: "executor→orc → writer", meaning: "a DEFECT task's reproduction: RED before the fix, GREEN after", owner: "_shared/return-validation.md" },
-  NOTE: { grammar: "NOTE :: <decisions>", emitter: "writer", meaning: "the packet's `decisions` field — the WHY layer; one line, only when non-empty", owner: "agents/orc-trace-writer-haiku-4-5.md" },
+  NOTE: { grammar: "NOTE :: <decisions>", emitter: "writer", meaning: "the packet's `decisions` field — the WHY layer; one line, only when non-empty", owner: "agents/orc-trace-writer-haiku-5-high.md" },
   STATS: { grammar: "STATS lane=<l> slug=<s> dispatches=<n> waves=<n> tasks=<n> bands=<h:n,m:n,l:n> downgrades=<n> duration_ms=<n>", emitter: "orc → writer", meaning: "ONE summary line per run, in the FINISH packet, immediately BEFORE the FINISH line", owner: "_shared/phases/trace-verbs.md" },
   PACT: { grammar: "PACT <state> :: <ids> · PACT inject task=<id> :: <PACT-id> · PACT recheck pass|fail :: <ids>", emitter: "orc → writer", meaning: "invariant-ledger state at the Phase-1 probe, a promise injected into a task, the Phase-6 recheck", owner: "orc-pact/references/gate.md" },
   BOUNDARY: { grammar: "BOUNDARY <EXECUTE|ESCALATE|REFUSE|unknown> task=<id> :: <area> · BOUNDARY lift task=<id> :: <area>", emitter: "orc → writer", meaning: "per-task boundary verdict; an uncarded area is `unknown`, never REFUSE", owner: "orc-boundary/references/gate.md" },
@@ -4822,6 +4867,29 @@ function laneTraceGrammar(lane) {
   for (const v of t.spine_verbs || []) want.add(v);
   const out = {};
   for (const [v, d] of Object.entries(TRACE_VERBS)) if (want.has(v) && d.emitter !== "hook") out[v] = d.grammar;
+  return out;
+}
+
+// v2.2.0 T13 — the verb heads of a lane, by lane name or trace token (`quick`,
+// `orc-quick`); null when it names no traced lane. `orc trace write` lists these
+// when it refuses an unknown verb.
+function laneVerbsFor(x) {
+  const k = String(x || "");
+  const lane = LANE_TRACE[k] ? k : Object.keys(LANE_TRACE).find((l) => LANE_TRACE[l].token === k);
+  const g = lane ? laneTraceGrammar(lane) : null;
+  return g ? Object.keys(g) : null;
+}
+
+// v2.2.0 T13 — `{ qid: "offered=<o1|o2>" }` for every ASK question registered for a lane.
+function laneAskIds(lane) {
+  let H = null;
+  try { H = require("./habit.js"); } catch (_) { return {}; }
+  const out = {};
+  for (const [q, p] of Object.entries(H.ASK_POINTS || {})) {
+    if (!(p.lanes || []).includes(lane)) continue;
+    const o = Object.keys(p.options || {});
+    out[q] = `offered=${o.length ? o.join("|") : "<the agent names you offered>"}`;
+  }
   return out;
 }
 
@@ -5092,7 +5160,7 @@ const LANE_OWN_PHASES = {
     { ord: 0, id: "q0", file: "orc-quick/SKILL.md", heading: "## Q0 — Preflight (ONE time per session, silent, nothing can stop the run)", read: "section", trace_verbs: ["GATE", "GRAPH-CONSULT"] },
     { ord: 1, id: "q1", file: "orc-quick/SKILL.md", heading: "## Q1 — LOOK (silent — no questions here)", read: "section", trace_verbs: ["GATE", "WIKI-CONSULT", "GRAPH-CONSULT", "GRAPH-MAP", "GRAPH-COVERAGE"] },
     { ord: 2, id: "q2", file: "orc-quick/SKILL.md", heading: "## Q2 — ASK (ONE user turn: questions + the gate together)", read: "section", trace_verbs: [] },
-    { ord: 3, id: "q3", file: "orc-quick/SKILL.md", heading: "## Q3 — DO (dispatch → build/test → write the doc → offer)", read: "section", trace_verbs: ["DISPATCH", "VERIFY", "REPRO", "GRAPH-CHANGES", "GRAPH-UPDATE", "GRAPH-NOTES", "GRAPH-GAIN", "OUTCOME", "FINDING", "FINDING-OUTCOME", "REVIEW-WHICH", "FINISH"] },
+    { ord: 3, id: "q3", file: "orc-quick/SKILL.md", heading: "## Q3 — DO (dispatch → build/test → write the doc → offer)", read: "section", trace_verbs: ["DISPATCH", "VERIFY", "REPRO", "GRAPH-CHANGES", "GRAPH-UPDATE", "GRAPH-NOTES", "OUTCOME", "FINDING", "FINDING-OUTCOME", "REVIEW-WHICH", "FINISH"] },
   ],
   "orc-wiki": [
     { ord: 0, id: "phase-0", file: "orc-wiki/references/phases/phase-0.md", layers: ["full"], trace_verbs: [] },
@@ -5355,6 +5423,8 @@ function lanePhasesCmd(lane, claudeDir) {
       layer_set: PHASE_LAYERS,
       phase_files: PHASE_FILES,
       lanes: out,
+      // v2.2.0 T13 — one lane answered: its grammar and ASK ids at the top level too.
+      ...(out.length === 1 ? { trace_grammar: out[0].trace_grammar, ask_ids: laneAskIds(out[0].lane) } : {}),
     });
     return 0;
   }
@@ -5371,6 +5441,10 @@ function lanePhasesCmd(lane, claudeDir) {
         "  trace grammar  " +
           ui.color.gray(`${Object.keys(r.trace_grammar).length} verbs: ${Object.keys(r.trace_grammar).join(" · ")}  (--json → trace_grammar)`)
       );
+    if (!all) {
+      const ids = Object.keys(laneAskIds(r.lane));
+      if (ids.length) console.log("  ask ids  " + ui.color.gray(`${ids.join(" · ")}  (--json → ask_ids)`));
+    }
     if (!r.phases.length) {
       // An empty answer is an ANSWER: this lane runs no SHARED phase yet.
       console.log(
@@ -5659,14 +5733,13 @@ const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 // (`sonnet-5-low`, `sonnet-5-med`).
 //
 // It also feeds `fixed_executor`'s option list, so every entry here is offerable
-// — which is what keeps the seven agents no band names reachable (D14).
+// — which is what keeps the six agents no band names reachable (D14).
 //
 // Effort ranks `low(0) < medium(1) < high(2) < xhigh(3) < max(4)`. There is no
 // session tier at 0: an agent at low effort fits every tier of its own model,
 // which is correct — a low-effort child never exceeds its parent.
 const DIY_EXECUTORS = {
-  "orc-executor-haiku-4-5": { model: 1, effort: 1 },
-  "orc-executor-sonnet-4-6-med": { model: 2, effort: 1 },
+  "orc-executor-haiku-5-high": { model: 1, effort: 2 },
   "orc-executor-sonnet-4-6-high": { model: 2, effort: 2 },
   "orc-executor-sonnet-5-low": { model: 3, effort: 0 },
   "orc-executor-sonnet-5-med": { model: 3, effort: 1 },
@@ -5841,7 +5914,9 @@ function readDiyConfig(claudeDir) {
     if (!t || t.startsWith("#")) continue;
     const i = t.indexOf(":");
     if (i === -1) continue;
-    map[t.slice(0, i).trim()] = t.slice(i + 1).trim().replace(/^["']|["']$/g, "");
+    const k = t.slice(0, i).trim();
+    const v = t.slice(i + 1).trim().replace(/^["']|["']$/g, "");
+    map[k] = LEGACY_AGENT_KEYS.has(k) ? resolveLegacyAgents(v) : v;
   }
   return Object.keys(map).length ? map : null;
 }
@@ -5851,7 +5926,7 @@ function readDiyConfig(claudeDir) {
 // where the ledger is in hand — a validator that read the ledger would make
 // `orc diy set` fail on a machine that has not connected yet.
 function vDiyExecutor(v) {
-  const raw = String(v || "").trim();
+  const raw = resolveLegacyAgents(String(v || "").trim());
   if (!raw) return { value: "" };
   if (Object.prototype.hasOwnProperty.call(DIY_EXECUTORS, raw)) return { value: raw };
   if (/^extra:[^/]+\/[^/]+\/.+$/.test(raw)) return { value: raw };
@@ -5963,7 +6038,7 @@ function diyValidate(cfg) {
 // v2.1.0 — FIVE BANDS. The score is always a whole number, so the user's closed
 // ranges 0–20 · 21–30 · 31–40 · 41–89 · 90–100 map exactly to these half-open
 // rows. The bottom three are Sonnet 5 with effort as the dial; from 41 every
-// task runs on Opus 5.5. `haiku-4-5`, `sonnet-4-6-med` and `sonnet-4-6-high` are
+// task runs on Opus 5.5. `haiku-5-high` (v2.2.0: was `haiku-4-5` and `sonnet-4-6-med`) and `sonnet-4-6-high` are
 // named by no band now and STAY ON DISK (the same D14 rule as above).
 const DIY_SCORE_TABLE = [
   [0, 21, "orc-executor-sonnet-5-low"],
@@ -9429,7 +9504,7 @@ function graphMeasured(claudeDir, root, opts) {
     } catch (_) {}
     const used = (text.match(/graph_used/g) || []).length;
     const none = (text.match(/graph_used[^\n]*none/g) || []).length;
-    groups[m[1] === "off" ? "off" : "on"].push({ name: t.name, lane: t.lane, start: meta.start, end: meta.end, hints, graph_used: used, graph_used_none: none });
+    groups[m[1] === "off" || m[1] === "semi" ? "off" : "on"].push({ name: t.name, lane: t.lane, start: meta.start, end: meta.end, hints, graph_used: used, graph_used_none: none });
   }
 
   const corpus = readToolCorpus(root);
@@ -9496,12 +9571,25 @@ function gainRowFor(sub, Q, model, operands, r, ms, forSlice) {
   }
   const base = { cmd: sub, targets: operands.slice(0, 5), gen, ms, paid };
 
+  // v2.2.0 (T6): the PACK — paid is the pack file the executor reads.
+  if (sub === "ctx" && forSlice && r.pack) {
+    const p = r.pack;
+    return { ...base, cmd: "pack", paid: { card: p.tokens, source: 0, hints: 0 }, ...K.packCost(model, p.refs || [], (r.files || []).filter((rel) => (Number((model.byFile[rel] || {}).lines) || 0) > 150), p.tokens) };
+  }
+  // v2.2.0 (R6): the ANCHORS — paid is the anchor block; avoided low is 0.
+  if (sub === "ctx" && r.anchors) {
+    const c = K.impactCost(model, r.anchors.refs || [], 1, 0, []);
+    return { ...base, cmd: "anchors", ...c, paid: { card: r.anchors.tokens, source: 0, hints: 0 }, avoided: { ...c.avoided, low: 0 } };
+  }
   if (sub === "impact" || (sub === "ctx" && forSlice)) {
     const files = sub === "impact" ? r.files || [] : r.files || [];
     const callerFiles = sub === "impact" ? (r.callers || []).map((c) => c.file) : (r.blocks || []).flatMap((b) => (b.callers || []).map((c) => c.file));
     const symbols = sub === "impact" ? r.symbols || 1 : (r.blocks || []).reduce((a, b) => a + (b.total_callers || 0), 0) || 1;
     const hits = files.reduce((a, rel) => a + ((model.byFile[rel] || {}).symbols || []).reduce((n, x) => n + (x.kind === "module" ? 0 : Q.nameHits(model, x.name)), 0), 0);
     const c = K.impactCost(model, files, symbols, hits, callerFiles);
+    // v2.2.0 (G-08): an executor reads its declared files whole either way, so
+    // an outside view done well saved nothing — `low` is 0.
+    if (forSlice) c.avoided = { ...c.avoided, low: 0 };
     return { ...base, cmd: forSlice ? "for-slice" : "impact", ...c };
   }
   // D4 (v1.8.2 W7): the map's targets are its FOCUS, and what it replaced is
@@ -9582,20 +9670,44 @@ function graphGainAppend(claudeDir, row) {
 //      `ctx`, whose rows are three scalars each).
 // Every drop leaves its COUNT behind, at the level it was dropped from, except
 // where the answer already carries that count under another name.
+// v2.2.0 (G-19): the reads whose every answer — ok, empty, declined or failed —
+// leaves one ledger row with its outcome.
+const GRAPH_READ_SUBS = new Set(["ctx", "impact", "path", "map", "changes", "cochange", "coverage"]);
 const GRAPH_BRIEF_DROP = new Set(["callers", "calls", "effects", "symbols", "imports", "importers", "blocks", "names", "rows", "chain", "waiting"]);
 const GRAPH_BRIEF_KEEP = new Set(["nearest", "candidates", "cards"]);
 // V2/V3 answers that ARE the answer: `complexity` and `facts` are ten rows at
 // most, and they are the whole reason the call was made. They pass through
 // whole, never walked.
 const GRAPH_BRIEF_WHOLE = new Set(["complexity", "facts"]);
-const GRAPH_BRIEF_NO_COUNT = { impact: ["callers"], map: ["files"], changes: ["symbols"] };
+const GRAPH_BRIEF_NO_COUNT = { impact: ["callers"], map: ["files"], changes: ["symbols"], ctx: ["tests_via"] };
+
+// v2.2.0 (R7): a brief map answer keeps only these keys; every list is counted.
+const GRAPH_BRIEF_MAP_KEEP = new Set(["ok", "state", "line", "trace", "generation", "card", "counts"]);
 
 function briefOf(sub, obj) {
+  if (sub === "map" && obj && typeof obj === "object") {
+    const out = {};
+    const counts = { ...((obj.counts && typeof obj.counts === "object") ? obj.counts : {}) };
+    for (const [k, v] of Object.entries(obj)) {
+      if (GRAPH_BRIEF_MAP_KEEP.has(k)) { if (k !== "counts") out[k] = v; continue; }
+      if (Array.isArray(v)) counts[k] = v.length;
+    }
+    if (Object.keys(counts).length) out.counts = counts;
+    return out;
+  }
   const noCount = new Set(GRAPH_BRIEF_NO_COUNT[sub] || []);
   const walk = (o) => {
     const out = {};
     const counts = {};
     for (const [k, v] of Object.entries(o)) {
+      // v2.2.0 (T6-b): a map's `focus` list (every focused file) was the bulk
+      // of a 10 KB brief answer. It is counted, and any other string list in a
+      // map answer is cut to 12 with its count.
+      if (sub === "map" && o === obj && Array.isArray(v) && (k === "focus" || (v.length > 12 && typeof v[0] === "string"))) {
+        counts[k] = v.length;
+        if (k !== "focus") out[k] = v.slice(0, 12);
+        continue;
+      }
       if (Array.isArray(v)) {
         const rows = GRAPH_BRIEF_DROP.has(k) || (!GRAPH_BRIEF_KEEP.has(k) && v.length > 0 && v[0] !== null && typeof v[0] === "object");
         if (!rows) out[k] = v;
@@ -9613,15 +9725,29 @@ function briefOf(sub, obj) {
     if (Object.keys(counts).length) out.counts = { ...(out.counts || {}), ...counts };
     return out;
   };
-  return walk(obj);
+  const out = walk(obj);
+  // R11: a FULL coverage verdict is one word in a brief answer — the card row
+  // already says how many files. A partial one keeps its gap list.
+  if (sub === "ctx" && out.coverage && out.coverage.verdict === "full") out.coverage = "full";
+  return out;
+}
+
+// v2.2.0 (T6-a): write the PACK atomically, the folder created. Relative to
+// the repository root; overwritten every call.
+function writeGraphPack(root, rel, text) {
+  const G = require("./graph.js");
+  const abs = path.resolve(root, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  G.atomicWrite(abs, text);
+  return abs;
 }
 
 function graphCmd() {
   const usage =
     "Usage: orc graph status [--heal] | update [--notes-pending --files <a,b>] | gc | audit [--top=N]\n" +
-    "       orc graph ctx <symbol|file[:line]>… [--source [N]] [--callers-source] | ctx --for-slice <file…> | impact <file…> | path <from> <to>\n" +
+    "       orc graph ctx <symbol|file[:line]>… [--source [N]] [--callers-source] | ctx --for-slice <file…> [--focus=<w,…>] [--refs=<file,…>] [--anchors] [--pack=<path>] [--pack-budget=N] | impact <file…> | path <from> <to>\n" +
     "       orc graph coverage <file…> | changes [--base <ref>] [--files=<a,b>] | cochange <file>\n" +
-    "       orc graph map [--focus <file|name,…>] [--budget N]\n" +
+    "       orc graph map [--focus=<file|name|word,…>] [--budget N]\n" +
     "       orc graph gain [--run <name>] [--since 7d] [--history [--limit 40]] [--measured] [--reset --yes]\n" +
     "       orc graph notes pending --files <a,b> [--cap 40] [--min 5] [--with-source] | notes apply <file|->\n" +
     "       [--if-enabled] [--depth N] [--budget TOKENS] [--format prose|tree] [--offset N] [--json] [--brief] [--dir <path>]\n" +
@@ -9673,7 +9799,14 @@ function graphCmd() {
   };
   const ovr = readOverride(claudeDir).map;
   const cfg = (k) => (Object.prototype.hasOwnProperty.call(ovr, k) ? ovr[k] : metaFor(k).def);
-  const enabled = String(cfg("code_graph")) === "on";
+  // v2.2.0: `code_graph` is off | semi | on. `semi` keeps the graph BUILT and
+  // CURRENT (status --heal, update, the SubagentStop hook) but no lane READS it:
+  // every gated read answers exit 3 exactly as `off` does. A person who types a
+  // read WITHOUT --if-enabled still gets an answer from the index.
+  const graphMode = String(cfg("code_graph")).toLowerCase();
+  const enabled = graphMode === "on";
+  const maintained = enabled || graphMode === "semi";
+  const isSemi = graphMode === "semi";
   // v1.8.2 W2 (G8): the extra globs the map must never index. One string,
   // split here; the engine takes the list.
   const ignore = String(cfg("code_graph_ignore") || "")
@@ -9687,6 +9820,8 @@ function graphCmd() {
   const notesPendingAnswer = (gated) => {
     const N = require("./graph-notes.js");
     const notesMode = String(cfg("code_graph_notes"));
+    if (gated && isSemi)
+      return { answer: { ok: true, state: "semi", mode: "semi", enabled: false, notes: notesMode, exit: 3 }, line: "graph: semi (kept current; lanes do not read it)", trace: "GRAPH-NOTES off :: mode=semi" };
     if (gated && (!enabled || notesMode === "off"))
       return { answer: { ok: true, state: "off", enabled, notes: notesMode, exit: 3 }, line: enabled ? "graph notes: off" : "graph: off", trace: "GRAPH-NOTES off" };
     // `--at wave|end` names the CALL SITE. A batch the configured mode places at
@@ -9765,6 +9900,25 @@ function graphCmd() {
     }
     const full = { ...obj, ...(line && jsonLine ? { line } : {}), ...(trace ? { trace } : {}) };
     const payload = asJson && briefOn ? briefOf(sub, full) : full;
+    // v2.2.0 (G-19): every READ gets a row with its OUTCOME — a declined or
+    // failed read paid for its line too, and an empty answer is not a saving.
+    if (GRAPH_READ_SUBS.has(sub) && (exit === 0 || exit === 1 || exit === 4)) {
+      const empty =
+        exit === 0 &&
+        ((Array.isArray(obj.rows) && !obj.rows.length) || (sub === "changes" && Array.isArray(obj.symbols) && !obj.symbols.length) || (!obj.card && !line));
+      const outcome = exit === 4 ? "declined" : exit === 1 ? "error" : empty ? "empty" : "ok";
+      if (!gainRow) {
+        try {
+          const K = require("./graph-gain.js");
+          const cmd = sub === "ctx" && args.includes("--for-slice") ? (eqFlag("--pack") ? "pack" : args.includes("--anchors") ? "anchors" : "for-slice") : sub;
+          gainRow = { cmd, targets: positionals().slice(2, 7), gen: obj.generation || null, ms: 0, paid: { card: K.tok(obj.card || line || ""), source: 0, hints: 0 }, avoided: { low: 0, high: 0, calls_low: 0, calls_high: 0 }, basis: { files: [], grep_hits: 0 } };
+        } catch (_) {}
+      }
+      if (gainRow) {
+        gainRow.outcome = outcome;
+        gainRow.exit = exit;
+      }
+    }
     if (gainRow) {
       try {
         const K = require("./graph-gain.js");
@@ -9780,19 +9934,27 @@ function graphCmd() {
     process.exit(exit);
   };
 
+  // The --if-enabled exit-3 answer of every gated READ: off, or semi.
+  const offGate = (verb) => {
+    const V = String(verb || "").toUpperCase();
+    return isSemi
+      ? finish({ ok: true, enabled: false, state: "semi", mode: "semi", exit: 3 }, "graph: semi (kept current; lanes do not read it)", `GRAPH-${V} off :: mode=semi`)
+      : finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+  };
+
   if (sub === "status") {
-    let r = G.graphStatus(claudeDir, root, { enabled, ignore });
+    let r = G.graphStatus(claudeDir, root, { enabled: maintained, ignore });
     const autoUpdate = String(cfg("code_graph_auto_update")) !== "false";
     // `--heal` (W9): consult AND build in ONE call. A lane that had to run
     // status, read the exit code and then run update skipped the second step.
     let healed = null;
-    if (flag("--heal") === true && enabled && autoUpdate && (r.state === "none" || r.state === "drifted")) {
-      const u = G.graphUpdate(claudeDir, root, { enabled, ifEnabled: true, ignore });
+    if (flag("--heal") === true && maintained && autoUpdate && (r.state === "none" || r.state === "drifted")) {
+      const u = G.graphUpdate(claudeDir, root, { enabled: maintained, ifEnabled: true, ignore });
       healed =
         u.exit === 0
           ? { state: u.state, added: u.added, changed: u.changed, deleted: u.deleted, parsed: u.parsed, reused: u.reused, engine_upgrade: u.engine_upgrade, ms: u.ms }
           : { state: u.state, reason: u.reason };
-      if (u.exit === 0) r = G.graphStatus(claudeDir, root, { enabled, ignore });
+      if (u.exit === 0) r = G.graphStatus(claudeDir, root, { enabled: maintained, ignore });
     }
     // What the lane does NEXT depends on these two, and the lane reads no key.
     r.auto_update = autoUpdate;
@@ -9805,7 +9967,7 @@ function graphCmd() {
     // obeys — the index did not change, so `generation` and `gen_id` do not.
     const SIGD = require("./graph-signals.js");
     let meta = metaNow();
-    if (flag("--heal") === true && enabled && meta && !meta.density && r.exists) {
+    if (flag("--heal") === true && maintained && meta && !meta.density && r.exists) {
       const capMs = Number(cfg("code_graph_heal_ms")) || 0;
       if (!capMs || !meta.update_ms || meta.update_ms <= capMs) {
         try {
@@ -9855,6 +10017,19 @@ function graphCmd() {
             : `graph: ${plural(moved, "file")} changed outside ORC → updated (${healed.ms} ms) — ${size}`;
     } else if (healed) line += ` · could not heal: ${healed.reason}`;
     if (densityText && ["fresh", "drifted", "built", "updated"].includes(consult)) line += densityText;
+    // semi: built and healed above exactly as `on`, then the lane is told OFF
+    // (exit 3) so it reads nothing. Without --if-enabled the person sees the state.
+    if (isSemi && flag("--if-enabled") === true) {
+      r.index_state = consult;
+      r.state = "semi";
+      r.mode = "semi";
+      r.exit = 3;
+      return finish(
+        r,
+        `graph: semi — kept current (${plural(r.files || 0, "file")} · ${plural(r.symbols || 0, "symbol")}); lanes do not read it`,
+        `GRAPH-CONSULT semi :: files=${r.files || 0} symbols=${r.symbols || 0} gen=${r.generation || 0}`
+      );
+    }
     return finish(
       r,
       line,
@@ -9867,7 +10042,7 @@ function graphCmd() {
 
   if (sub === "update") {
     const r = G.graphUpdate(claudeDir, root, {
-      enabled,
+      enabled: maintained,
       ifEnabled: flag("--if-enabled") === true,
       ignore,
       say: asJson ? null : (s) => console.log(s),
@@ -9886,7 +10061,7 @@ function graphCmd() {
         `graph: ${verb} — ${plural(r.files, "file")} (${r.parsed} parsed, ${r.reused} reused, ${r.deleted} deleted` +
         `${r.skipped ? `, ${r.skipped} skipped` : ""}) · ${r.ms} ms`;
     }
-    if (r.exit === 0 && !enabled) {
+    if (r.exit === 0 && !maintained) {
       line += "\n  note: code_graph is off — lanes will not read this graph (orc config set code_graph on)";
     }
     const trace =
@@ -9939,15 +10114,17 @@ function graphCmd() {
   // the lock, the read answers from the old generation — and every touched card
   // already says `CHANGED since index` for itself.
   const healOnRead = (paths) => {
-    if (!enabled) return null;
+    if (!maintained) return null;
     const autoUpdate = String(cfg("code_graph_auto_update")) !== "false";
     const capRaw = Number(cfg("code_graph_heal_ms"));
     const cap = Number.isFinite(capRaw) ? capRaw : 1500;
     if (!autoUpdate || cap <= 0) return null;
     const meta = metaNow();
     if (!meta) return null; // no graph at all — `update` is the answer, not a heal
+    // v2.2.0 (G-13): decide `moved` FIRST. Nothing moved is no line at all —
+    // an over-cap store that is current had nothing to heal. A missing
+    // `update_ms` (a cold build writes `build_ms`) counts as under the cap.
     const last = Number(meta.update_ms) || 0;
-    if (last > cap) return { state: "skipped", reason: "over-cap", last_ms: last, cap_ms: cap };
 
     let moved = null;
     try {
@@ -9972,8 +10149,9 @@ function graphCmd() {
       } catch (_) {}
     }
     if (!moved) return null;
+    if (last > cap) return { state: "skipped", reason: "over-cap", trigger: moved, last_ms: last, cap_ms: cap };
 
-    const u = G.graphUpdate(claudeDir, root, { enabled, ifEnabled: true, ignore });
+    const u = G.graphUpdate(claudeDir, root, { enabled: maintained, ifEnabled: true, ignore });
     if (u.exit !== 0) return { state: "skipped", reason: u.reason || u.state, trigger: moved };
     return { state: u.state, trigger: moved, added: u.added, changed: u.changed, deleted: u.deleted, generation: u.generation, ms: u.ms };
   };
@@ -9982,7 +10160,7 @@ function graphCmd() {
   const asPaths = (list) => list.map((x) => String(x).split("\\").join("/").replace(/^\.\//, "").replace(/:\d+$/, ""));
 
   if (sub === "coverage") {
-    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    if (!enabled && flag("--if-enabled") === true) return offGate(sub);
     const VALUE_FLAGS = new Set(["--dir"]);
     const plain = [];
     for (let i = 0; i < args.length; i++) {
@@ -10005,7 +10183,7 @@ function graphCmd() {
           ? `partial ${(x.ranges || []).map((g) => `${g[0]}-${g[1]}`).join(",")}`
           : x.coverage;
     const line =
-      `graph coverage (gen ${r.generation}) — ${plural(r.gaps, "gap")} in ${plural(r.rows.length, "path")}\n` +
+      `graph parse coverage (gen ${r.generation}) — ${plural(r.gaps, "gap")} in ${plural(r.rows.length, "path")}\n` +
       r.rows.map((x) => `  ${x.path}  ${LABEL(x)}${x.changed_since_index && x.changed_since_index !== "current" ? `  [${x.changed_since_index} since index]` : ""}`).join("\n") +
       "\n  no recorded gap is not proof of completeness — the source is ground truth";
     return finish(r, line, `GRAPH-COVERAGE ${r.gaps ? "gaps" : "clean"} :: paths=${r.rows.length} gaps=${r.gaps} gen=${r.generation}`);
@@ -10013,7 +10191,7 @@ function graphCmd() {
 
   // ── E7: the cheap signals ──────────────────────────────────────────────────
   if (sub === "changes" || sub === "cochange") {
-    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    if (!enabled && flag("--if-enabled") === true) return offGate(sub);
     const VALUE_FLAGS = new Set(["--dir", "--base"]);
     const plain = [];
     for (let i = 0; i < args.length; i++) {
@@ -10049,9 +10227,18 @@ function graphCmd() {
           const Q = require("./graph-query.js");
           const m = Q.loadModel(claudeDir, root);
           if (m) {
-            const hits = r.symbols.reduce((a, x) => a + Q.nameHits(m, x.qname), 0);
-            const callerFiles = r.symbols.flatMap((x) => (x.callers || []).map((cc) => cc.file || cc));
-            gainRow = { cmd: "changes", targets: [r.base], gen: r.generation, ms: r.ms || 0, paid: { card: K.tok(line), source: 0, hints: 0 }, ...K.changesCost(m, r.symbols.length, hits, callerFiles) };
+            // v2.2.0 (G-08): only the symbols a file OUTSIDE the diff calls are
+            // priced, and a second read of the same diff in the same run adds 0.
+            const priced = K.changesPriced(m, r.symbols, r.files, (x) => Q.nameHits(m, x.qname));
+            const key = require("crypto").createHash("sha1").update(K.changesKey(r.symbols.map((x) => ({ id: x.id, body_hash: (m.symbols.get(x.id) || {}).body_hash })))).digest("hex").slice(0, 16);
+            let run = null;
+            try {
+              run = fs.readFileSync(path.join(resolveLogDir(claudeDir), ".current"), "utf8").trim() || null;
+            } catch (_) {}
+            const repeat = K.changesSeen(claudeDir, run, key);
+            const { priced: _n, ...cost } = priced;
+            if (repeat) cost.avoided = { low: 0, high: 0, calls_low: 0, calls_high: 0 };
+            gainRow = { cmd: "changes", targets: [r.base], gen: r.generation, ms: r.ms || 0, key, ...(repeat ? { repeat: true } : {}), paid: { card: K.tok(line), source: 0, hints: 0 }, ...cost };
           }
         } catch (_) {}
       }
@@ -10059,6 +10246,17 @@ function graphCmd() {
     }
     const file = plain[2];
     if (!file) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
+    // v2.2.0 (G-15): under 20 commits there is no history to count — an
+    // ANSWER (exit 4), given at once, before any `git log` is paid for.
+    try {
+      const rc = spawnSync("git", ["rev-list", "--count", "HEAD"], { cwd: root, encoding: "utf8" });
+      const n = rc.status === 0 ? Number(String(rc.stdout).trim()) : NaN;
+      if (Number.isFinite(n) && n < 20)
+        return finish(
+          { ok: true, state: "none", reason: "short-history", file: asPaths([file])[0], history: n, rows: [], exit: 4 },
+          `cochange: history too short (${plural(n, "commit")}) — no answer`,
+          `GRAPH-COCHANGE none :: history=${n}`);
+    } catch (_) {}
     const r = SIG.graphCochange(claudeDir, root, { file });
     if (r.exit === 1) return finish(r, r.reason === "missing-operand" ? usage : `graph: unavailable — ${r.reason}`);
     const line = r.rows.length
@@ -10075,7 +10273,7 @@ function graphCmd() {
   // `lanes: []`). It reads the index, the file table and the first lines of
   // each empty file. It never parses, never writes, and costs no model tokens.
   if (sub === "audit") {
-    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    if (!enabled && flag("--if-enabled") === true) return offGate(sub);
     const A = require("./graph-audit.js");
     const r = A.audit(claudeDir, root, { top: eqFlag("--top") });
     if (r.exit === 1) return finish(r, "graph: none — no index yet (run: orc graph update)");
@@ -10141,7 +10339,7 @@ function graphCmd() {
   // has the runs to say so — what actually happened. Three different kinds of
   // knowing, never mixed into one number.
   if (sub === "gain") {
-    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    if (!enabled && flag("--if-enabled") === true) return offGate(sub);
     const K = require("./graph-gain.js");
     const U = require("./ui.js");
     const rng = (a, b) => (a === b ? kTok(a) : `${kTok(a)} – ${kTok(b)}`);
@@ -10219,6 +10417,7 @@ function graphCmd() {
       `\n  avoided    ~${rng(r.avoided.low, r.avoided.high)} tokens   (estimate — the read ladder done well … done badly)` +
       `\n  net        ~${rng(r.net.low, r.net.high)} tokens · ~${r.calls.low} – ${r.calls.high} tool calls` +
       (byCmd ? `\n  by command ${byCmd}` : "") +
+      `\n  outcomes  ok ${(r.outcomes || {}).ok || 0} · empty ${(r.outcomes || {}).empty || 0} · declined ${(r.outcomes || {}).declined || 0} · error ${(r.outcomes || {}).error || 0}` +
       `\n  hints      ${r.hints.injected} injected · ${r.hints.read_notes} read notes · ${r.hints.updates} hook updates` +
       // R2 (v1.9.1): the reads the `on,read` hint would have named ranges for.
       // A COUNT, printed only when there is one — it is the data DE-8 waits
@@ -10243,7 +10442,7 @@ function graphCmd() {
   // files OR names, comma-separated or as bare words, so a planner can hand it
   // whatever the request happened to mention.
   if (sub === "map") {
-    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    if (!enabled && flag("--if-enabled") === true) return offGate(sub);
     const VALUE_FLAGS = new Set(["--dir", "--budget", "--focus"]);
     const plain = [];
     for (let i = 0; i < args.length; i++) {
@@ -10253,8 +10452,10 @@ function graphCmd() {
       }
       if (!String(args[i]).startsWith("--")) plain.push(args[i]);
     }
+    // B1: `--focus=a,b` is the lane form; the old space form still works.
+    const focusRaw = eqFlag("--focus") !== undefined ? eqFlag("--focus") : flag("--focus") === true ? "" : flag("--focus");
     const focus = [
-      ...String(flag("--focus") || "")
+      ...String(focusRaw || "")
         .split(",")
         .map((x) => x.trim())
         .filter(Boolean),
@@ -10278,7 +10479,7 @@ function graphCmd() {
   }
 
   if (sub === "ctx" || sub === "impact" || sub === "path") {
-    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    if (!enabled && flag("--if-enabled") === true) return offGate(sub);
     // Positionals after the subcommand, with every value-flag's value removed.
     // D1: `--source` takes an OPTIONAL count, so it only swallows the next word
     // when that word is a number — otherwise `ctx --source handler` would lose
@@ -10294,7 +10495,8 @@ function graphCmd() {
       }
       if (!String(args[i]).startsWith("--")) plain.push(args[i]);
     }
-    const operands = plain.slice(2);
+    // v2.2.0 (R10): `--for-slice a.js,b.vue` is split like `--refs=` — a path never holds a comma.
+    const operands = plain.slice(2).flatMap((x) => String(x).split(",")).map((s) => s.trim()).filter(Boolean);
     const sourceLines = srcAt === -1 ? undefined : srcTakesValue ? Number(args[srcAt + 1]) : require("./graph-query.js").SOURCE_DEFAULT;
     // D2 is a SWITCH, so it is read from `args` — `flag()` would read the first
     // declared file as its value.
@@ -10319,7 +10521,9 @@ function graphCmd() {
     // heal that was skipped changed nothing. Either way the generation it pins
     // itself to is the one on disk now.
     let fast = null;
-    if (sub === "ctx" && !forSlice && operands.length === 1) {
+    // R11: `ctx <symbol> --anchors` builds the slice anchors from the WHOLE
+    // model, so it never takes the one-shard path.
+    if (sub === "ctx" && !forSlice && operands.length === 1 && !args.includes("--anchors")) {
       try {
         fast = require("./graph-shard.js").fastModel(claudeDir, root, operands[0], { callersSource });
       } catch (_) {
@@ -10367,6 +10571,50 @@ function graphCmd() {
         // hint never pays for the same name twice (D3).
         r = Q.forSlice(model, operands, opts);
         if (r.ok) noteGraphNamesSeen(claudeDir, r.names);
+        // v2.2.0 (T6-a): `--pack=<path>` writes the executor PACK — the outside
+        // view, the reference outlines, the quoted ranges and the tests, in ONE
+        // file — and the answer becomes the ONE line that points at it.
+        const packPath = eqFlag("--pack");
+        if (packPath) {
+          const list = (x) => String(x || "").split(",").map((s) => s.trim()).filter(Boolean);
+          if (!r.ok && r.state === "not-found")
+            r = { ok: true, state: "found", view: "for-slice", format: "tree", files: [], missing: r.missing || operands, skipped: [], blocks: [], names: [], budget: { used: 0, max: Number(opts.budget) || 0 }, card: "", exit: 0 };
+          const p = Q.buildPack(claudeDir, model, {
+            declared: operands,
+            refs: list(eqFlag("--refs")),
+            focus: list(eqFlag("--focus")),
+            budget: eqFlag("--pack-budget"),
+            outlineBudget: eqFlag("--pack-outline"),
+            sliceCard: r.files && r.files.length ? r.card : null,
+          });
+          if (!p.ok) r = p;
+          else {
+            const shown = String(packPath).split("\\").join("/");
+            writeGraphPack(root, packPath, p.text);
+            const gen = (model.meta && model.meta.generation) || 0;
+            r.pack = { path: shown, files: p.files, refs: p.refs, excerpts: p.excerpts, tokens: p.tokens, cut: p.cut };
+            r.card = `graph pack → ${shown} · ${p.files} files · ${p.refs.length} refs · ${p.excerpts} quoted ranges · ~${p.tokens} tokens · gen ${gen} — the executor reads it first`;
+            r.pack_trace = `GRAPH-CONSULT pack :: files=${p.files} refs=${p.refs.length} excerpts=${p.excerpts} tokens=${p.tokens} gen=${gen}`;
+          }
+        }
+        // v2.2.0 (R6): `--anchors` — no file. Up to 12 `path:a-b` ranges the
+        // dig found and ONE shell command that prints them all; the card is the
+        // anchor block the slice carries INLINE as `graph_anchors`.
+        if (!packPath && args.includes("--anchors")) {
+          const list = (x) => String(x || "").split(",").map((s) => s.trim()).filter(Boolean);
+          if (!r.ok && r.state === "not-found")
+            r = { ok: true, state: "found", view: "for-slice", format: "tree", files: [], missing: r.missing || operands, skipped: [], blocks: [], names: [], budget: { used: 0, max: Number(opts.budget) || 0 }, card: "", exit: 0 };
+          const a = Q.buildAnchors(claudeDir, model, { declared: operands, refs: list(eqFlag("--refs")), focus: list(eqFlag("--focus")) });
+          if (!a.ok) r = a;
+          else {
+            r.anchors = { lines: a.lines, read_cmd: a.read_cmd, code: a.code, tokens: a.tokens, read_tokens: a.read_tokens, ranges: a.ranges, files: a.files, refs: a.refs, refs_missing: a.refs_missing, missing: r.missing || [] };
+            r.card = a.card;
+            const miss = r.missing || [];
+            const rmiss = a.refs_missing || [];
+            r.anchors_line = `graph anchors: ${a.ranges} ranges in ${a.files} files · ~${a.read_tokens} tokens to read · gen ${a.gen}${a.code ? " · code inline" : ""}${miss.length ? ` · not found: ${miss[0]}${miss.length > 1 ? ` (+${miss.length - 1} more)` : ""}` : ""}${rmiss.length ? ` · ref not found: ${rmiss[0]}` : ""}`;
+            r.pack_trace = `GRAPH-CONSULT anchors :: ranges=${a.ranges} files=${a.files} gen=${a.gen}`;
+          }
+        }
       } else if (operands.length === 1) {
         if (fast && fast.model) {
           try {
@@ -10387,6 +10635,21 @@ function graphCmd() {
         // is the only way to find out why.
         r.read = fast && fast.model ? "sharded" : "full";
         if (fast && !fast.model) r.read_fallback = fast.reason;
+        // R11 (v2.2.0): `ctx <symbol> --anchors` — ONE look-time call gives the
+        // card AND the slice anchors. Declared = the target file + the non-test
+        // caller files the card names (dedup, max 10); focus defaults to the
+        // target's name. Same shape as `--for-slice --anchors`.
+        if (r.ok && r.target && args.includes("--anchors")) {
+          const list = (x) => String(x || "").split(",").map((s) => s.trim()).filter(Boolean);
+          const declared = [...new Set([r.target.file, ...(r.callers || []).map((c) => c.file).filter((f) => !Q.TEST_FILE.test(f))])].slice(0, 10);
+          const focus = list(eqFlag("--focus"));
+          const a = Q.buildAnchors(claudeDir, model, { declared, refs: list(eqFlag("--refs")), focus: focus.length ? focus : [r.target.name || String(r.target.qname || "").split(".").pop()] });
+          if (a.ok) {
+            r.anchors = { lines: a.lines, read_cmd: a.read_cmd, code: a.code, tokens: a.tokens, read_tokens: a.read_tokens, ranges: a.ranges, files: a.files, refs: a.refs, refs_missing: a.refs_missing, missing: [] };
+            r.anchors_card = a.card;
+            r.anchors_count = a.ranges;
+          }
+        }
       }
       else {
         // Several targets, ONE call, ONE budget (W9): a slice builder that had to
@@ -10423,7 +10686,14 @@ function graphCmd() {
       if (operands.length < 2) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
       r = Q.pathBetween(model, operands[0], operands[1]);
     }
-    let line = r.card;
+    let line = r.anchors_line || r.card;
+    if (r.anchors_line) delete r.anchors_line;
+    if (r.anchors_count !== undefined) {
+      const lines = String(line || "").split("\n");
+      lines[0] = `${lines[0]} · anchors ${r.anchors_count} ranges`;
+      line = lines.join("\n");
+      delete r.anchors_count;
+    }
     if (line && r.complexity) line = `${line}\n  ${r.complexity.line}`;
     if (!line && r.state === "not-found") {
       const near = (r.nearest || []).map((s) => `${s.qname} (${s.file}:${s.lines[0]})`);
@@ -10433,7 +10703,7 @@ function graphCmd() {
       if (sub === "path") line = "graph: path needs two known symbols — " + ((r.candidates || []).length ? `ambiguous: ${r.candidates.map((s) => `${s.qname} (${s.file})`).join(", ")}` : "one end was not found");
     }
     if (!line && r.state === "ambiguous-target")
-      line = `graph: "${r.query}" names ${r.candidates.length} symbols — pick one:\n` + r.candidates.map((s) => `  ${s.id}`).join("\n");
+      line = `graph: "${r.query}" names ${r.candidates.length} ${r.candidates[0] && !r.candidates[0].id ? "files" : "symbols"} — pick one:\n` + r.candidates.map((s) => `  ${s.id || s.file}`).join("\n");
     if (healed) r.healed = healed;
     // A heal is a real event and it gets ONE line above the card — a card that
     // silently answers from a different generation than the reader expected is
@@ -10453,6 +10723,8 @@ ${line || ""}`;
       cx
         ? `GRAPH-COMPLEXITY ${cx.verdict} :: files=${cx.numbers.files} callers=${cx.numbers.callers_outside} caller_files=${cx.numbers.caller_files_outside}` +
           ` maybe=${cx.numbers.maybe} tests=${cx.numbers.tests_reaching} risk=${cx.numbers.risk.length} cochange=${cx.numbers.cochange_missing.length} gen=${r.generation || (r.facts && r.facts.generation) || 0}`
+        : sub === "ctx" && r.exit === 0 && r.pack_trace
+        ? r.pack_trace
         : sub === "ctx" && r.exit === 0
         ? `GRAPH-CONSULT ${r.view === "for-slice" ? "slice" : "card"} :: targets=${(r.view === "for-slice" ? r.files : r.cards ? r.cards.filter((c) => c.state === "found").map((c) => c.query) : [operands[0]]).join(",")}` +
           (healed && healed.state && healed.state !== "skipped" ? ` healed=${healed.trigger}` : "")
@@ -10467,7 +10739,8 @@ ${line || ""}`;
         // argument to it.
       }
     }
-    return finish(r, line, trace, !r.card, gainRow);
+    if (r.pack_trace) delete r.pack_trace;
+    return finish(r, line, trace, !r.card || !!r.pack || !!r.anchors, gainRow);
   }
 
   if (asJson) emitJson({ ok: false, reason: "unknown-subcommand", usage }, 1);
@@ -13273,10 +13546,10 @@ function parsePlanTasks(text) {
 // Fixed roles a run dispatches besides executors. Named, not guessed: the
 // forecast has to say WHICH roles it priced or the total is unfalsifiable.
 const LANE_FIXED_ROLES = {
-  orc: ["orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-reviewer-opus-5-low", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-4-5"],
-  ultra: ["orc-advisor-opus-5-xhigh", "orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-judge-opus-5-xhigh", "orc-reviewer-opus-5-low", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-4-5"],
-  mini: ["orc-analyze-mini-sonnet-5-high", "orc-planner-mini-sonnet-5-high", "orc-trace-writer-haiku-4-5"],
-  fast: ["orc-trace-writer-haiku-4-5"],
+  orc: ["orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-reviewer-opus-5-low", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-5-high"],
+  ultra: ["orc-advisor-opus-5-xhigh", "orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-judge-opus-5-xhigh", "orc-reviewer-opus-5-low", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-5-high"],
+  mini: ["orc-analyze-mini-sonnet-5-high", "orc-planner-mini-sonnet-5-high", "orc-trace-writer-haiku-5-high"],
+  fast: ["orc-trace-writer-haiku-5-high"],
 };
 const FORECAST_LANES = ["ultra", "orc", "mini", "fast"];
 const LANE_CMD = { orc: "/orc", ultra: "/orc-ultra", mini: "/orc-mini", fast: "/orc-fast" };
@@ -35687,10 +35960,12 @@ function doctor() {
   // graph nobody has asked for yet is a doctor people learn to scroll past.
   try {
     const cfg = resolvedConfig(claudeDir);
-    if (String(cfg.code_graph || "off") !== "on") ok("code graph off (fine — the default)");
+    const dMode = String(cfg.code_graph || "off").toLowerCase();
+    if (dMode !== "on" && dMode !== "semi") ok("code graph off (fine — the default)");
     else {
       const gs = require("./graph.js").graphStatus(claudeDir, repoRootOf(claudeDir), { enabled: true });
-      if (gs.state === "drifted") {
+      if (dMode === "semi") ok("code graph semi — kept current, lanes do not read it");
+      else if (gs.state === "drifted") {
         const b = gs.behind || {};
         const n = (b.added || 0) + (b.changed || 0) + (b.deleted || 0);
         warn(
@@ -35719,13 +35994,14 @@ function doctor() {
           ["PreToolUse", "Grep|Glob"],
           ["PreToolUse", "Bash|Read"],
           ["PostToolUse", "Read"],
+          ["PostToolUse", "Task|Agent"],
         ];
         const wired = ENTRIES.filter(([e, m]) => wiredOn(e, m)).map(([e, m]) => (m ? `${e} ${m}` : e));
-        if (wired.length === ENTRIES.length) ok("graph hook wired on all five entries");
+        if (wired.length === ENTRIES.length) ok("graph hook wired on all six entries");
         else
           warn(
             "graph-hook-unwired",
-            `graph hook wired on ${wired.length} of 5 entries (${wired.join(", ") || "none"}) — the graph will not update itself when an executor finishes, and subagents get no anchors; run \`orc update\``,
+            `graph hook wired on ${wired.length} of ${ENTRIES.length} entries (${wired.join(", ") || "none"}) — the graph will not update itself when an executor finishes, and subagents get no anchors; run \`orc update\``,
             { fixable: true, fix: "orc update", fix_command: "orc update" }
           );
       }
@@ -45434,7 +45710,7 @@ function slEngine() {
 // concluded could not be measured.
 const SL_TASK_FIXTURES = {
   healthy: { id: "t1", name: "orc-executor-opus-5-low", type: "orc-executor-opus-5-low", description: "wire the retry ladder", status: "running", model: "claude-opus-5-5", effort: "low", tokenCount: 84000, contextWindowSize: 200000, startTime: 1767225600000 - 17 * 60000 },
-  degraded: { id: "t2", name: "orc-executor-sonnet-4-6-med", type: "orc-executor-sonnet-4-6-med", description: "rename two files", status: "failed", model: "claude-sonnet-4-6", effort: "medium", tokenCount: 191000, contextWindowSize: 200000, startTime: 1767225600000 - 96 * 60000 },
+  degraded: { id: "t2", name: "orc-executor-haiku-5-high", type: "orc-executor-haiku-5-high", description: "rename two files", status: "failed", model: "claude-haiku-5-5", effort: "high", tokenCount: 191000, contextWindowSize: 200000, startTime: 1767225600000 - 96 * 60000 },
   empty: { id: "t3" },
 };
 
@@ -47758,7 +48034,7 @@ function jsonCrash(err) {
     // pair. The Haiku writer is the fallback when this exits ≠ 0.
     case "trace":
       require("./trace-write.js").traceCmd({
-        flag, positionals, emitJson, wantsJson, resolveClaudeDir, resolveLogDir, TRACE_VERBS, readOverride, reviewPolicyCompute,
+        flag, positionals, emitJson, wantsJson, resolveClaudeDir, resolveLogDir, TRACE_VERBS, readOverride, reviewPolicyCompute, laneVerbsFor,
         logSweep: (claudeDir) => require("./clear-logs.js").sweep(claudeDir, clearLogsDeps()),
       });
       break;

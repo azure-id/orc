@@ -453,7 +453,7 @@ test("budget calibrate: the join attributes by model+window, and unattributed is
       blk(at(9, 30, 0), "claude-opus-4-8", false, 10),
       blk(at(9, 31, 5), "claude-sonnet-4-6", true, 200),
       // DELIBERATELY UNJOINABLE: no DISPATCH line claims a haiku dispatch.
-      blk(at(9, 46, 0), "claude-haiku-4-5", true, 20),
+      blk(at(9, 46, 0), "claude-haiku-5-5", true, 20),
     ].join("\n") + "\n");
 
     const logs = path.join(claudeDir, "orc", "logs");
@@ -954,7 +954,7 @@ const usdAt = (v, model) => {
 const VEC = (input, cache_write, cache_read, output) => ({ input, cache_write, cache_read, output });
 // One task that scores into `[21,31)` — the Sonnet 5 medium band.
 const PLAN_25 = "tasks:\n  - id: T1\n    declared_files: [a.ts]\n    depends_on: []\n    computed_score: 25\n";
-const ORC_ROLES = ["orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-reviewer-opus-5-low", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-4-5"];
+const ORC_ROLES = ["orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-reviewer-opus-5-low", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-5-high"];
 function seedRates(claudeDir, rates) {
   fs.mkdirSync(path.join(claudeDir, "orc"), { recursive: true });
   fs.writeFileSync(
@@ -1008,12 +1008,12 @@ test("budget forecast: each band and fixed role is priced at the model its agent
     assert.strictEqual(r.status, 0, r.stdout + r.stderr);
     const d = json(r);
     for (const p of ["p50", "p90"]) {
-      const want = usdAt(band[p], "claude-sonnet-5-5") + 4 * usdAt(role[p], "claude-opus-5-5") + usdAt(role[p], "claude-haiku-4-5");
+      const want = usdAt(band[p], "claude-sonnet-5-5") + 4 * usdAt(role[p], "claude-opus-5-5") + usdAt(role[p], "claude-haiku-5-5");
       assert.ok(Math.abs(d.usd[p] - want) < 1e-9, `${p}: ${d.usd[p]} is the sum of the rows, ${want}`);
     }
     // The NAME says `sonnet-5`; the file pins the point release, and that prices.
     assert.strictEqual(d.bands[0].model, "claude-sonnet-5-5");
-    assert.strictEqual(d.fixed_roles.find((f) => f.role === "orc-trace-writer-haiku-4-5").model, "claude-haiku-4-5");
+    assert.strictEqual(d.fixed_roles.find((f) => f.role === "orc-trace-writer-haiku-5-high").model, "claude-haiku-5-5");
     assert.strictEqual(d.fixed_roles.find((f) => f.role === "orc-planner-opus-5-med").model, "claude-opus-5-5");
 
     // /orc-mini runs no Opus at all, so its dollars sit far below the figure
@@ -1021,7 +1021,7 @@ test("budget forecast: each band and fixed role is priced at the model its agent
     const mini = d.lanes.find((l) => l.lane === "mini");
     const miniVec = VEC(...["input", "cache_write", "cache_read", "output"].map((k) => one.p50[k] + role.p50[k]));
     assert.strictEqual(mini.raw, miniVec.input + miniVec.cache_write + miniVec.cache_read + miniVec.output);
-    assert.ok(Math.abs(mini.usd - (usdAt(one.p50, "claude-sonnet-5-5") + usdAt(role.p50, "claude-haiku-4-5"))) < 1e-9);
+    assert.ok(Math.abs(mini.usd - (usdAt(one.p50, "claude-sonnet-5-5") + usdAt(role.p50, "claude-haiku-5-5"))) < 1e-9);
     assert.ok(mini.usd < usdAt(miniVec, "claude-opus-4-8") / 2, "below the token-proportional Opus figure");
   } finally {
     rmrf(root);

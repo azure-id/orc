@@ -221,9 +221,9 @@ test("inflight: a pending dispatch → classify exits 1 and record refuses (exit
   const root = project();
   try {
     const name = "run-quick-total-fix-021026-091200.txt";
-    trace(root, name, `[${stamp(new Date())}] hook     SPAWN orc-executor-sonnet-4-6-med\n`);
+    trace(root, name, `[${stamp(new Date())}] hook     SPAWN orc-executor-haiku-5-high\n`);
     fs.writeFileSync(path.join(logs(root), ".current"), name);
-    fs.writeFileSync(path.join(logs(root), name + ".pending.json"), JSON.stringify([{ agent: "orc-executor-sonnet-4-6-med", desc: "fix", ts: Date.now() }]));
+    fs.writeFileSync(path.join(logs(root), name + ".pending.json"), JSON.stringify([{ agent: "orc-executor-haiku-5-high", desc: "fix", ts: Date.now() }]));
     const c = classify(root, "fix Sonar typescript:S3776 in src/a.ts:10-20");
     assert.strictEqual(c.status, 1);
     assert.strictEqual(j(c).inflight, "in-flight");

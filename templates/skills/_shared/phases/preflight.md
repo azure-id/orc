@@ -81,9 +81,9 @@ that the line is printed and when.
 dispatch — never skipped. Run `orc graph status --if-enabled --heal --json --brief`
 only when `heal_needed` is true (it builds or updates the graph, free). Put the
 `trace` (`GRAPH-CONSULT …`) in the next packet as it is — never as a `GATE` line
-in your own words. While the graph is
-on, `orc lane config` prints the three graph steps in `announce[]` (`../code-graph.md`
-§0). **The lane reads no `code_graph` key:** `--if-enabled`
+in your own words. Exit 3 (`off`, or `semi` — kept current, never read) → make no other
+graph call in this run. While the graph is on, `orc lane config` prints the four graph
+touchpoints in `announce[]` (`../code-graph.md` §0). **The lane reads no `code_graph` key:** `--if-enabled`
 makes the CLI decide, which is how `/orc-quick` takes part while its step 1 still
 reads `log_dir` and nothing else. A graph that cannot be built never stops a run,
 and `/orc-fast` gains no third gate. Every other lane prints nothing.

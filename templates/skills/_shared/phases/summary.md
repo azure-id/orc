@@ -54,7 +54,7 @@ entry that wrote code. Every detail goes BELOW the card, never above it.
 ✅ Fixed the null charge on guest checkout — 3 files, tests 14 passed (2 affected first)
    review   2 findings · 1 fixed · 1 disputed (recorded)      gotchas  1 recorded (G-044)
    risk     low — callers 3 in 2 files, tests reach 2          habits   1 proposal below
-   flaky    1 test passed on the re-run (no repair round)      graph    <gain line>
+   flaky    1 test passed on the re-run (no repair round)      graph    <pack line>
    undo     orc undo --run <run-slug>                          next     commit? (your usual: review → commit)
 ```
 
@@ -69,5 +69,4 @@ entry that wrote code. Every detail goes BELOW the card, never above it.
   `undo  none — no snapshot`. The command only PRINTS the undo; `--apply` runs
   it. The lane never runs it itself.
 - **Copy the CLI's words.** `risk` is the `blast_line` with its `why`;
-  `graph` is the `orc graph gain` `line`, VERBATIM — an estimate with a range,
-  never restated as a saving. `flaky` is the `GATE flaky` tests.
+  `graph` is the last pack call's `line`, VERBATIM (no lane calls `orc graph gain`). `flaky` is the `GATE flaky` tests.

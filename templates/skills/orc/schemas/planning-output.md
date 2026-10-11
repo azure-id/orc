@@ -50,6 +50,9 @@ open_questions: [object]   # [] or [{question, proposed_default, blocking: bool}
   declared_files: [string] # HARD GATE: actual files it will touch, incl. tests.
                            # File-level globs. No declaration → no wave assignment.
   depends_on: [string]     # forward = ordering; reverse = stale_review flagging
+  precedent: [string]      # OPTIONAL. Read-only files this task copies behaviour
+                           # or style from (max 5); the lane passes them to the
+                           # pack as `--refs=`. Absent = the map picks them.
 
   # grounding attestation (filled by the PLANNER — one entry per declared path)
   grounding: [object]      # {path, disposition: exists|new, evidence}

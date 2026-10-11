@@ -75,8 +75,8 @@ Task                                   facets                     score  model
 T1 order note column + migration       3 files · new · stateful     62   sonnet-5 high
 T2 POST /orders accepts note           2 files · imitate            38   sonnet-5 high
 T3 checkout note box                   2 files · imitate            35   sonnet-5 high
-T4 order page shows the note           1 file  · mechanical         12   haiku-4-5
-T5 label text                          1 file  · mechanical          4   haiku-4-5
+T4 order page shows the note           1 file  · mechanical         12   haiku-5-high
+T5 label text                          1 file  · mechanical          4   haiku-5-high
 
 Waves:  W1 {T1}   W2 {T2, T3}   W3 {T4, T5}
 Pause every 2 waves. OK to start?

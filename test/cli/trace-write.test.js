@@ -12,7 +12,7 @@ const T = require("../../bin/trace-write.js");
 // ── `orc trace write --packet -` — the CLI holds the trace pen (v2.0.0 T21) ──
 //
 // The golden PAIR below is hand-made in the writer's formats
-// (agents/orc-trace-writer-haiku-4-5.md): `[<ts>] <actor padded to 8> <VERB> :: <tail>`
+// (agents/orc-trace-writer-haiku-5-high.md): `[<ts>] <actor padded to 8> <VERB> :: <tail>`
 // and `{"ts","actor","phase","verb","tail",…}`. The CLI must produce exactly it.
 
 const PACKET = `phase: execution wave 2
@@ -263,7 +263,7 @@ test("trace write: a live packet's shape is repaired from the grammar, and a bar
       '  - {ts: "270926 13:54:23.000", verb: "GATE grounding pass", note: "src/app.js globbed"}',
       '  - {ts: "270926 13:54:24.000", verb: "GATE", tail: "coverage pass :: 0 orphans"}',
       '  - {ts: "270926 13:54:25.000", verb: "GATE complexity pass", tail: ":: mini-ok"}',
-      '  - {ts: "270926 13:54:26.000", verb: "OUTCOME", tail: "task=T1 score=12 band=[0,30) model=claude-haiku-4-5 retries=0 requeues=0 needs_context=0 unmet=0"}',
+      '  - {ts: "270926 13:54:26.000", verb: "OUTCOME", tail: "task=T1 score=12 band=[0,30) model=claude-haiku-5-5 retries=0 requeues=0 needs_context=0 unmet=0"}',
       '  - {ts: "270926 13:54:27.000", verb: "ASK", tail: "quick.q3.offer.review :: offered=review-first|commit-direct|stop rec=review-first chose=review-first by=user"}',
       "",
     ].join("\n");
@@ -274,7 +274,7 @@ test("trace write: a live packet's shape is repaired from the grammar, and a bar
       "GATE grounding pass :: src/app.js globbed",
       "GATE coverage pass :: 0 orphans",
       "GATE complexity pass :: mini-ok",
-      "OUTCOME task=T1 score=12 band=[0,30) model=claude-haiku-4-5 retries=0 requeues=0 needs_context=0 unmet=0",
+      "OUTCOME task=T1 score=12 band=[0,30) model=claude-haiku-5-5 retries=0 requeues=0 needs_context=0 unmet=0",
       "ASK quick.q3.offer.review :: offered=review-first|commit-direct|stop rec=review-first chose=review-first by=user",
     ]);
     const rows = lines(path.join(logs, RICH + ".jsonl")).map((l) => JSON.parse(l));
@@ -511,14 +511,14 @@ test("trace write: a repeat ASK in the same entry is a follow-up and is kept out
   try {
     fs.writeFileSync(path.join(logs, ".current"), RICH + "\n");
     fs.writeFileSync(path.join(logs, RICH),
-      "[270926 17:40:00.000] hook     SPAWN orc-executor-sonnet-4-6-med :: entry 1\n" +
+      "[270926 17:40:00.000] hook     SPAWN orc-executor-haiku-5-high :: entry 1\n" +
       "[270926 17:45:00.000] orc      ASK quick.q3.offer.review :: offered=review-first|commit-direct|stop rec=none chose=review-first by=user\n" +
       "[270926 17:46:00.000] hook     SPAWN orc-reviewer-opus-5-low :: review entry 1\n");
     const ask = (ts, chose) => `phase: q3\nevents:\n  - {ts: "${ts}", verb: "ASK quick.q3.offer.review", tail: "offered=review-first|commit-direct|stop rec=none chose=${chose} by=user"}\n`;
     const r = JSON.parse(write(root, ask("270926 17:48:00.000", "stop"), ["--json"]).stdout);
     assert.match(r.ask_rejected[0].error, /follow-up/);
     assert.strictEqual((fs.readFileSync(path.join(logs, RICH), "utf8").match(/ ASK /g) || []).length, 1);
-    fs.appendFileSync(path.join(logs, RICH), "[270926 17:50:00.000] hook     SPAWN orc-executor-sonnet-4-6-med :: entry 2\n");
+    fs.appendFileSync(path.join(logs, RICH), "[270926 17:50:00.000] hook     SPAWN orc-executor-haiku-5-high :: entry 2\n");
     const r2 = JSON.parse(write(root, ask("270926 17:55:00.000", "review-first"), ["--json"]).stdout);
     assert.strictEqual(r2.ask_rejected, undefined, "a new entry answers again");
     assert.strictEqual((fs.readFileSync(path.join(logs, RICH), "utf8").match(/ ASK /g) || []).length, 2);
@@ -611,6 +611,38 @@ test("trace write: every trace a graph read prints is in the closed set", () => 
     const r = write(root, JSON.stringify({ phase: "graph", events }), ["--json"]);
     assert.strictEqual(r.status, 0, r.stderr + r.stdout);
     assert.strictEqual(lines(path.join(logs, RICH)).length, traces.length);
+  } finally {
+    rmrf(root);
+  }
+});
+
+// v2.2.0 T13 — a refusal carries its own fix: no doc lookup for the retry.
+test("trace write: an unknown verb names the fix and the lane verbs; a bad line is quoted", () => {
+  const { root, logs } = project();
+  try {
+    const pk = `phase: x
+run_meta:
+  lane: quick
+  slug: t13 probe
+  trace_path: .claude/orc/logs/run-quick-t13-probe-240726-002352.txt
+events:
+  - {ts: "240726 00:30:39.881", verb: "LOOK around"}
+`;
+    const r = write(root, pk, ["--json"]);
+    assert.strictEqual(r.status, 2);
+    const j = JSON.parse(r.stdout);
+    assert.match(j.reason, /unknown verb LOOK/);
+    assert.ok(j.reason.includes("PHASE <name> start|end"), j.reason);
+    assert.ok(j.reason.includes("GRAPH-CONSULT"), j.reason);
+    assert.match(j.reason, /, PHASE, ASK <qid>.*ask_ids/, j.reason);
+    assert.ok(j.reason.includes("orc lane phases orc-quick --json"), j.reason);
+    assert.match(j.reason, /nothing written/);
+    assert.ok(!fs.readdirSync(logs).some((n) => n.startsWith("run-quick-t13")), "nothing written");
+    const r2 = write(root, "phase: x\noops not yaml\n", ["--json"]);
+    assert.strictEqual(r2.status, 2);
+    const j2 = JSON.parse(r2.stdout);
+    assert.ok(j2.reason.includes('"oops not yaml"'), j2.reason);
+    assert.ok(j2.reason.includes('{"phase":'), j2.reason);
   } finally {
     rmrf(root);
   }

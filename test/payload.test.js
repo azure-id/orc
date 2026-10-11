@@ -278,7 +278,7 @@ test("the opus5-only mapping names only agents that exist, and never the trace w
     assert.ok(/-opus-5-(low|med|high)$/.test(n), `${n} is an opus-5 variant`);
 
   // The one role the mode must never touch.
-  assert.match(shared, /orc-trace-writer-haiku-4-5` stays Haiku/, "trace writer excluded");
+  assert.match(shared, /orc-trace-writer-haiku-5-high` stays Haiku/, "trace writer excluded");
   assert.ok(!/orc-trace-writer-opus/.test(shared), "no opus trace-writer variant is promised");
 });
 
@@ -341,7 +341,7 @@ test("both opus5-only executors are generated from the template and documented",
 // has LF. The generator used to inject the `effort:` frontmatter line with a
 // hardcoded LF, so on Windows every variant that HAS an effort line came out
 // one byte short of the file on disk, and `--check` reported nine drifted
-// agents that git itself did not record as changed. `orc-executor-haiku-4-5`
+// agents that git itself did not record as changed. `orc-executor-haiku-5-high`
 // passed, because it is the one variant with no effort line — which is exactly
 // what makes this look like a content bug instead of a line-ending one.
 test("the executor generator is line-ending agnostic (CRLF worktree)", () => {
@@ -1115,7 +1115,7 @@ test("every coding agent has a one-line description that names its own model and
   const files = fs
     .readdirSync(path.join(T, "agents"))
     .filter((f) => /^orc-.*\.md$/.test(f) && !DOC_LANE.test(f));
-  assert.ok(files.length >= 38, "the agent walk found only " + files.length + " coding agents");
+  assert.ok(files.length >= 37, "the agent walk found only " + files.length + " coding agents");
   for (const f of files) {
     const rel = path.join("agents", f);
     const fm = frontmatterOf(rel);

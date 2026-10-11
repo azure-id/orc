@@ -213,7 +213,7 @@ behind the disk. Keep the `Where it stands:` line at column 0.
 ## Trace
 
 Tier **Iterative** — one packet per completed cycle. Pipe the PHASE PACKET to
-`orc trace write --packet -` (exit ≠ 0 → `orc-trace-writer-haiku-4-5`).
+`orc trace write --packet -` (exit ≠ 0 → `orc-trace-writer-haiku-5-high`).
 Canonical: `../_shared/phases/trace.md`.
 
 ## Waiting mid-run (`/orc-wait`)

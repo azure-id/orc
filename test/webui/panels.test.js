@@ -819,6 +819,31 @@ test("knowledge panel: the density row and the THIN warning come from the CLI, n
   }
 });
 
+test("knowledge panel: a code_graph: semi project shows the SEMI badge, never OFF (v2.2.0)", () => {
+  const js = panelJs("knowledge");
+  // The badge is rendered off the API's own `mode`, never derived in the browser.
+  assert.match(js, /function graphSemiNote\(g\)/);
+  assert.match(js, /g\.mode !== "semi"\) return null/, "the badge shows only for mode semi");
+  assert.match(js, /chip\("SEMI", "idle"\)/);
+  assert.ok(js.includes('"knowledge.graph.semi"') && js.includes('"knowledge.graph.semiHint"'));
+  // Both the state ladder and the graph card call it; the exact-numbers copy does not.
+  assert.match(js, /const semiS = graphSemiNote\(g\);\s*\n?\s*if \(semiS\) c\.append\(semiS\)/);
+  assert.match(js, /if \(semiG && !exact\) c\.append\(semiG\)/);
+  for (const lang of ["en", "id"]) {
+    const dict = JSON.parse(fs.readFileSync(path.join(WEBUI, "i18n", lang, "knowledge.json"), "utf8"));
+    assert.ok(dict["knowledge.graph.semi"].startsWith("semi"), `${lang}: the mode word is a config value, not translated`);
+    assert.ok(dict["knowledge.graph.semiHint"], `${lang}: the hint exists`);
+  }
+  // The API passes the configured mode through; the fixture serves it on ?mode=semi
+  // with an index state that is NOT off, so the default tab stays DRIFTED.
+  const api = fs.readFileSync(path.join(WEBUI, "api.js"), "utf8");
+  assert.match(api, /\["config", "get", "code_graph"\]/);
+  const fx = fs.readFileSync(path.join(WEBUI, "fixtures", "knowledge.js"), "utf8");
+  assert.match(fx, /const graphSemi = \{[^}]*state: "fresh"[^\n]*mode: "semi"/);
+  const idx = fs.readFileSync(path.join(WEBUI, "fixtures", "index.js"), "utf8");
+  assert.match(idx, /q\.mode === "semi" \? graphSemi : graph/);
+});
+
 test("knowledge panel: both new doctor findings route to the panel that can CLEAR them", () => {
   const js = panelJs("overview");
   // `orc wiki sync` is a BUTTON on Knowledge and `orc wiki plan` is the card

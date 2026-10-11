@@ -27,7 +27,7 @@ selector.
 | `mock_example` | `ask` / `on` / `off` | Post-verify mocked example + drift recovery (`mock-examples/<slug>/`, never committed) |
 | `tdd` | `on` / `off` | TDD-anchored planning: plan-time `tdd_spec` (scoped by `disposition`), paired TDD tasks for the red proof, TDD gate in the verify slot |
 | `gotchas` | `on` / `off` | Repair memory: inject scope-matching gotchas into slices, record one when a repair loop goes red → green (`_shared/gotchas.md`) |
-| `code_graph` | `on` (default) / `off` | Code-graph cache steps: `orc graph status --heal` at preflight, `orc graph ctx` cards in slices, `orc graph map` then `orc graph impact` + `orc graph cochange` at planning, `orc graph changes` at review, `orc graph coverage` on demand, `orc graph update` after every wave and at ship, one `orc graph notes` batch per wave when notes are on. `on` compiles them in and the global `code_graph` key decides at run time (every call carries `--if-enabled`); `off` removes them (`_shared/code-graph.md`) |
+| `code_graph` | `on` (default) / `off` | The four graph touchpoints: consult at preflight (print the probe line; `orc graph status --heal` only when `heal_needed`), orient at planning (`orc graph map --focus=` once, then `orc graph impact` + `orc graph cochange`), ONE `orc graph ctx --for-slice … --anchors` per writing slice (`graph_anchors`, inline), `orc graph changes --files=` once at review; `orc graph update --notes-pending` only when `update_step` is `lane`; no gain step. `on` compiles them in and the global `code_graph` key decides at run time (every call carries `--if-enabled`); `off` removes them (`_shared/code-graph.md`) |
 | `wiki_gate` | `notice` / `off` / `hard` | Wiki freshness handling at preflight |
 | `post_ship_wiki_ask` | `on` / `off` | Post-ship wiki refresh offer on big runs |
 | `summary` | `full` / `off` / `short` | Summary depth |
@@ -44,7 +44,7 @@ selector.
 Hard errors (config not written):
 - `scoring: off` without a `fixed_executor`.
 - `fixed_executor` or any agent choice above `session_tier` (tier order:
-  haiku-4-5 < sonnet-4-6 < sonnet-5 < opus-4-7 < opus-4-8 < opus-5 < fable-5 —
+  haiku-5 < sonnet-4-6 < sonnet-5 < opus-4-7 < opus-4-8 < opus-5 < fable-5 —
   subagents cannot exceed the main session; effort medium < high < xhigh < max).
   A tier below `opus-5-high` clips the `[90,100]` band to the highest agent it
   allows, at compile time.

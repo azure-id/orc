@@ -324,6 +324,16 @@ to bottom:
 | **All the numbers, as the CLI sent them** | the card described below, minus the chip/button row | `graphCard(g, body, gain, true)` |
 | **What each word means** | every term on the tab, in four groups | plain words (STE) |
 
+**v2.2.0 — the SEMI badge.** `orc graph status` without `--if-enabled`
+answers the index state, so a `code_graph: semi` project looked like `on`.
+`/api/graph` now adds `mode` (the configured `code_graph`, read with
+`orc config get code_graph`). When `mode` is `semi`, the state card and the
+graph card (not the exact-numbers copy) show a `SEMI` chip with "semi — kept
+current, lanes do not read it" next to the index state, and the command
+`orc config set code_graph on` to enable reading. The meaning: preflight heal
+and the hook keep the index current, but every lane read answers exit 3 (off).
+Fixture: `/api/graph?mode=semi` (`graphSemi`); the default stays DRIFTED.
+
 Reduced motion: `.cg-beacon`, `.cg-link-dot` and `.cg-pulse` (the three
 infinite ones) are removed with `display: none` in `04-motion.css`; every
 finite `cg-*` animation is `animation: none`; the tiles skip the count-up. The

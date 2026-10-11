@@ -181,7 +181,7 @@ For recon, the suggestion is simpler: `orc-recon-sonnet-5-med` finds things;
    no step and no question to this lane.
 
 8. **ORC bookkeeping is not a dispatch you gate.** The trace writer and
-   `orc-graph-noter-sonnet-4-6-med` (the code graph's notes,
+   `orc-graph-noter-haiku-5-high` (the code graph's notes,
    `../../_shared/code-graph.md` §6) are fixed, never offered on this menu and
    never asked. They run no user task and change no code, and asking about them
    would add a user turn to a lane whose promise is one turn per request.

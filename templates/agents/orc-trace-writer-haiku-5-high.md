@@ -1,8 +1,9 @@
 ---
-name: orc-trace-writer-haiku-4-5
+name: orc-trace-writer-haiku-5-high
 description: >
-  ORC Trace writer — claude-haiku-4-5 (no effort ladder). Dispatched by every trace-owning lane at each phase close (single-dispatch lanes: once, at run end).
-model: claude-haiku-4-5
+  ORC Trace writer — claude-haiku-5-5, high effort. Dispatched by every trace-owning lane at each phase close (single-dispatch lanes: once, at run end).
+model: claude-haiku-5-5
+effort: high
 tools: Read, Bash, Glob
 ---
 

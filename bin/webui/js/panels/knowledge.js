@@ -149,6 +149,19 @@ function knowledgeHeaderStrip(d) {
   return strip;
 }
 
+/* v2.2.0 — code_graph: semi. `graph status` answers the INDEX state, and
+   the API adds the configured `mode`. A semi graph is kept current but no lane
+   reads it, so the panel says so next to the state, with the one command that
+   enables reading. The mode word is a config VALUE — never translated. */
+function graphSemiNote(g) {
+  if (!g || g.mode !== "semi") return null;
+  const box = el("div", "cg-semi");
+  const row = el("div", "row-actions");
+  row.append(chip("SEMI", "idle"), el("span", "note", t("knowledge.graph.semi")));
+  box.append(row, el("div", "note", t("knowledge.graph.semiHint")), el("pre", "cmd", "orc config set code_graph on"));
+  return box;
+}
+
 /* THE CODE GRAPH CARD (v1.8.0). Every value is `orc graph status --json`'s, and
    the state word is never replaced by a friendlier synonym. An update is FREE
    (parser only, no model), so it is a button; an OFF graph shows the one config
@@ -167,6 +180,8 @@ function graphCard(g, body, gain, exact) {
     return c;
   }
   if (exact) c.append(el("div", "note", t("knowledge.cg.exact.lead")));
+  const semiG = graphSemiNote(g);
+  if (semiG && !exact) c.append(semiG);
   const head = el("div", "row-actions");
   head.append(chip(String(g.state).toUpperCase(), g.state === "fresh" ? "ok" : g.state === "drifted" ? "warn" : "idle", g.state === "drifted"));
   const upd = el("button", "btn btn-sm", "orc graph update");
@@ -1228,6 +1243,8 @@ function cgStateCard(g, body) {
     return c;
   }
   c.append(el("div", "note", t("knowledge.cg.state.lead")));
+  const semiS = graphSemiNote(g);
+  if (semiS) c.append(semiS);
   const ladder = el("div", "cg-ladder");
   const steps = [
     ["OFF", t("knowledge.cg.state.off"), t("knowledge.cg.state.toNone")],

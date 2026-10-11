@@ -191,7 +191,7 @@ test("upgrade @5 → @6 — DRIFTED, one automatic re-extract, the Options API i
 
   const h = json(graph(c.root, "status", "--heal", "--json"));
   assert.equal(h.state, "fresh");
-  assert.equal(h.engine, "graph@6");
+  assert.equal(h.engine, "graph@7");
   assert.equal(h.healed.engine_upgrade, true);
   assert.equal(h.healed.parsed, 7, "every file is parsed again");
   assert.equal(h.healed.reused, 0);
@@ -199,7 +199,8 @@ test("upgrade @5 → @6 — DRIFTED, one automatic re-extract, the Options API i
 
   const submit = json(graph(c.root, "ctx", "CreateFundTransferModal.submit", "--json"));
   assert.equal(submit.state, "found");
-  assert.deepStrictEqual(submit.callers.map((x) => x.qname), ["formMixin.reset"]);
+  // CHANGED v2.2.0 (graph@7): the template is a caller too (`@click="submit"`).
+  assert.deepStrictEqual(submit.callers.map((x) => x.qname), ["CreateFundTransferModal.template", "formMixin.reset"]);
 
   // A function symbol keeps its id and its body hash, so its note is current.
   const fmt = json(graph(c.root, "ctx", "fmt", "--json"));

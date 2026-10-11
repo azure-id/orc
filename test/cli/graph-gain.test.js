@@ -398,3 +398,75 @@ test("orc stats — the graph row is null with no ledger, and a row once there i
   assert.equal(after.graph.estimate, true);
   assert.ok(after.graph.avoided_high >= after.graph.avoided_low);
 });
+
+// ── v2.2.0 (T8) — the meter fixes ───────────────────────────────────────────
+
+test("gain --run (G-07) — the trace file, the name without .txt, and the slug are the same run", () => {
+  assert.ok(K.sameRun("run-quick-x-091026-134917.txt", "run-quick-x-091026-134917"));
+  assert.ok(K.sameRun("run-quick-x-091026-134917.txt", "quick-x-091026-134917"));
+  assert.ok(K.sameRun("run-quick-x-091026-134917", "quick-x-091026-134917"));
+  assert.ok(K.sameRun("logs/run-quick-x-091026-134917.txt", "other-slug-091026-134917"), "the same stamp is the same run");
+  assert.ok(!K.sameRun("run-quick-x-091026-134917.txt", "quick-x-091026-134918"));
+
+  const root = shop();
+  graph(root, "ctx", "Store.insert", "--json");
+  const f = path.join(root, ".claude", "orc", "graph", "gain.jsonl");
+  const rows = ledger(root);
+  rows[0].run = "run-quick-x-091026-134917.txt";
+  fs.writeFileSync(f, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  for (const name of ["run-quick-x-091026-134917.txt", "run-quick-x-091026-134917", "quick-x-091026-134917"]) {
+    const r = graph(root, "gain", "--run", name, "--json");
+    assert.equal(r.status, 0, name);
+    assert.equal(json(r).calls_recorded, 1, name);
+  }
+});
+
+test("changes avoided (G-08) — only symbols called from OUTSIDE the diff are priced, and a repeat in one run adds 0", () => {
+  const root = shop();
+  const logs = path.join(root, ".claude", "orc", "logs");
+  fs.mkdirSync(logs, { recursive: true });
+  fs.writeFileSync(path.join(logs, ".current"), "run-orc-g08-091026-120000.txt\n");
+
+  // A change to the store: `list` is called from routes.js, outside the diff.
+  write(root, "src/store.js", ["class Store {", "  constructor() { this.rows = new Map(); }", "  list() {", "    return [...this.rows.values()].slice();", "  }", "  insert(row) {", "    this.rows.set(row.id, row);", "    return row;", "  }", "}", "module.exports = Store;"]);
+  graph(root, "changes", "--json");
+  const first = ledger(root).filter((r) => r.cmd === "changes")[0];
+  assert.ok(first.avoided.high > 0, "list() has a caller outside the diff");
+  assert.equal(first.repeat, undefined);
+  const callerPaths = first.basis.files.map((x) => x.path);
+  assert.ok(!callerPaths.includes("src/store.js"), "a caller inside the changed files is never priced");
+
+  graph(root, "changes", "--json");
+  const second = ledger(root).filter((r) => r.cmd === "changes")[1];
+  assert.equal(second.repeat, true);
+  assert.deepStrictEqual([second.avoided.low, second.avoided.high], [0, 0], "the same diff read twice avoided nothing the second time");
+});
+
+test("changes avoided (G-08) — a symbol nobody outside calls adds 0", () => {
+  const root = shop();
+  // routes.js: `listAll` has no caller anywhere.
+  write(root, "src/routes.js", ["const Store = require('./store');", "const store = new Store();", "function listAll() {", "  return store.list().length;", "}", "module.exports = { listAll };"]);
+  graph(root, "changes", "--json");
+  const row = ledger(root).filter((r) => r.cmd === "changes")[0];
+  assert.deepStrictEqual([row.avoided.low, row.avoided.high], [0, 0]);
+});
+
+test("for-slice avoided (G-08) — low is 0 without a pack", () => {
+  const root = shop();
+  graph(root, "ctx", "--for-slice", "src/store.js", "--json");
+  const row = ledger(root).filter((r) => r.cmd === "for-slice")[0];
+  assert.equal(row.avoided.low, 0);
+  assert.ok(row.avoided.high >= 0);
+});
+
+test("outcome (G-19) — every row says ok, empty, declined or error, and gain counts them", () => {
+  const root = shop();
+  graph(root, "ctx", "Store.insert", "--json");
+  graph(root, "ctx", "noSuchThingAnywhere", "--json");
+  graph(root, "changes", "--json");
+  const rows = ledger(root);
+  assert.deepStrictEqual(rows.map((r) => [r.cmd, r.outcome, r.exit]), [["ctx", "ok", 0], ["ctx", "declined", 4], ["changes", "empty", 0]]);
+  const g = json(graph(root, "gain", "--json"));
+  assert.deepStrictEqual(g.outcomes, { ok: 1, empty: 1, declined: 1, error: 0 });
+  assert.match(graph(root, "gain").stdout, /outcomes {2}ok 1 · empty 1 · declined 1 · error 0/);
+});

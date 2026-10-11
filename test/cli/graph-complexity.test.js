@@ -157,14 +157,14 @@ test("complexity — the line is the grammar `complexity.md` §3 prints, word fo
   assert.equal(
     mini.line,
     `complexity: mini-ok — 1 files · confident callers ${mini.numbers.callers_outside} in ${mini.numbers.caller_files_outside} files` +
-      ` · tests reach ${mini.numbers.tests_reaching} · risk none · cochange none`
+      ` · tests reach ${mini.numbers.tests_reaching} · risk none`
   );
 
   const full = complexity(repo({ callerFiles: SIG.COMPLEXITY_CALLER_FILES }), ["src/core.js"], "--risk=auth@a.js:1");
   assert.equal(
     full.line,
     `complexity: recommend /orc — 1 files · callers ${full.numbers.callers_outside} in ${full.numbers.caller_files_outside} files` +
-      ` · tests reach ${full.numbers.tests_reaching} · risk auth (a.js:1) · cochange none`
+      ` · tests reach ${full.numbers.tests_reaching} · risk auth (a.js:1)`
   );
 });
 

@@ -65,7 +65,9 @@ to orc-mini for full Phase 2–8; or save-and-stop). Escalation thresholds
 (suggest the full Opus 5.5 planner, user chooses): >8 tasks, any 3-deep
 dependency chain, or >2 same-file serializations. Record `plan_head` (HEAD at
 plan time) for cross-session drift detection. Return planning-output (each task
-with its `facets`; top level with `plan_head`, `plan_confidence`,
+with its `facets`, and an OPTIONAL `precedent[]` — read-only files this task
+copies behaviour or style from, max 5; the lane passes them as the pack's
+`--refs=`; top level with `plan_head`, `plan_confidence`,
 `open_questions[]`) + summary + `coverage: {requirements, tasks, orphans}`, plus
 actual_model (quoted verbatim from your system prompt's "The exact model ID is …"
 line; `unknown` if absent, never guessed) and actual_effort ($CLAUDE_EFFORT).

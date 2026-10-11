@@ -42,8 +42,8 @@ The default table has 5 bands (`skills/orc/config.md`):
 | `[41,90)` | `claude-opus-5-5` | low | `orc-executor-opus-5-low` |
 | `[90,100]` | `claude-opus-5-5` | medium | `orc-executor-opus-5-med` |
 
-Every band from score 41 needs an Opus 5.5 main session. Seven executors are
-named by no band (`orc-executor-haiku-4-5`, `orc-executor-sonnet-4-6-med`,
+Every band from score 41 needs an Opus 5.5 main session. Six executors are
+named by no band (`orc-executor-haiku-5-high`,
 `orc-executor-sonnet-4-6-high`, `orc-executor-opus-4-7-med`,
 `orc-executor-opus-4-7-high`, `orc-executor-opus-4-8-high`,
 `orc-executor-opus-5-high`). They still ship. To use one, name it in

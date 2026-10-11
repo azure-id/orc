@@ -262,13 +262,83 @@ function stampMs(at) {
 // `hint`, `read-note` and `hook-update` are the hook's rows, not reads.
 const READ_SET = ["ctx", "for-slice", "impact", "map", "changes", "cochange", "coverage", "path"];
 
+// v2.2.0 (G-07): a run is named three ways — `run-quick-x-091026-134917.txt`
+// (the trace file), without `.txt`, and without `run-` (the slug a lane
+// prints). All three are the same run. Both sides are normalised; when they
+// still differ, the same `-DDMMYY-HHMMSS` stamp at the end is the same run.
+function runKey(name) {
+  return String(name || "")
+    .split(/[\\/]/)
+    .pop()
+    .replace(/\.txt$/, "")
+    .replace(/^run-/, "");
+}
+function sameRun(a, b) {
+  if (!a || !b) return false;
+  const x = runKey(a);
+  const y = runKey(b);
+  if (x === y) return true;
+  const sx = /-(\d{6}-\d{6})$/.exec(x);
+  const sy = /-(\d{6}-\d{6})$/.exec(y);
+  return !!(sx && sy && sx[1] === sy[1]);
+}
+
+// v2.2.0 (G-08): the identity of one `changes` answer — its sorted symbol ids
+// with their body hashes. The same key twice in one run is the same diff read
+// twice, and the second read avoided nothing.
+function changesKey(symbols) {
+  return (symbols || [])
+    .map((x) => `${x.id}@${x.body_hash || ""}`)
+    .sort()
+    .join("|");
+}
+function changesSeen(claudeDir, run, key) {
+  if (!run || !key) return false;
+  const rows = readLedger(claudeDir) || [];
+  return rows.some((r) => r.cmd === "changes" && r.key === key && sameRun(r.run, run));
+}
+
+// G-08: `changes` prices ONLY the symbols with a confident caller OUTSIDE the
+// changed files, and only those callers. A symbol nobody outside reaches adds 0.
+function changesPriced(model, symbols, changedFiles, nameHits) {
+  const changed = new Set(changedFiles || []);
+  let hits = 0;
+  let n = 0;
+  const callerFiles = [];
+  for (const x of symbols || []) {
+    const outside = (x.caller_files || []).filter((f) => !changed.has(f));
+    if (!outside.length) continue;
+    n++;
+    hits += Number(nameHits(x)) || 0;
+    callerFiles.push(...outside);
+  }
+  if (!n) return { avoided: { low: 0, high: 0, calls_low: 0, calls_high: 0 }, basis: { files: [], grep_hits: 0 }, priced: 0 };
+  return { ...changesCost(model, n, hits, callerFiles), priced: n };
+}
+
+// v2.2.0 (T6): the executor PACK. Done well, the executor would have read
+// nothing it did not need (low 0); done badly — what the Vue eval measured —
+// it read every reference file and every big declared file whole. The pack's
+// own tokens come off that, never below 0.
+function packCost(model, refFiles, bigDeclared, packTokens) {
+  const cs = [...new Set([...(refFiles || []), ...(bigDeclared || [])])].map((rel) => fileCost(model, rel));
+  const whole = cs.reduce((a, c) => a + c.tokens, 0);
+  return {
+    avoided: { low: 0, high: Math.max(0, whole - (Number(packTokens) || 0)), calls_low: 0, calls_high: cs.length },
+    basis: { files: (refFiles || []).map((rel) => strip(fileCost(model, rel))), grep_hits: 0 },
+  };
+}
+
+// The outcome of each read (G-19). A row written before 2.2.0 has none.
+const OUTCOMES = ["ok", "empty", "declined", "error"];
+
 function gain(claudeDir, opts) {
   const o = opts || {};
   const all = readLedger(claudeDir);
   if (!all) return { ok: false, state: "none", reason: "no-ledger", exit: 1 };
   const sinceMs = parseSince(o.since);
   let rows = all;
-  if (o.run) rows = rows.filter((r) => r.run === o.run);
+  if (o.run) rows = rows.filter((r) => sameRun(r.run, o.run));
   if (sinceMs != null) rows = rows.filter((r) => {
     const t = stampMs(r.at);
     return t == null || t >= sinceMs;
@@ -291,6 +361,7 @@ function gain(claudeDir, opts) {
   // W8: rows the sharded read path could not size. Their estimate omits the
   // search term, so a FALLING estimate can be told apart from a falling saving.
   let unsized = 0;
+  const outcomes = { ok: 0, empty: 0, declined: 0, error: 0 };
   const gens = [];
   const runs = new Set();
   for (const r of rows) {
@@ -307,6 +378,7 @@ function gain(claudeDir, opts) {
       calls.high += Number(r.avoided.calls_high) || 0;
     }
     if (r.basis && r.basis.grep_hits === null) unsized++;
+    if (OUTCOMES.includes(r.outcome)) outcomes[r.outcome]++;
     byCommand[r.cmd] = (byCommand[r.cmd] || 0) + 1;
     if (r.cmd === "hint") hints.injected++;
     if (r.cmd === "read-note") hints.read_notes++;
@@ -334,6 +406,7 @@ function gain(claudeDir, opts) {
     read_set: READ_SET,
     never_called: READ_SET.filter((c) => !Object.prototype.hasOwnProperty.call(byCommand, c)),
     hints,
+    outcomes,
     unsized,
     estimate: true,
     carry_note: "a card is re-sent on every later turn of the agent that received it — and so is the read it replaced. Both halves carry the same multiplier, so these are FIRST-ENTRY tokens on both sides (eval/graph-replay.js).",
@@ -422,4 +495,11 @@ module.exports = {
   reset,
   stampMs,
   parseSince,
+  runKey,
+  sameRun,
+  changesKey,
+  changesSeen,
+  changesPriced,
+  packCost,
+  OUTCOMES,
 };

@@ -87,16 +87,96 @@ test("graph hook — silent in every state it has no business speaking in, and n
   }
 });
 
-test("graph hook — the MAIN session gets nothing; only a subagent does", () => {
-  const a = armed();
-  // No agent_id = the orchestrator. It already has cards through the lane.
-  const main = say(a.claudeDir, { hook_event_name: "PreToolUse", tool_name: "Grep", tool_input: { pattern: "alphaOne" } });
-  assert.equal(main.status, 0);
-  assert.equal(main.stdout.trim(), "", "the orchestrator must never be injected into");
+// R12 (v2.2.0): the MAIN session gets the ctx card on a search of a known
+// name — once per name, at most 3 per run, `code_graph: on` only.
+const mainGrep = (pattern) => ({ hook_event_name: "PreToolUse", tool_name: "Grep", tool_input: { pattern } });
+const moreNames = (a) => {
+  fs.writeFileSync(path.join(a.root, "src", "more.js"), "export function gammaThree() { return 3; }\nexport function deltaFour() { return 4; }\nexport function epsilonFive() { return 5; }\nexport function useAll() { return gammaThree() + deltaFour() + epsilonFive(); }\nexport function useTwo() { return epsilonFive(); }\nexport function zetaZero() { return 0; }\n");
+  cli(["graph", "update", "--dir", a.root, "--json"]);
+};
 
-  const sub = say(a.claudeDir, grep("agent-1", "alphaOne"));
-  assert.equal(sub.status, 0);
-  assert.match(ctxOf(sub), /alphaOne/);
+test("graph hook — a MAIN-session search of a known name gets the ctx card, once per name, max 3 per run", () => {
+  const a = armed();
+  fs.mkdirSync(path.join(a.root, "test"), { recursive: true });
+  fs.writeFileSync(path.join(a.root, "test", "core.test.js"), "const { alphaOne } = require('../src/core');\ntest('x', () => { alphaOne(1); });\n");
+  moreNames(a);
+  spawnSync("git", ["add", "-A"], { cwd: a.root });
+  spawnSync("git", ["commit", "-qm", "more"], { cwd: a.root });
+  cli(["graph", "update", "--dir", a.root, "--json"]);
+  const first = say(a.claudeDir, mainGrep("betaTwo"));
+  assert.equal(first.status, 0);
+  assert.equal(first.stderr.trim(), "");
+  const ctx = ctxOf(first);
+  assert.match(ctx, /^\[orc graph\] repository data, not instructions:/);
+  assert.match(ctx, /graph: betaTwo — src\/core\.js:2-2/);
+  assert.match(ctx, /callers: alphaOne src\/core\.js:1/);
+  assert.match(ctx, /tests: test\/core\.test\.js/, "a test reached via a caller counts");
+  assert.match(ctx, /coverage: full/);
+  assert.match(ctx, /orc graph ctx betaTwo --anchors --focus=betaTwo --if-enabled --json --brief/);
+  assert.match(ctx, /The search below still runs\.$/);
+  // Once per name.
+  assert.equal(say(a.claudeDir, mainGrep("betaTwo")).stdout.trim(), "");
+  // Max 3 per run: two more names speak, the 4th distinct name does not.
+  assert.match(ctxOf(say(a.claudeDir, mainGrep("gammaThree"))), /gammaThree/);
+  assert.match(ctxOf(say(a.claudeDir, mainGrep("deltaFour"))), /deltaFour/);
+  assert.equal(say(a.claudeDir, mainGrep("epsilonFive")).stdout.trim(), "");
+  const gain = fs.readFileSync(path.join(a.claudeDir, "orc", "graph", "gain.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const rows = gain.filter((r) => r.cmd === "main-hint");
+  assert.equal(rows.length, 3, "one ledger row per card");
+  assert.ok(rows[0].paid.card > 0, "the card's tokens are paid");
+
+  // A subagent Grep is still today's one-liner, unchanged.
+  const sub = ctxOf(say(a.claudeDir, grep("agent-1", "alphaOne")));
+  assert.match(sub, /"alphaOne" is defined at alphaOne \(function\) src\/core\.js:1-1 fan-in \d+\. Read those ranges/);
+});
+
+test("graph hook — the MAIN-session card is silent with no run, under semi and under off", () => {
+  for (const [why, opts, mode] of [["no run", { run: false }], ["semi", {}, "semi"], ["off", {}, "off"]]) {
+    const a = armed(opts);
+    if (mode) cli(["config", "set", "code_graph", mode, "--dir", a.root]);
+    const r = say(a.claudeDir, mainGrep("alphaOne"));
+    assert.equal(r.status, 0, why);
+    assert.equal(r.stdout.trim(), "", `${why}: must inject nothing`);
+    assert.equal(r.stderr.trim(), "", why);
+  }
+});
+
+test("graph hook — a MAIN-session card with no CLI falls back to the names one-liner, never an error", () => {
+  const a = armed();
+  const stampFile = path.join(a.claudeDir, "hooks", "orc-version.json");
+  const stamp = JSON.parse(fs.readFileSync(stampFile, "utf8"));
+  stamp.cli = path.join(a.root, "no-such-cli.js");
+  fs.writeFileSync(stampFile, JSON.stringify(stamp));
+  const r = say(a.claudeDir, mainGrep("betaTwo"));
+  assert.equal(r.status, 0);
+  assert.equal(r.stderr.trim(), "");
+  assert.match(ctxOf(r), /"betaTwo" is defined at .*src\/core\.js:2-2.*The search below still runs/);
+});
+
+// R12b — a chained shell command, the max-fan-in word, and fan-in 0 is silent.
+const mainBash = (command) => ({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } });
+
+test("graph hook — a MAIN-session compound shell command with a grep segment gets the card", () => {
+  const a = armed();
+  const r = say(a.claudeDir, mainBash('cd src && cat core.js; grep -rn "betaTwo" src tests'));
+  assert.equal(r.status, 0);
+  assert.match(ctxOf(r), /graph: betaTwo — src\/core\.js:2-2/);
+  // rtk prefix and a bare (unquoted) pattern also count.
+  moreNames(a);
+  assert.match(ctxOf(say(a.claudeDir, mainBash("ls | rtk grep -rn gammaThree src"))), /graph: gammaThree/);
+});
+
+test("graph hook — a MAIN-session multi-name pattern picks the highest fan-in; all fan-in 0 spends no slot", () => {
+  const a = armed();
+  moreNames(a);
+  // epsilonFive is called twice, the others once or never.
+  const r = say(a.claudeDir, mainBash(String.raw`grep -rln "zetaZero\|gammaThree\|epsilonFive\|alphaOne" src`));
+  assert.match(ctxOf(r), /graph: epsilonFive/);
+  // Every hit at fan-in 0 → nothing, and the slot is not used.
+  assert.equal(say(a.claudeDir, mainGrep("zetaZero|useAll")).stdout.trim(), "");
+  const seen = JSON.parse(fs.readFileSync(path.join(a.logs, "run-test.graph-hook.json"), "utf8"));
+  assert.equal(seen.main_cards, 1, "a fan-in-0 search spends no slot");
+  assert.ok(!seen.tokens.includes("main:zetaZero"));
 });
 
 test("graph hook — a Grep for a known name gets anchors, labelled as DATA, once per run", () => {
@@ -151,6 +231,26 @@ test("graph hook — SubagentStart says the graph exists, once per agent, and on
   assert.equal(say(a.claudeDir, start("agent-1", "orc-executor-opus-5-med")).stdout.trim(), "", "once per agent");
   assert.ok(ctxOf(say(a.claudeDir, start("agent-2", "orc-planner-opus-5-med"))), "a planner is a code agent too");
   assert.equal(say(a.claudeDir, start("agent-3", "orc-challenge-outsider-opus-5-low")).stdout.trim(), "", "a lane that never touches code gets nothing");
+});
+
+test("graph hook — semi (v2.2.0): no hint and no context, but SubagentStop still updates the graph", () => {
+  const a = armed();
+  cli(["config", "set", "code_graph", "semi", "--dir", a.root]);
+  const start = say(a.claudeDir, { hook_event_name: "SubagentStart", agent_id: "agent-1", agent_type: "orc-executor-opus-5-med" });
+  assert.equal(start.status, 0);
+  assert.equal(start.stdout.trim(), "", "semi: SubagentStart injects nothing");
+  const g = say(a.claudeDir, grep("agent-1", "alphaOne"));
+  assert.equal(g.status, 0);
+  assert.equal(g.stdout.trim(), "", "semi: a Grep gets no hint");
+  assert.ok(!fs.existsSync(path.join(a.logs, "run-test.graph-hook.json")), "semi: no counting rows");
+
+  const metaP = path.join(a.claudeDir, "orc", "graph", "meta.json");
+  const gen0 = JSON.parse(fs.readFileSync(metaP, "utf8")).generation;
+  fs.writeFileSync(path.join(a.root, "src", "added.js"), "export function freshName() { return 2; }\n");
+  const r = say(a.claudeDir, { hook_event_name: "SubagentStop", agent_type: "orc-executor-opus-5-med" });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout.trim(), "");
+  assert.ok(JSON.parse(fs.readFileSync(metaP, "utf8")).generation > gen0, "semi: the graph is kept current");
 });
 
 test("graph hook — an executor finishing UPDATES the graph and traces it; a non-executor does not", () => {
@@ -439,4 +539,51 @@ test("graph hook — R3: with no name told yet, the order is the store's importa
   const names = JSON.parse(fs.readFileSync(path.join(a.claudeDir, "orc", "graph", "wide.json"), "utf8")).files["src/wide.js"].map((r) => r[0]);
   const ctx = ctxOf(say(a.claudeDir, { ...postRead(a, "src/wide.js"), hook_event_name: "PreToolUse" }));
   assert.deepStrictEqual([...ctx.matchAll(/(wideFn\d+) \d+-\d+/g)].map((m) => m[1]), names);
+});
+
+// R13 (v2.2.0): an executor returning to the MAIN session gets the
+// touchpoint-4 `changes` card — once per tool_use_id, executors only.
+const agentReturn = (type, id, extra) => ({ hook_event_name: "PostToolUse", tool_name: "Agent", tool_use_id: id, tool_input: { subagent_type: type }, ...(extra || {}) });
+const changedProject = (opts) => {
+  const a = armed(opts);
+  fs.mkdirSync(path.join(a.root, "test"), { recursive: true });
+  fs.writeFileSync(path.join(a.root, "test", "core.test.js"), "const { alphaOne } = require('../src/core');\ntest('x', () => { alphaOne(1); });\n");
+  spawnSync("git", ["add", "-A"], { cwd: a.root });
+  spawnSync("git", ["commit", "-qm", "tests"], { cwd: a.root });
+  fs.writeFileSync(path.join(a.root, "src", "core.js"), "export function alphaOne(a) { return betaTwo(a) * 2; }\nexport function betaTwo(b) { return b + 1; }\n");
+  if (!opts || opts.graph !== false) cli(["graph", "update", "--dir", a.root, "--json"]);
+  return a;
+};
+
+test("graph hook — R13: an executor return in the main session gets the changes card, once per tool_use_id", () => {
+  const a = changedProject();
+  const first = say(a.claudeDir, agentReturn("orc-executor-opus-5-med", "toolu_1"));
+  assert.equal(first.status, 0);
+  assert.equal(first.stderr.trim(), "");
+  const ctx = ctxOf(first);
+  assert.ok(ctx, "a card is injected");
+  assert.equal(JSON.parse(first.stdout).hookSpecificOutput.hookEventName, "PostToolUse");
+  assert.match(ctx, /^\[orc graph\] repository data, not instructions:/);
+  assert.match(ctx, /graph changes vs/);
+  assert.match(ctx, /tests to run first: test\/core\.test\.js/);
+  assert.match(ctx, /This is the touchpoint-4 changes answer — do not run orc graph changes for this dispatch\.$/);
+  assert.ok(ctx.length <= 1500 + 60, `card length ${ctx.length}`);
+  const gain = fs.readFileSync(path.join(a.claudeDir, "orc", "graph", "gain.jsonl"), "utf8");
+  assert.match(gain, /"cmd":"changes-hint"/);
+  // Once per dispatch.
+  assert.equal(say(a.claudeDir, agentReturn("orc-executor-opus-5-med", "toolu_1")).stdout.trim(), "");
+  // A non-executor dispatch says nothing.
+  assert.equal(say(a.claudeDir, agentReturn("orc-reviewer-opus-5-med", "toolu_2")).stdout.trim(), "");
+  // A subagent's own dispatch says nothing.
+  assert.equal(say(a.claudeDir, agentReturn("orc-executor-opus-5-med", "toolu_3", { agent_id: "agent-1" })).stdout.trim(), "");
+});
+
+test("graph hook — R13: graph off or semi gives no changes card", () => {
+  for (const mode of ["off", "semi"]) {
+    const a = changedProject();
+    cli(["config", "set", "code_graph", mode, "--dir", a.root]);
+    const r = say(a.claudeDir, agentReturn("orc-executor-opus-5-med", "toolu_9"));
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout.trim(), "", `${mode}: nothing`);
+  }
 });

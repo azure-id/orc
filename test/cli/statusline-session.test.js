@@ -83,7 +83,7 @@ test("the second line reports agents, extra, duration, tokens and branch", () =>
   );
   fs.writeFileSync(
     path.join(logs, "run-mini-other-040926-110000.txt"),
-    [spawnLine(now, "orc-executor-sonnet-4-6-med"), ""].join("\n")
+    [spawnLine(now, "orc-executor-haiku-5-high"), ""].join("\n")
   );
   fs.writeFileSync(
     path.join(logs, "run-wiki-old-010926-090000.txt"),

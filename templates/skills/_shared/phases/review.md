@@ -53,9 +53,10 @@ P0/P1 findings gate anything; P2/P3 findings are listed once in the summary
 and never re-offered as fix-up tasks.
 <!-- /diy:when -->
 <!-- diy:when code_graph=on -->
-With the code graph on, the reviewer also gets the callers from
-`orc graph changes --if-enabled --json` — an unchanged caller of a
-changed signature is a finding candidate (`.claude/skills/_shared/code-graph.md` §7).
+With the code graph on, run ONCE
+`orc graph changes --files=<the changed paths> --if-enabled --json --brief`: print its `tests_line`,
+run its `tests[]` first, print its `blast_line`, and hand the reviewer its callers — an unchanged
+caller of a changed signature is a finding candidate (`.claude/skills/_shared/code-graph.md` §0 step 4).
 <!-- /diy:when -->
 
 <!-- /orc:layer -->

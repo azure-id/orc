@@ -27,12 +27,13 @@ const tok = (s) => Math.ceil(String(s).length / 4);
 // golden test — which is the point: the list IS the record of what moved.
 const ADDED = {
   // R2 (W5): the wide whole-file reads no hint named.
-  gain: ["paid.envelope", "read_set", "never_called", "hints.wide_unhinted"],
+  gain: ["paid.envelope", "read_set", "never_called", "hints.wide_unhinted", "outcomes"],
   changes: ["totals", "tests", "tests_line", "blast_line"],
   status: ["density", "thin"],
   // R4 (W5): where a language server should be asked, on every symbol card.
-  "ctx-symbol": ["lsp_at"],
-  "ctx-source": ["lsp_at"],
+  "ctx-symbol": ["lsp_at", "tests_via", "coverage"],
+  // v2.2.0 (R11): the tests a caller reaches, and the coverage verdict.
+  "ctx-source": ["lsp_at", "tests_via", "coverage"],
   // v2.1.2 F05: what each plain focus word reached, and the too-common ones.
   // The unfocused map carries both too, empty — one answer shape, focus or not.
   map: ["focus_words", "focus_common"],
@@ -50,7 +51,10 @@ const CHANGED = {
   // PRINTED, and A4 changed which files those are.
   // v2.1.2 F05 moves `paid.card`: the `map --focus orders` card in this ledger
   // is now a FOCUSED card (its focus row and its `focus words` row).
-  gain: ["line", "trace", "paid.total", "paid.card", "net.low", "net.high", "avoided.low", "avoided.high", "calls.low", "calls.high"],
+  // v2.2.0 (G-19): EVERY read leaves a row with its outcome — the matrix's
+  // cochange, coverage and declined reads are now counted; (G-08) changes and
+  // for-slice are priced lower.
+  gain: ["line", "trace", "paid.total", "paid.card", "net.low", "net.high", "avoided.low", "avoided.high", "calls.low", "calls.high", "calls_recorded", "by_command", "never_called", "paid.envelope"],
   // A1 — the density rides on the line and the trace a lane already prints.
   // W5b (DE-15) — `graph@6`: the one engine change 1.9.1 makes, on purpose.
   // Every COUNT on this fixture is unchanged (it has no Options API object and
@@ -60,6 +64,17 @@ const CHANGED = {
   // and froze the bug: `focus: []` under a trace that said `focused`. The word
   // now reaches the files that hold it, so the ranking and the card move.
   "map-focus": ["focus", "focus_missing", "files", "shown", "card", "budget", "trace", "hidden", "has_more"],
+  // v2.2.0 (G-22): the line says `parse coverage` — what the PARSER read, not
+  // test coverage.
+  coverage: ["line"],
+  // v2.2.0 (T6b): a caller in a TEST file is a `tests` entry, never a caller
+  // row, and the tests line says how many files.
+  impact: ["callers", "total_callers", "has_more", "card", "budget", "hidden", "format"],
+  // v2.2.0 (R11): `tests` also names the tests that reach the target THROUGH a
+  // caller, and the card carries that row and the coverage row.
+  "ctx-symbol": ["tests", "card", "budget"],
+  "ctx-source": ["tests", "card", "budget", "source"],
+  "ctx-multi": ["cards", "card", "budget"],
 };
 
 // Walk the golden and the live answer together. Every golden key must be
@@ -166,7 +181,9 @@ test("--brief — the card, the line, the trace and every scalar survive", () =>
   const m = matrix();
   for (const cmd of READS) {
     const { full, brief } = pair(m.root, cmd);
-    for (const k of ["card", "line", "trace", "state", "ok", "generation", "gen_id", "read", "hidden", "budget", "exit"]) {
+    // v2.2.0 (R7): a brief map keeps ONLY ok, state, line, trace, generation, card, counts.
+    const keys = /^map/.test(cmd.name) ? ["card", "line", "trace", "state", "ok", "generation"] : ["card", "line", "trace", "state", "ok", "generation", "gen_id", "read", "hidden", "budget", "exit"];
+    for (const k of keys) {
       if (!Object.prototype.hasOwnProperty.call(full.json, k)) continue;
       assert.deepStrictEqual(brief.json[k], full.json[k], `${cmd.name}: --brief moved ${k}`);
     }

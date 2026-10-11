@@ -21,7 +21,7 @@
 // case here; it is never an edit to a 1 700-line module.
 const { PROJECT, doctor, where } = require("./shell.js");
 const { config } = require("./settings.js");
-const { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact, graph, graphGain, graphGainMeasured } = require("./knowledge.js");
+const { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact, graph, graphSemi, graphGain, graphGainMeasured } = require("./knowledge.js");
 const { runs, runDetail, runDetailClosed, aftermath } = require("./runs.js");
 const { stats, budgetForecast, budgetRates } = require("./stats.js");
 const { pact } = require("./pact.js");
@@ -309,7 +309,7 @@ module.exports.get = function get(route, q) {
       return wikiImpact;
     // v1.8.0 — the code graph, DRIFTED (the state the card must be designed for).
     case "/api/graph":
-      return graph;
+      return q && q.mode === "semi" ? graphSemi : graph;
     // v1.8.2 W4b — the gain meter, and the A/B behind its second button.
     case "/api/graph/gain":
       return graphGain;

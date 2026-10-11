@@ -368,6 +368,29 @@ test("graph heal-on-read — a moved HEAD heals, a slow last update declines, an
   assert.match(graph(root, "ctx", "src/c.js").stdout, /not healed on read/);
 });
 
+test("graph heal-on-read (G-13) — nothing moved is no line, and a cold build writes build_ms, not update_ms", () => {
+  const { root } = repo();
+  on(root);
+  graph(root, "update", "--json");
+  const metaFile = path.join(root, ".claude", "orc", "graph", "meta.json");
+  const meta = JSON.parse(fs.readFileSync(metaFile, "utf8"));
+  assert.ok(Number.isFinite(meta.build_ms), "a cold build stamps its own duration");
+  assert.equal(meta.update_ms, undefined, "update_ms is left to incremental updates");
+
+  // Over the cap, but nothing moved: there is nothing to heal and nothing to say.
+  meta.update_ms = 999999;
+  fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2) + "\n");
+  const quiet = json(graph(root, "ctx", "src/a.js", "--json"));
+  assert.equal(quiet.healed, undefined, "no heal state when nothing moved");
+  assert.doesNotMatch(graph(root, "ctx", "src/a.js").stdout, /not healed/);
+
+  // Something moved AND over the cap: now it says so.
+  write(root, "src/a.js", "function a() { return 2; }\n");
+  const declined = json(graph(root, "ctx", "src/a.js", "--json"));
+  assert.equal(declined.healed.state, "skipped");
+  assert.equal(declined.healed.reason, "over-cap");
+});
+
 test("graph coverage — off with --if-enabled is exit 3, and no graph is exit 1", () => {
   const { root } = repo();
   const off = graph(root, "coverage", "src/a.js", "--if-enabled", "--json");

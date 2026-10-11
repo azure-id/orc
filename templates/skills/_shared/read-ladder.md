@@ -18,7 +18,13 @@ Escalate one step at a time. Stop at the step that answers the question.
 
 ## Step 0 — ask the graph (always first; the CLI decides if it is on)
 
-Before step 1, run `orc graph ctx <symbol|file[:line]> --if-enabled --json --brief`
+Your slice carries `graph_anchors` (up to 12 `path:a-b` ranges, one `read all:` command and, when present, a fenced block with the code of every range) →
+`graph_anchors` may carry the code of its ranges inline — use it as already read; do NOT read those ranges again. Without the code, your FIRST call prints every range (below). With `graph_anchors`, a wiki page is OPTIONAL: read it only for a business rule that the requirement, the anchors and the code do not settle.
+Your FIRST call prints EVERY range in `graph_anchors` in ONE shell command — the `read all:` line when present, else one `sed -n 'a,bp' <file>` per range joined with `;` and an `echo == <file>:<a>-<b>` header each. Then read further only for what those ranges do not show; do not `cat` a whole anchored file over 150 lines. A file you will EDIT is still read in full first (exception 1). The inline code and the ranges are real bytes of the current blob. Then
+`orc graph ctx <name> --source --if-enabled --json --brief` for a symbol the anchors do not cover.
+Never read again a range the anchors printed.
+
+With no `graph_anchors`, before step 1, run `orc graph ctx <symbol|file[:line]> --if-enabled --json --brief`
 yourself. You do not need to know whether the graph is on. Exit 0 → the card
 answers step 1 and step 2 together: where the symbol is, its line range, who
 calls or uses it, what it calls, and which effects it has. Then continue at
@@ -46,7 +52,7 @@ list of candidates. Without an LSP tool, or with `lsp_at: null`, the ladder
 continues as before.
 
 Exit 3 (off) → skip step 0 for the rest of the task. Exit 1 (no index) or 4 (not
-in the graph) → step 1 as before. Name the card targets you used in
+in the graph) → step 1 as before. Name the pack or card targets you used in
 `graph_used`. Both exceptions below apply unchanged.
 Canonical: `code-graph.md`.
 

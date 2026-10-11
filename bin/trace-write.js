@@ -6,10 +6,10 @@
 // halves of the trace pair — the `.txt` line and its `.jsonl` row — so the two
 // can never disagree about an event. W0 measured the Haiku writer at 92.4 %
 // (whole phase blocks missing from the `.jsonl`); here parity is by
-// construction. The writer agent `orc-trace-writer-haiku-4-5` stays as the
+// construction. The writer agent `orc-trace-writer-haiku-5-high` stays as the
 // FALLBACK: a lane dispatches it only when this command exits ≠ 0.
 //
-// The formats are the writer's, not new ones (`agents/orc-trace-writer-haiku-4-5.md`):
+// The formats are the writer's, not new ones (`agents/orc-trace-writer-haiku-5-high.md`):
 //   .txt    [<ts>] <actor padded to 8> <VERB> :: <tail>
 //   .jsonl  {"ts","actor","phase","verb","tail", …verbatim extra fields}
 //   NOTE    one line from `decisions`, actor `writer`, the last event's ts
@@ -179,6 +179,10 @@ function blockScalar(lines, i, style, parentIndent) {
   return [text, j - 1];
 }
 
+// v2.2.0 T13 — a parse error names the line it could not read (trimmed, ≤ 80 chars).
+const quoteLine = (l) => { const t = String(l).trim(); return JSON.stringify(t.length > 80 ? t.slice(0, 79) + "…" : t); };
+const PACKET_SHAPE_HINT = ' — a packet is YAML or JSON, e.g. {"phase":"entry 1","events":[{"ts":"DDMMYY HH:MM:SS.mmm","verb":"NOTE","tail":"…"}]}';
+
 function parseYaml(text) {
   const lines = text.split("\n");
   const out = {};
@@ -187,7 +191,7 @@ function parseYaml(text) {
     if (line.trim() === "" || line.trim()[0] === "#") continue;
     if (indentOf(line) !== 0) throw new PacketError(`line ${i + 1}: unexpected indentation`);
     const m = KEY_RE.exec(line);
-    if (!m) throw new PacketError(`line ${i + 1}: expected "key: value"`);
+    if (!m) throw new PacketError(`line ${i + 1}: expected "key: value", got ${quoteLine(line)}`);
     const key = m[1];
     const rest = stripComment(m[2] || "").trim();
     if (/^[>|][+-]?$/.test(rest)) {
@@ -250,7 +254,7 @@ function parseYaml(text) {
           }
           if (indentOf(n) <= itemIndent) break;
           const nm = KEY_RE.exec(n.trim());
-          if (!nm) throw new PacketError(`line ${k + 2}: expected "key: value" inside an item`);
+          if (!nm) throw new PacketError(`line ${k + 2}: expected "key: value" inside an item, got ${quoteLine(n)}`);
           k++;
           put(nm[1], nm[2], k);
         }
@@ -267,7 +271,7 @@ function parseYaml(text) {
       if (l.trim() === "" || l.trim()[0] === "#") continue;
       if (indentOf(l) === 0) break;
       const nm = KEY_RE.exec(l.trim());
-      if (!nm) throw new PacketError(`line ${k + 1}: expected "key: value" under ${key}`);
+      if (!nm) throw new PacketError(`line ${k + 1}: expected "key: value" under ${key}, got ${quoteLine(l)}`);
       map[nm[1]] = scalar(nm[2] || "");
     }
     out[key] = map;
@@ -381,7 +385,22 @@ function findingOutcomeError(verb, tail) {
 }
 
 // → { phase, run_meta, events: [{ts, actor, verb, tail, extra}], note } or throws.
-function validatePacket(pk, traceVerbs) {
+// v2.2.0 T13 — `laneVerbs(tokenOrLane)` → this lane's verb heads, or null; `laneHint`
+// is the lane token from the trace file name when the packet has no run_meta.
+function unknownVerbFix(pk, traceVerbs, laneVerbs, laneHint) {
+  const rm = pk && pk.run_meta && typeof pk.run_meta === "object" ? pk.run_meta : null;
+  const lane = (rm && rm.lane) || laneHint || null;
+  const own = lane && typeof laneVerbs === "function" ? laneVerbs(String(lane)) : null;
+  // T13b — PHASE and ASK are packet verbs for every lane, even when the grammar omits them.
+  if (own) {
+    if (!own.includes("PHASE")) own.push("PHASE");
+    if (!own.includes("ASK")) { const ln = String(lane); const name = /^orc(-|$)/.test(ln) ? ln : ln === "ultra" ? "orc" : `orc-${ln}`; own.push(`ASK <qid> (the ids: orc lane phases ${name} --json → ask_ids)`); }
+  }
+  const heads = own || Object.keys(traceVerbs).filter((v) => traceVerbs[v].emitter !== "hook" && traceVerbs[v].emitter !== "cli");
+  return ` — use "PHASE <name> start|end" for a phase, "NOTE" for free text; ${own ? "this lane's verbs" : "the packet verbs"}: ${heads.join(", ")}`;
+}
+
+function validatePacket(pk, traceVerbs, laneVerbs, laneHint) {
   if (!pk || typeof pk !== "object" || Array.isArray(pk)) throw new PacketError("the packet is not a map");
   const errs = [];
   const events = Array.isArray(pk.events) ? pk.events : [];
@@ -395,7 +414,7 @@ function validatePacket(pk, traceVerbs) {
     const word = verb.split(/\s+/)[0];
     if (!word) return errs.push(`${at} has no verb`);
     const d = Object.prototype.hasOwnProperty.call(traceVerbs, word) ? traceVerbs[word] : null;
-    if (!d) return errs.push(`${at}: unknown verb ${word} — not in the CLOSED set (trace-verbs.md)`);
+    if (!d) return errs.push(`${at}: unknown verb ${word} — not in the CLOSED set (trace-verbs.md)${unknownVerbFix(pk, traceVerbs, laneVerbs, laneHint)}`);
     if (d.emitter === "hook") return errs.push(`${at}: ${word} is written by the hook, never by a packet`);
     // v2.1.0 W6 — `FIX` is written by `orc fix record` itself; v2.1.2 F11 —
     // `WAIT` by `orc wait`. The verb's owner file says which command.
@@ -728,11 +747,20 @@ function traceCmd(deps) {
     return fail(1, "unreadable", `cannot read the packet (${e.code || e.message})`);
   }
   let v;
+  let laneHint = null;
   try {
-    v = validatePacket(parsePacket(text), deps.TRACE_VERBS);
+    const ld0 = deps.resolveLogDir(deps.resolveClaudeDir());
+    const cur0 = fs.readFileSync(path.join(ld0, ".current"), "utf8").trim();
+    laneHint = (/(?:^|[\/])run-([a-z0-9]+)-/.exec(cur0) || [])[1] || null;
+  } catch (_) {}
+  try {
+    const pk0 = parsePacket(text);
+    if (!laneHint && pk0 && typeof pk0.run === "string") laneHint = (/(?:^|[\/])run-([a-z0-9]+)-/.exec(pk0.run) || [])[1] || null;
+    v = validatePacket(pk0, deps.TRACE_VERBS, deps.laneVerbsFor, laneHint);
   } catch (e) {
     if (!(e instanceof PacketError)) throw e;
-    return fail(2, "invalid", `${e.message} — nothing written`, { errors: e.errors || [e.message] });
+    const hint = /expected "key: value"|not valid JSON|unexpected indentation/.test(e.message) ? PACKET_SHAPE_HINT : "";
+    return fail(2, "invalid", `${e.message} — nothing written${hint}`, { errors: e.errors || [e.message] });
   }
   // An ASK is checked against the habit registry AS IT ARRIVES (eval E2): a live lane
   // wrote its own option names and extra text, and the habit engine then counted

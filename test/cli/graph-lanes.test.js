@@ -208,21 +208,26 @@ test("graph map: plain words focus the map on the files that hold them", () => {
   const order = m.focus_words.find((w) => w.word === "order");
   assert.ok(order && order.used && order.files === m.focus.length, "`orders` is stemmed to `order`, and it is counted");
   assert.deepEqual(m.focus_missing, ["count"], "a word in no file is reported, beside the words that resolved");
-  assert.match(m.card, /focus words: order \d+ · count 0/);
+  // v2.2.0 (D6): a word that hits prints `hits×weight`; a word with no hit
+  // prints its 0 and no weight.
+  assert.match(m.card, /focus words: order \d+×\d\.\d\d · count 0/);
 
   // A stop word and a two-letter word are not words at all.
   const stop = json(graph(root, "map", "--focus", "fix the orders in src", "--json"));
   assert.deepEqual(stop.focus_words.map((w) => w.word), ["order"]);
   assert.deepEqual(stop.focus, m.focus);
 
-  // Too common: reported, not used — a hint must not become the whole repository.
+  // v2.2.0 (D6): a common word is never dropped — it is WEIGHTED by how rare
+  // it is, so it still focuses the map, only less.
   const wide = json(graph(root, "map", "--focus", "widget", "--json"));
-  assert.deepEqual(wide.focus_common, ["widget"]);
-  assert.deepEqual(wide.focus_words, [{ word: "widget", files: 9, used: false }]);
-  assert.deepEqual(wide.focus, []);
-  assert.deepEqual(wide.focus_missing, []);
-  assert.match(wide.trace, /^GRAPH-MAP repo :: /);
-  assert.match(wide.card, /focus words: widget \(too common\)/);
+  assert.deepEqual(wide.focus_common, []);
+  assert.equal(wide.focus_words.length, 1);
+  assert.equal(wide.focus_words[0].word, "widget");
+  assert.equal(wide.focus_words[0].files, 9);
+  assert.ok(wide.focus_words[0].used && wide.focus_words[0].weight > 0);
+  assert.equal(wide.focus.length, 9);
+  assert.match(wide.trace, /^GRAPH-MAP focused :: /);
+  assert.match(wide.card, /focus words: widget 9×\d\.\d\d/);
 
   // Nothing resolved: the trace says `repo`, never `focused` with an empty list.
   const none = json(graph(root, "map", "--focus", "zzqx", "--json"));
@@ -233,8 +238,9 @@ test("graph map: plain words focus the map on the files that hold them", () => {
 
   // The two exact steps still come first and answer as before.
   const exact = json(graph(root, "map", "--focus", "requireAuth", "--json"));
-  assert.deepEqual(exact.focus, ["src/auth.js"]);
-  assert.deepEqual(exact.focus_words, []);
+  // v2.2.0 (T6b): a camelCase token is a NAME and its words — both kept.
+  assert.ok(exact.focus.includes("src/auth.js"));
+  assert.ok(exact.focus_words.every((w) => w.kind === "name"));
 });
 
 // ── 3. the budget cuts a PREFIX ─────────────────────────────────────────────
@@ -340,7 +346,7 @@ const laneCalls = (lane) => json(cli(["lane", "calls", lane, "--json"])).calls.m
 
 test("the lean lanes may ask what breaks, and where to look first", () => {
   const quick = laneCalls("orc-quick");
-  for (const id of ["graph-map", "graph-changes", "graph-coverage"])
+  for (const id of ["graph-map", "graph-changes"])
     assert.ok(quick.includes(id), "orc-quick cannot call " + id);
   // Quick has no planner and no declared-file set before the gate, so the two
   // planning reads stay out of its catalogue.
@@ -359,7 +365,7 @@ test("the lean lanes may ask what breaks, and where to look first", () => {
 test("every graph row a lean lane gained still points at the one canonical file", () => {
   const all = json(cli(["lane", "calls", "--all", "--json"])).calls;
   const byId = Object.fromEntries(all.map((c) => [c.id, c]));
-  for (const id of ["graph-map", "graph-impact", "graph-changes", "graph-coverage", "graph-cochange"]) {
+  for (const id of ["graph-map", "graph-impact", "graph-changes", "graph-cochange"]) {
     const row = byId[id];
     assert.ok(row, id + " is not catalogued");
     assert.equal(row.canonical, "_shared/code-graph.md", id + " points somewhere else");
@@ -441,11 +447,11 @@ test("the gate suggestion is a recommendation, never a default", () => {
   assert.ok(skill("orc-quick").includes("→ suggested"), "the quick spine never names the marker");
 });
 
-test("the gain line is catalogued for the lanes that print it, and only those", () => {
+test("the gain meter is a USER command: catalogued, and no lane calls it (v2.2.0)", () => {
   const all = json(cli(["lane", "calls", "--all", "--json"])).calls;
   const row = all.find((c) => c.id === "graph-gain");
   assert.ok(row, "graph-gain is not catalogued");
-  assert.deepEqual([...row.lanes].sort(), ["orc-mini", "orc-quick"]);
+  assert.deepEqual([...row.lanes], []);
   assert.equal(row.canonical, "_shared/code-graph.md");
   assert.equal(row.cost, "free");
   // The meter may never block a run, and its estimate may never be restated as
@@ -488,7 +494,7 @@ const PAYLOAD = path.join(__dirname, "..", "..", "templates");
 // file → why this call keeps its rows.
 const BRIEF_EXCEPTIONS = {
   "skills/_shared/phases/review.md": "the reviewer is handed symbols[].caller_files and reads them",
-  "agents/orc-graph-noter-sonnet-4-6-med.md": "the noter needs rows[].source, and `notes apply` is not a read",
+  "agents/orc-graph-noter-haiku-5-high.md": "the noter needs rows[].source, and `notes apply` is not a read",
   // v2.0.0 T1 — the verb table left trace.md for the on-demand trace-verbs.md.
   "skills/_shared/phases/trace-verbs.md": "it NAMES the commands a trace verb comes from; it makes no call",
 };
@@ -522,11 +528,65 @@ test("every graph --json call a lane makes carries --brief, or is a named except
 test("the exceptions each SAY why, in their own file", () => {
   const review = fs.readFileSync(path.join(PAYLOAD, "skills", "_shared", "phases", "review.md"), "utf8");
   assert.match(review, /no `--brief` here/, "review.md does not say why it keeps its rows");
-  const noter = fs.readFileSync(path.join(PAYLOAD, "agents", "orc-graph-noter-sonnet-4-6-med.md"), "utf8");
+  const noter = fs.readFileSync(path.join(PAYLOAD, "agents", "orc-graph-noter-haiku-5-high.md"), "utf8");
   assert.match(noter, /--with-source/, "the noter does not name the flag that gives it rows");
 });
 
 test("the source template carries --brief, so every generated executor does", () => {
   const src = fs.readFileSync(path.join(__dirname, "..", "..", "agents-src", "executor.template.md"), "utf8");
   assert.match(src, /orc graph ctx <symbol\|file> --if-enabled --json --brief/);
+});
+
+// ── v2.2.0 (R7) — the executor prints EVERY anchor in ONE call, line or not ──
+test("R7 — the executor template reads every anchor in one call, with or without the read-all line", () => {
+  const repo = path.join(__dirname, "..", "..");
+  const tpl = fs.readFileSync(path.join(repo, "agents-src", "executor.template.md"), "utf8");
+  assert.ok(tpl.includes("the `read all:` line when present"), "case 1: the read-all line");
+  assert.ok(tpl.includes("else one `sed -n 'a,bp' <file>` per range joined with `;`"), "case 2: no line, one sed per range");
+  assert.ok(tpl.includes("do not `cat` a whole anchored file over 150 lines"));
+  const ladder = fs.readFileSync(path.join(repo, "templates", "skills", "_shared", "read-ladder.md"), "utf8");
+  assert.ok(ladder.includes("else one `sed -n 'a,bp' <file>` per range"));
+});
+
+test("R7 — every lane that writes graph_anchors keeps its `read all:` line", () => {
+  const repo = path.join(__dirname, "..", "..", "templates", "skills");
+  for (const rel of ["orc-quick/SKILL.md", "orc-quick/references/look.md", "orc-mini/SKILL.md", "orc-fast/SKILL.md", "orc/SKILL.md", "_shared/phases/execution.md", "_shared/code-graph.md"]) {
+    const t = fs.readFileSync(path.join(repo, ...rel.split("/")), "utf8");
+    assert.ok(/graph_anchors/.test(t) && /VERBATIM/.test(t) && t.includes("read all:"), rel);
+  }
+});
+
+// v2.2.0 (R11): a request that names ONE symbol — ONE look call gives the card
+// and the anchors. The quick spine and its look reference both say so, and the
+// spine stays inside its budget.
+test("R11 — quick names `ctx <symbol> --anchors` in the spine and in look.md, inside the budget", () => {
+  const T = path.join(__dirname, "..", "..", "templates", "skills");
+  const spine = fs.readFileSync(path.join(T, "orc-quick", "SKILL.md"), "utf8");
+  const look = fs.readFileSync(path.join(T, "orc-quick", "references", "look.md"), "utf8");
+  for (const [name, text] of [["SKILL.md", spine], ["look.md", look]]) {
+    assert.ok(text.includes("ctx <symbol> --anchors"), `${name} names ctx <symbol> --anchors`);
+    assert.ok(text.includes("anchors_card"), `${name} names anchors_card`);
+    assert.ok(text.includes("--for-slice"), `${name} keeps the --for-slice path`);
+  }
+  assert.ok(Buffer.byteLength(spine) < 16384, `quick SKILL.md is ${Buffer.byteLength(spine)} bytes`);
+  assert.ok(spine.split("\n").length <= 325, "quick SKILL.md ≤ 325 lines");
+  const mini = fs.readFileSync(path.join(T, "orc-mini", "SKILL.md"), "utf8");
+  assert.ok(Buffer.byteLength(mini) <= 16384, "orc-mini SKILL.md did not grow past its cap");
+});
+
+// R11c — the announce lines a lane prints first must name the one-call path.
+test("R11c — lane config announces `ctx <symbol> --anchors` at 2/4 and anchors_card at 3/4", () => {
+  const root = shop();
+  const r = cli(["lane", "config", "orc-quick", "--json", "--dir", root]);
+  assert.equal(r.status, 0, r.stderr);
+  const lines = [];
+  const walk = (v) => { if (typeof v === "string") lines.push(v); else if (v && typeof v === "object") Object.values(v).forEach(walk); };
+  walk(json(r));
+  const two = lines.find((l) => l.startsWith("graph: on (2/4)"));
+  const three = lines.find((l) => l.startsWith("graph: on (3/4)"));
+  assert.ok(two && two.includes("ctx <symbol> --anchors") && two.includes("no 3/4 call"), `2/4: ${two}`);
+  assert.ok(three && three.includes("anchors_card") && three.includes("--for-slice"), `3/4: ${three}`);
+  // R13 — 4/4 names the hook card first and the CLI call as the fallback.
+  const four = lines.find((l) => l.startsWith("graph: on (4/4)"));
+  assert.ok(four && four.includes("the hook prints a `graph changes` card when the executor returns") && four.includes("No card → `orc graph changes --files=<actual files> --if-enabled --json --brief`"), `4/4: ${four}`);
 });

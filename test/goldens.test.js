@@ -278,7 +278,7 @@ test("GOLDEN: a hand-written config file survives a set — comments, blocks and
     "# a note the user wrote\n" +
       "max_scouts: 5\n" +
       "rubric_bands_override:\n" +
-      "  - { min: 0, max: 50, agent: orc-executor-haiku-4-5 }\n" +
+      "  - { min: 0, max: 50, agent: orc-executor-haiku-5-high }\n" +
       "  - { min: 50, max: 100, agent: orc-executor-opus-5-high }\n"
   );
   const cfg = path.join(root, ".claude", "orc.config.yaml");
@@ -298,7 +298,7 @@ test("GOLDEN: a hand-written config file survives a set — comments, blocks and
     assert.match(after, /^# a note the user wrote$/m, "the user's comment survives");
     assert.match(
       after,
-      /^rubric_bands_override:\n {2}- \{ min: 0, max: 50, agent: orc-executor-haiku-4-5 \}\n {2}- \{ min: 50, max: 100, agent: orc-executor-opus-5-high \}$/m,
+      /^rubric_bands_override:\n {2}- \{ min: 0, max: 50, agent: orc-executor-haiku-5-high \}\n {2}- \{ min: 50, max: 100, agent: orc-executor-opus-5-high \}$/m,
       "the documented multi-line form survives BYTE FOR BYTE"
     );
     assert.match(after, /^max_scouts: 5$/m, "an untouched value is not re-serialised");
@@ -406,19 +406,19 @@ const OPUS5_LADDER = [
   [0, 90, "orc-executor-opus-5-low"],
   [90, 101, "orc-executor-opus-5-med"],
 ];
-// Named by no band since W4 (and since v2.1.0 also haiku-4-5, sonnet-4-6-med,
+// Named by no band since W4 (and since v2.1.0 also haiku-5-high, renamed in
+// v2.2.0 from haiku-4-5 + sonnet-4-6-med,
 // sonnet-4-6-high), and still shipped (D14). They are reachable only
 // when a user names one explicitly, so the SET is frozen: an agent quietly
 // rejoining a default table, or quietly disappearing from disk, are both
 // changes somebody has to mean.
 const UNBANDED_EXECUTORS = [
-  "orc-executor-haiku-4-5",
+  "orc-executor-haiku-5-high",
   "orc-executor-opus-4-7-high",
   "orc-executor-opus-4-7-med",
   "orc-executor-opus-4-8-high",
   "orc-executor-opus-5-high",
   "orc-executor-sonnet-4-6-high",
-  "orc-executor-sonnet-4-6-med",
 ];
 
 // The constants are read out of the source because bin/cli.js is a script, not

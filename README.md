@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.1.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.2.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v2.1.2** · updated 03-10-2026 · [full changelog](CHANGELOG.md)
+**Latest: v2.2.0** · updated 11-10-2026 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -387,7 +387,7 @@ and its headings become the outline.
 A local map of how your code is connected. It is **off by default**.
 
 ```bash
-orc config set code_graph on          # code lanes build and use the map (free)
+orc config set code_graph on          # code lanes build and use the map (free); `semi` = keep it current, no lane reads it
 orc config set code_graph_notes wave  # optional: one-sentence notes (costs tokens)
 orc graph map                         # the repository ranked, before you know a file name
 orc graph ctx OrderService.create     # a card: callers, calls, SQL/HTTP/env effects
@@ -698,6 +698,7 @@ Some lanes ship a full how-to next to the skill, in plain language:
 | [Rules](guides/rules.md) | you want the 65 anti-slop rules, the precedence ladder and the lint |
 | [Configuration](guides/configuration.md) · [Model selection](guides/model-selection.md) | you want every key, or the scoring bands |
 | [Habits and gotchas](guides/habits-and-gotchas.md) | you want to know how a habit is proposed, how to import Sonar, SARIF or PR history, and how to undo |
+| [Code graph benefit](guides/code-graph-benefit.md) | you want to know when the code graph helps, with live numbers |
 | [Other AI models](guides/extra-models.md) | you want part of the ladder to run somewhere other than Claude |
 
 Every skill also ships its own `SKILL.md` and `references/`. The guides above are
@@ -741,31 +742,49 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v2.1.2 — a typed /orc meets the effort guard, and the budget uses each model's price _(2026-10-03)_
+### v2.2.0 — one graph contract for every coding lane, a graph that reads Vue, and Haiku 5.5 _(2026-10-11)_
 
-- **The effort guard runs for a typed `/orc` and `/orc-diy`.** A second event,
-  `UserPromptExpansion`, stops a session below the necessary effort at $0. The gate
-  fails open where the ORC status line does not run (possibly the desktop app Code
-  tab, not checked yet). An older Claude Code build is not verified.
-- **`orc budget` prices each row at its pinned model** (it used the Opus 4.8 rate for
-  all). The USD figures are lower. Tokens and quota do not change.
-- **New: `orc wait start` and `orc wait end`** record a wait and write the `WAIT`
-  trace line. **New: `orc doc parts --checked` and `--findings`** record a check, so
-  `orc doc next` does not name the paid check again.
-- **`orc graph map --focus <word>` accepts a plain word.**
-- **Fixes:** `/orc-fix` does not read a stale `.current` as a host run. `orc boundary
-  status` reads block lists. `orc pact`, `orc aftermath status` and `orc pr stack
-  status` give correct results. The trace accepts `DOC`, `WAIT` and `GRAPH-COVERAGE`.
-- **Changed exit codes:** `orc budget forecast` with no plan exits 3 (was 1). A
-  block-list REFUSE card exits 2 (was 3). A READY stack plan from v2.1.1 can show
-  NOT READY.
+- **The code graph reads Vue / JS.** The `@/` alias, template edges, props /
+  emits / inject, lazy imports, SPA routes and route-name edges. `$` built-ins
+  make no edge. A test file never takes a non-test caller.
+- **One graph contract for every coding lane.** Four touchpoints. The new
+  `update_step` probe field says who updates the graph. Lanes do not call
+  `gain`. The slice gets `graph_anchors` (`ctx --for-slice --anchors`): up to
+  12 ranges and one `read all:` command. Declared files can be joined with
+  commas. A focus word that names an exported function gives its definition
+  and up to 8 call sites.
+- **One look-time card.** `orc graph ctx <symbol>` also lists the tests that
+  reach a caller and a coverage verdict. With `--anchors` it also gives the
+  slice anchors. One call replaces grep, the test search, `coverage` and
+  `--for-slice`.
+- **The graph hook speaks to the main session** (graph `on` only). A search
+  of a known symbol gets its card (3 per run at most). When an executor
+  returns, a new hook entry gives the `changes` card. `orc doctor` counts 6
+  hook entries.
+- **New: `code_graph: semi`.** The graph stays current. No lane reads it.
+- **Gain meter fixes:** run match, `changes` pricing, the `outcome` field, the
+  heal line, short `cochange` history.
+- **Trace friction:** `orc lane phases --json` gives `trace_grammar` and
+  `ask_ids`. A refused or bad packet tells you what to correct.
+- **Haiku 5.5.** The Haiku 4.5 and Sonnet 4.6-medium agents become
+  `*-haiku-5-high`. An old name in your config still works, with one notice.
+- **Engine `graph@7`.** The index rebuilds cold one time.
 
-**What you have to do:** run `orc update` once. It adds the `UserPromptExpansion`
-entry to `settings.json`.
+EVAL: real company Vue 2.7 repo, /orc-quick, graph OFF vs ON, medians. RMT2
+(change one helper and every caller, N=3/3): cost −2.0 %, time −8.6 %, tokens
+−4.2 %, grade equal (86). RMT1 (build step 1 of a create-transaction flow from a
+requirement, N=3 ON / 5 OFF): cost −9.6 %, time −28.4 %, tokens −15.8 %, grade
+equal (84), e2e 12/12 in every run. RMT3 (build step 2 on the built step 1, N=2/2, means): cost −8.9 %, tokens −14.0 %, time +4.0 %. RMT4 (a cross-file change inside the built page, stored notes on ON, N=2/2, means): no gain — cost +7.7 %, time +45.5 %, tokens +4.4 %; the executor explored only about 4 calls in either arm, so the graph and the stored notes had nothing to save. Details: guides/code-graph-benefit.md.
+
+When the code graph helps, with live numbers: [guides/code-graph-benefit.md](guides/code-graph-benefit.md)
+
+**What you have to do:** run `orc update` once. Then run `orc graph update`
+one time if `code_graph` is `on` or `semi`.
 
 <details>
-<summary><strong>Earlier releases</strong> — 129 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 130 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.1.2** — a typed /orc meets the effort guard, and the budget uses each model's price · _2026-10-03_
 - **v2.1.1** — the quick and fast lanes move to Sonnet 5 · _2026-10-02_
 - **v2.1.0** — the review counts, the score table moves up, and old logs can go · _2026-10-02_
 - **v2.0.4** — design the status line to the last cell · _2026-09-30_
