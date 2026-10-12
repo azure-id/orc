@@ -67,6 +67,7 @@ const NAMESPACES = [
   "test",
   "extra",
   "experiment",
+  "lorc",
   "tour",
 ];
 

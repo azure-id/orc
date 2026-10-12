@@ -30,6 +30,7 @@ const { boundary } = require("./boundary.js");
 const { usage, waitLanes, waitStatus } = require("./wait.js");
 const hookui = require("./hookui.js");
 const { handoff } = require("./handoff.js");
+const { lorcRead, lorcWrite } = require("./lorc.js");
 const { exportState, mocks, clearLogsSummary, clearLogsPreview, clearLogsPreviewEmpty } = require("./maintenance.js");
 const { chGoals, chDims, challengeRoles, challengeCouncil, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint } = require("./challenge.js");
 const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext, docRules, docRulesFrozen, docForecast, docCost } = require("./docs.js");
@@ -43,6 +44,8 @@ const { testList, testShows, testShowToy, testUiTools, testEnvUnhealthy, testEnv
 const { extraProviders, extraList, extraListNoConnection, extraListNeverTested, extraTools, extraKeyhelp, extraModels, extraDoctor, extraRoute, extraRole, extraLanes, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer, extraJournal, extraReconcile, extraJournalPrune, extraPingLive, extraPingDeadModel, extraPingNotInstalled, extraInstall, extraDemotion } = require("./extra.js");
 
 module.exports.get = function get(route, q) {
+  // v2.3.0 — Light ORC. One state per `?fx=` (fixture mode only); see fixtures/lorc.js.
+  if (route.startsWith("/api/lorc/")) return lorcRead(route, q && q.fx);
   switch (route) {
     // v1.0.0 W16 — the `orc lane` noun. `phases` is keyed by lane so the
     // picker reaches BOTH designable states: a lane with a full pipeline and
@@ -609,6 +612,10 @@ const TEST_ENV = { "api-users": [1, testEnvUnhealthy], "orders-api": [1, testEnv
 const HABITS_MODE = { value: "propose" };
 
 module.exports.post = function post(route, body) {
+  if (route.startsWith("/api/lorc/")) {
+    const w = lorcWrite(route, body);
+    return w ? { exit_code: w.exit_code, data: { output: w.output } } : undefined;
+  }
   if (route === "/api/config/set" && body && body.key === "habits" && ["off", "observe", "propose"].includes(String(body.value))) {
     HABITS_MODE.value = String(body.value);
     return { exit_code: 0, data: { ok: true, key: "habits", value: HABITS_MODE.value } };

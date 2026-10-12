@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.1.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.3.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v2.1.0** · diperbarui 02-10-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v2.3.0** · diperbarui 11-10-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -548,6 +548,7 @@ orc ui --stop          # matikan server proyek ini
 | Learn | panduan `orc onboarding`, satu bagian sekali baca | — |
 | Experiment | setiap lane dengan tombol salin; membuka sesi Claude di terminal | — |
 | Maintenance | `update`, `update --prune`, `doctor --fix`, `upgrade` | tinjau dulu, baru terapkan |
+| **Light ORC** | run, pemakaian, pengaturan, kebiasaan, dan versi lorc, dibaca lewat `orc lorc … --json`. Hanya tampil kalau lorc terpasang | `lorc settings set`, `habits accept` / `decline` |
 
 - **Panel ini *adalah* CLI.** Ia membaca `orc <perintah> --json` dan menjalankan
   perintah asli untuk setiap penulisan, jadi ia tidak mungkin melenceng dari
@@ -569,6 +570,15 @@ orc ui --stop          # matikan server proyek ini
 
 Nol dependensi, tanpa langkah build: `node:http`, JavaScript biasa, dan CSS yang
 ditulis tangan.
+
+### Light ORC
+
+Light ORC (`lorc`) adalah paket terpisah. ORC tidak memasangnya. Kalau lorc ada
+di proyek atau di `~/.claude`, ORC menemukannya. `orc lorc …` (`status`, `runs`,
+`stats`, `settings`, `usage`, `doctor`, `version`, dan lainnya, masing-masing
+`--json`) menjalankan CLI lorc dan meneruskan JSON-nya apa adanya. Panel
+menampilkan halaman Light ORC. `orc doctor` menampilkan versi lorc. Kedua alat
+memakai kode wiki, pattern, dan rules yang sama.
 
 ---
 
@@ -797,40 +807,32 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v2.1.0 - review terhitung, tabel nilai naik, dan log lama bisa dihapus _(02-10-2026)_
+### v2.3.0 — ORC melihat Light ORC, dan tiga modul inti bersama _(11-10-2026)_
 
-- **Tabel nilai baru dengan lima pita.** Nilai 0–40 ke Sonnet 5 (low, medium,
-  high). Nilai 41–89 ke Opus 5.5 low, dan 90–100 ke Opus 5.5 medium. Haiku tidak
-  lagi ada di tabel. **Setiap pita mulai nilai 41 butuh sesi utama Opus 5.5.**
-- **Sonnet 5 berjalan di `claude-sonnet-5-5`.** Tabel harga kembali benar.
-- **Reviewer sekarang `orc-reviewer-opus-5-low`.** Di eval langsung, effort low
-  menemukan setiap cacat yang sengaja ditanam dan masih ada di diff.
-- **Pemindai wiki dan penulis CLAUDE.md memakai Opus 5.5 low** (dulu Opus 4.8).
-- **Review quality tidak lagi menulis "0 so far" setelah review sungguhan.** Ia
-  menghitung review dari jejak. Review yang bersih juga dihitung.
-- **Aturan review milik proyek Anda.** Kalau CLAUDE.md atau AGENTS.md meminta
-  review lain (misalnya `/code-review`), lane bertanya "review ORC, review itu,
-  atau lewati". `orc review policy` menunjukkan apa yang ORC temukan.
-- **Lane baru `/orc-fix`.** Ia mencatat perbaikan setelah review (Sonar, CI merah,
-  bug) dan siapa yang memasukkan bug itu. Kartu reviewer menampilkannya, dan panel
-  menampilkan "Fixes after review".
-- **`orc clear logs`** menampilkan jejak dan folder run yang lama. `--apply`
-  menghapusnya. Tidak ada yang dihapus otomatis kecuali Anda menyetel
-  `log_retention_auto: on`.
-- **Timer status line:** 1, 2, 3, 5 atau 10 detik. Di bawah 1 detik ditolak, karena
-  Claude Code tidak mendukungnya.
-- **Perbaikan tab Behaviour:** dengan `habits: off` Anda tetap melihat Review quality
-  dan Gotchas, `/orc-fast` mencatat jawaban Anda, dan log jawaban menampilkan
-  pertanyaannya.
+- **Tiga modul keluar dari `bin/cli.js`:** `wiki-core.js`, `pattern-core.js`,
+  dan `rules-core.js`. Masing-masing punya `configure(deps)`. Perilakunya tidak
+  berubah. Light ORC menyalinnya, jadi kedua alat memberi jawaban yang sama.
+- **Baru: `orc lorc …`.** `status`, `runs`, `run <slug>`, `stats`, `settings`,
+  `settings set`, `habits`, `habits accept|decline`, `usage`, `graph`,
+  `doctor`, `version`, `changelog`, masing-masing `--json`. ORC menjalankan CLI
+  lorc dan meneruskan JSON-nya.
+- **Panel baru: Light ORC (`#/lorc`).** Hanya tampil kalau lorc terpasang. UI
+  tidak pernah memasang paket.
+- **`orc doctor`** menampilkan versi lorc dan menyebut status line lorc.
+  **`orc usage check`** membaca berkas pemakaian lorc kalau milik ORC tidak ada
+  atau sudah lama.
+- **Perbaikan:** `orc init`, `orc update`, dan perancang status line membiarkan
+  status line Light ORC tetap milik Anda.
 
-**Yang harus Anda lakukan:** `orc update`. Kalau Anda punya alur `orc diy` yang
-sudah dikompilasi, jalankan `orc diy compile`. Kalau ada skrip yang menyebut
-`orc-reviewer-opus-5-med`, ganti menjadi `orc-reviewer-opus-5-low`. Biayanya
-berubah: baca CHANGELOG.
+**Yang harus Anda lakukan:** jalankan `orc update` sekali.
 
 <details>
-<summary><strong>Rilis sebelumnya</strong> — 127 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Rilis sebelumnya</strong> — 131 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.2.0** — one graph contract for every coding lane, a graph that reads Vue, and Haiku 5.5 · _2026-10-11_
+- **v2.1.2** — a typed /orc meets the effort guard, and the budget uses each model's price · _2026-10-03_
+- **v2.1.1** — the quick and fast lanes move to Sonnet 5 · _2026-10-02_
+- **v2.1.0** — the review counts, the score table moves up, and old logs can go · _2026-10-02_
 - **v2.0.4** — design the status line to the last cell · _2026-09-30_
 - **v2.0.3** — the status line you designed is the status line you see · _2026-09-30_
 - **v2.0.2** — the lanes record what you answered, and the reviewer always gets the card · _2026-09-28_

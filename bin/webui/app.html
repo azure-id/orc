@@ -45,6 +45,7 @@
 <link rel="stylesheet" href="css/panels/docs.css">
 <link rel="stylesheet" href="css/panels/extra.css">
 <link rel="stylesheet" href="css/panels/test.css">
+<link rel="stylesheet" href="css/panels/lorc.css">
 <link rel="stylesheet" href="css/06-responsive.css">
 <link rel="stylesheet" href="css/04-motion.css">
 </head>
@@ -131,6 +132,11 @@
         off this machine. It is the last thing above the composer for that
         reason, never buried under the reading panels.
       -->
+      <!--
+        v2.3.0. Light ORC is hidden until `orc lorc status` says lorc is
+        installed (boot() shows it). Its shortcut key is "o".
+      -->
+      <li hidden><a href="#/lorc"        data-panel="lorc"        data-idx="o" data-i18n="nav.lorc">Light ORC</a></li>
       <li><a href="#/extra"       data-panel="extra"       data-idx="e" data-i18n="nav.extra">Extra</a></li>
       <li><a href="#/flow"        data-panel="flow"        data-idx="6" data-i18n="nav.flow">Flow</a></li>
       <li><a href="#/crosslink"   data-panel="crosslink"   data-idx="7" data-i18n="nav.crosslink">Crosslink</a></li>
@@ -232,6 +238,7 @@
 <script src="js/panels/wait.js"></script>
 <script src="js/panels/hookui.js"></script>
 <script src="js/panels/test.js"></script>
+<script src="js/panels/lorc.js"></script>
 <script src="js/90-tour.js"></script>
 <script src="js/91-shortcuts.js"></script>
 <script src="js/99-boot.js"></script>

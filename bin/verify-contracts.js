@@ -2157,7 +2157,7 @@ const CONTRACTS = [
   {
     name: "crosslink provider registry (v0.17.0 — wiki-meta sibling, integrity-gated)",
     token: "crosslink_provided",
-    binFiles: ["bin/cli.js"],
+    binFiles: ["bin/cli.js", "bin/wiki-core.js"],
     files: [
       "agents/orc-wiki-scanner-opus-5-low.md",
       "agents/orc-wiki-scanner-sonnet-5-high.md",
@@ -2294,7 +2294,7 @@ const CONTRACTS = [
     // registered doc, never bulk-deleted) is mirrored in bin/cli.js.
     name: "crosslink ATLAS (v0.33.0 — wiki/crosslink/atlas.md, sanctioned peer file write)",
     token: "atlas.md",
-    binFiles: ["bin/cli.js"],
+    binFiles: ["bin/wiki-core.js"],
     files: [
       "commands/orc-wiki.md",
       "skills/orc-poly/SKILL.md",
@@ -3460,7 +3460,7 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/partial-refresh.md",
     ],
-    binFiles: ["bin/cli.js"],
+    binFiles: ["bin/wiki-core.js"],
   },
   {
     name: "wiki light scanner (v0.46.0 — the tier ladder's cheap half, dispatched BY NAME)",
