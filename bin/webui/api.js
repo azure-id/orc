@@ -231,6 +231,20 @@ const READS = {
   "/api/graph/gain": () => ["graph", "gain"],
   "/api/graph/gain/measured": () => ["graph", "gain", "--measured"],
   "/api/wiki/impact": () => ["wiki", "impact"],
+  // v2.3.0 — Light ORC. `orc lorc …` RUNS the lorc CLI and passes its JSON
+  // through, so ORC keeps no copy of the lorc formats. `status` exits 1 when
+  // lorc is not installed: an ANSWER, the same as `pattern status`.
+  "/api/lorc/status": () => ["lorc", "status"],
+  "/api/lorc/runs": (q) => ["lorc", "runs", "--limit", String(Math.min(200, Number(q.limit) || 40))],
+  "/api/lorc/run": (q) => ["lorc", "run", String(q.slug || "")],
+  "/api/lorc/stats": (q) => ["lorc", "stats", "--limit", String(Math.min(200, Number(q.limit) || 40))],
+  "/api/lorc/settings": () => ["lorc", "settings"],
+  "/api/lorc/habits": () => ["lorc", "habits"],
+  "/api/lorc/usage": () => ["lorc", "usage"],
+  "/api/lorc/graph": () => ["lorc", "graph"],
+  "/api/lorc/doctor": () => ["lorc", "doctor"],
+  "/api/lorc/version": () => ["lorc", "version"],
+  "/api/lorc/changelog": () => ["lorc", "changelog"],
   // v0.46.0. Every one is a READ with an exit-code contract, so the exit code is
   // DATA here exactly like `pattern status` and `wiki impact` above: pact 0/1/2/3,
   // boundary 0/1/2/3, handoff 0/1, budget 0/1/2/3, aftermath 0/1/2/3,
@@ -618,6 +632,11 @@ const WRITES = {
   // false. There is no second idea of a safe edit anywhere in this panel.
   "/api/handoff/set": (b) => ["handoff", "set", String(b.id), String(b.key), String(b.value)],
   "/api/budget/calibrate": () => ["budget", "calibrate"],
+  // v2.3.0 — Light ORC. lorc validates its own keys and exits 2 on a bad
+  // value; the panel shows that line. ORC never checks a lorc key itself.
+  "/api/lorc/settings/set": (b) => ["lorc", "settings", "set", String(b.key), String(b.value), ...(b.global ? ["--global"] : [])],
+  "/api/lorc/habits/accept": (b) => ["lorc", "habits", "accept", String(b.id)],
+  "/api/lorc/habits/decline": (b) => ["lorc", "habits", "decline", String(b.id)],
   // v0.47.0. All three are FREE and deterministic, so all three get a button.
   // Running an ITERATION costs model tokens, so it is a copy-able command and
   // there is deliberately no route for it here. `accept` and `rebut` both refuse

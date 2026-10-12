@@ -1,0 +1,36 @@
+/* panels/lorc.css — orc ui
+   The Light ORC panel (v2.3.0): the state box, the doctor check rows, the run
+   table and its in-place detail row, the copyable install commands.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* DE-UI1: the rail item is hidden until lorc is installed. */
+.nav li[hidden] { display: none; }
+
+.lorc-state { display: flex; flex-direction: column; gap: var(--sp-2); align-items: flex-start; }
+.lorc-checks { display: flex; flex-direction: column; gap: var(--sp-1); }
+.lorc-check { display: flex; gap: var(--sp-2); align-items: baseline; flex-wrap: wrap; }
+.lorc-mark { color: var(--ok); width: 1.2em; }
+.lorc-check-bad .lorc-mark { color: var(--bad); }
+.lorc-run-row { cursor: pointer; }
+.lorc-run-row:hover { background: var(--surface-2); }
+.lorc-total td { font-weight: 600; border-top: 1px solid var(--border); }
+.lorc-input { width: 100%; max-width: 16em; }
+.lorc-err { margin-top: var(--sp-1); }
+.lorc-global { display: inline-flex; gap: var(--sp-1); align-items: center; }
+.lorc-proposal { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); }
+.lorc-proposal:last-child { border-bottom: 0; }
+.lorc-entry { display: flex; flex-direction: column; gap: var(--sp-1); }
+.lorc-cmd {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  font-family: var(--mono);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+}
+.lorc-detected:empty { display: none; }
+.lorc-chip { text-decoration: none; }

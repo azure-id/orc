@@ -107,6 +107,8 @@ function goRoute(panel, tab) {
 
 PANELS.overview = function (host) {
   head(host, t("overview.title"), t("overview.sub"));
+  // v2.3.0 — "Light ORC vX detected", only when lorc is installed.
+  lorcOverviewChip(host);
   section(
     host,
     () => read("/api/overview").then((r) => r.data),

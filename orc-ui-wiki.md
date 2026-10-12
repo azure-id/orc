@@ -68,6 +68,7 @@ shadowing announcement comes for free.
 | what **Knowledge** shows | `js/panels/knowledge.js` + `css/panels/knowledge.css` |
 | what **Stats** shows | `js/panels/stats.js` + `css/panels/stats.css` |
 | what **Behaviour** shows | `js/panels/behaviour.js` + `css/panels/behaviour.css` — and `bin/habit.js` / `bin/gotcha.js` FIRST, because every sentence, share, streak and command on it is the CLI's |
+| what **Light ORC** shows (v2.3.0) | `js/panels/lorc.js` + `css/panels/lorc.css` + `fixtures/lorc.js` — and the lorc CLI FIRST, because every value on it is lorc's JSON, passed through `orc lorc …` |
 | what **Docs** shows | `js/panels/docs.js` + `css/panels/docs.css` |
 | what **Wait** shows | `js/panels/wait.js` + `css/panels/wait.css` |
 | what **CLI Hook Interface** shows | `js/panels/hookui.js` + `css/panels/hookui.css` |
@@ -154,6 +155,7 @@ renders verbatim.
 | Promises | `#/pact` | `p` | `/api/pact` → `pact list` |
 | Boundary | `#/boundary` | `b` | `/api/boundary` → `boundary list` |
 | Self-serve | `#/handoff` | `h` | `/api/handoff` → `handoff map` |
+| **Light ORC** (v2.3.0, hidden when lorc is absent) | `#/lorc` | `o` | **`/api/lorc/{status,runs,run,stats,settings,habits,usage,graph,doctor,version,changelog}`** → `lorc <same>` (`runs` → `lorc runs --limit N`, `run` → `lorc run <slug>`; `status` exit 1 = not installed, an ANSWER); POST **`/api/lorc/settings/set`** `{key,value,global}`, **`/api/lorc/habits/{accept,decline}`** `{id}` |
 | Flow | `#/flow` | `6` | `/api/diy` → `diy show`; POST `/api/diy/{set,init}` |
 | Crosslink | `#/crosslink` | `7` | `/api/crosslink`; POST `/api/crosslink/{add,remove}`; `/api/fs/list` |
 | Learn | `#/learn` | `8` | `/api/learn` → the onboarding module (static content) |
@@ -286,6 +288,30 @@ ink bar under the selected tab always sits on the row it belongs to.
 POST of `/api/config/set` with `key: habits` changes it — so off · observe · propose
 are all reachable from the switch itself. The `30d` window is the empty answer (no
 ASK lines yet, below the review floor); a path outside every scope is the zero-match card.
+
+### 4a5. Light ORC — the light lane, read through its own CLI (v2.3.0)
+
+One panel for Light ORC (lorc). The UI does not read a lorc file. `orc lorc …`
+runs the lorc CLI and passes its JSON through as `{ ok, source, data }`, so ORC
+keeps no copy of a lorc format. The contract is `lorc-notes/briefs/W5-shared-contract.md`.
+
+| part | reads | what it draws |
+|---|---|---|
+| rail | `/api/lorc/status` | the "Light ORC" item is `hidden` until `installed` is not `none` (DE-UI1). `lorcRailShow()` runs once in `boot()` |
+| Overview chip | `/api/lorc/status` | ORC Overview shows "Light ORC vX detected", a link to `#/lorc`, only when lorc is installed |
+| Overview tab | `status`, `usage`, `graph`, `doctor` | install state (project / global / both, version, cli path), the usage line (5h %, reset minutes, weekly %, context %, source), the graph store `mode` + `reason`, the doctor checks as ✓/✗ rows |
+| Runs | `runs`, `run?slug=` | the run table (slug, request, tier, executor, outcome, duration, findings P0–P3); a click opens the detail IN PLACE (tasks, checks) |
+| Usage | `stats` | tokens per run (input, output, cache read, cache write, total) and cost, plus totals — the CLI's numbers, not computed here |
+| Settings | `settings` | key · value · source; a value is saved with POST `{key,value,global}`. lorc checks the value; on exit 2 the CLI's error line shows under the field |
+| Behaviour | `habits` | the mode, each proposal with Accept / Decline (POST `{id}`), the stats |
+| Version | `version`, `changelog` | the installed version, the newer changelog entries, and `npm i -g @azure-id/lorc@latest` / `lorc update` as copyable TEXT. The panel never runs them (DE-UI2) |
+
+**State words, verbatim:** `NOT-INSTALLED` (lorc is absent) and `UNREADABLE`
+(lorc answered non-JSON or timed out — its `detail` is shown). **Fixtures:**
+`fixtures/lorc.js`, one state per `#/lorc?fx=<state>` in fixture mode only —
+`none` · `project` · `global` · `both` (the default) · `old` (newer changelog
+entries) · `noruns` · `unreadable`; a bad `limit_pct` answers exit 2.
+**Tests:** `test/webui/lorc.test.js` renders every tab in every state in a vm.
 
 ### 4b. Knowledge — six tabs (v0.49.1, Code graph tab v1.9.2)
 

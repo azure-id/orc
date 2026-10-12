@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.2.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.3.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v2.2.0** · updated 11-10-2026 · [full changelog](CHANGELOG.md)
+**Latest: v2.3.0** · updated 11-10-2026 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -518,6 +518,7 @@ orc ui --stop          # shut this project's server down
 | Learn | the `orc onboarding` walkthrough, one section at a time | — |
 | Experiment | every lane with a copy button; opens a Claude session in a terminal | — |
 | Maintenance | `update`, `update --prune`, `doctor --fix`, `upgrade` | preview, then apply |
+| **Light ORC** | lorc runs, usage, settings, habits and version, read through `orc lorc … --json`. Shows only when lorc is installed | `lorc settings set`, `habits accept` / `decline` |
 
 - **The panel *is* the CLI.** It reads `orc <command> --json` and shells the real
   command for every write, so it cannot drift from the CLI — it has no second
@@ -536,6 +537,15 @@ orc ui --stop          # shut this project's server down
 
 Zero dependencies, zero build step: `node:http`, plain JavaScript, hand-written
 CSS.
+
+### Light ORC
+
+Light ORC (`lorc`) is a separate package. ORC does not install it. When lorc is
+in the project or in `~/.claude`, ORC finds it. `orc lorc …` (`status`, `runs`,
+`stats`, `settings`, `usage`, `doctor`, `version` and more, each `--json`) runs
+the lorc CLI and passes its JSON through. The panel shows a Light ORC page.
+`orc doctor` shows the lorc version. Both tools share the same wiki, pattern and
+rules code.
 
 ---
 
@@ -742,48 +752,28 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v2.2.0 — one graph contract for every coding lane, a graph that reads Vue, and Haiku 5.5 _(2026-10-11)_
+### v2.3.0 — ORC sees Light ORC, and three shared core modules _(2026-10-11)_
 
-- **The code graph reads Vue / JS.** The `@/` alias, template edges, props /
-  emits / inject, lazy imports, SPA routes and route-name edges. `$` built-ins
-  make no edge. A test file never takes a non-test caller.
-- **One graph contract for every coding lane.** Four touchpoints. The new
-  `update_step` probe field says who updates the graph. Lanes do not call
-  `gain`. The slice gets `graph_anchors` (`ctx --for-slice --anchors`): up to
-  12 ranges and one `read all:` command. Declared files can be joined with
-  commas. A focus word that names an exported function gives its definition
-  and up to 8 call sites.
-- **One look-time card.** `orc graph ctx <symbol>` also lists the tests that
-  reach a caller and a coverage verdict. With `--anchors` it also gives the
-  slice anchors. One call replaces grep, the test search, `coverage` and
-  `--for-slice`.
-- **The graph hook speaks to the main session** (graph `on` only). A search
-  of a known symbol gets its card (3 per run at most). When an executor
-  returns, a new hook entry gives the `changes` card. `orc doctor` counts 6
-  hook entries.
-- **New: `code_graph: semi`.** The graph stays current. No lane reads it.
-- **Gain meter fixes:** run match, `changes` pricing, the `outcome` field, the
-  heal line, short `cochange` history.
-- **Trace friction:** `orc lane phases --json` gives `trace_grammar` and
-  `ask_ids`. A refused or bad packet tells you what to correct.
-- **Haiku 5.5.** The Haiku 4.5 and Sonnet 4.6-medium agents become
-  `*-haiku-5-high`. An old name in your config still works, with one notice.
-- **Engine `graph@7`.** The index rebuilds cold one time.
+- **Three modules move out of `bin/cli.js`:** `wiki-core.js`,
+  `pattern-core.js` and `rules-core.js`. Each has `configure(deps)`. Behaviour
+  does not change. Light ORC copies them, so both tools give the same answers.
+- **New: `orc lorc …`.** `status`, `runs`, `run <slug>`, `stats`, `settings`,
+  `settings set`, `habits`, `habits accept|decline`, `usage`, `graph`,
+  `doctor`, `version`, `changelog`, each `--json`. ORC runs the lorc CLI and
+  passes its JSON through.
+- **New panel: Light ORC (`#/lorc`).** It shows only when lorc is installed.
+  The UI never installs a package.
+- **`orc doctor`** shows the lorc version and names a lorc status line.
+  **`orc usage check`** reads lorc's usage file when ORC's own is missing or old.
+- **Fix:** `orc init`, `orc update` and the status-line designer keep a Light
+  ORC status line as your line.
 
-EVAL: real company Vue 2.7 repo, /orc-quick, graph OFF vs ON, medians. RMT2
-(change one helper and every caller, N=3/3): cost −2.0 %, time −8.6 %, tokens
-−4.2 %, grade equal (86). RMT1 (build step 1 of a create-transaction flow from a
-requirement, N=3 ON / 5 OFF): cost −9.6 %, time −28.4 %, tokens −15.8 %, grade
-equal (84), e2e 12/12 in every run. RMT3 (build step 2 on the built step 1, N=2/2, means): cost −8.9 %, tokens −14.0 %, time +4.0 %. RMT4 (a cross-file change inside the built page, stored notes on ON, N=2/2, means): no gain — cost +7.7 %, time +45.5 %, tokens +4.4 %; the executor explored only about 4 calls in either arm, so the graph and the stored notes had nothing to save. Details: guides/code-graph-benefit.md.
-
-When the code graph helps, with live numbers: [guides/code-graph-benefit.md](guides/code-graph-benefit.md)
-
-**What you have to do:** run `orc update` once. Then run `orc graph update`
-one time if `code_graph` is `on` or `semi`.
+**What you have to do:** run `orc update` once.
 
 <details>
-<summary><strong>Earlier releases</strong> — 130 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 131 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.2.0** — one graph contract for every coding lane, a graph that reads Vue, and Haiku 5.5 · _2026-10-11_
 - **v2.1.2** — a typed /orc meets the effort guard, and the budget uses each model's price · _2026-10-03_
 - **v2.1.1** — the quick and fast lanes move to Sonnet 5 · _2026-10-02_
 - **v2.1.0** — the review counts, the score table moves up, and old logs can go · _2026-10-02_

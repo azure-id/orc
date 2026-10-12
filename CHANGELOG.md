@@ -10,6 +10,42 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v2.3.0 — ORC sees Light ORC, and three shared core modules _(2026-10-11)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+- **Three modules move out of `bin/cli.js`.** `bin/wiki-core.js` (wiki paths,
+  header reader, freshness, status, sync, resolve), `bin/pattern-core.js`
+  (pattern paths, language table, status, show) and `bin/rules-core.js` (pack
+  parse, user ledger, overrides, rules slice, zero-token lint). Each has
+  `configure(deps)`. Behaviour does not change. Light ORC (`lorc`, a separate
+  package) copies them, so both tools give the same answers. `cli.js` goes from
+  48,188 to about 46,600 lines.
+- **New: `orc lorc …`.** `status`, `runs`, `run <slug>`, `stats`, `settings`,
+  `settings set`, `habits`, `habits accept|decline`, `usage`, `graph`, `doctor`,
+  `version`, `changelog`. Each takes `--json`. ORC runs the lorc CLI and passes
+  its JSON through (`bin/lorc-bridge.js`). The states are `NOT-INSTALLED` and
+  `UNREADABLE`.
+- **New panel: Light ORC (`#/lorc`).** Overview, Runs, Usage, Settings,
+  Behaviour, Version. The rail item shows only when lorc is installed. The UI
+  never installs a package.
+- **`orc doctor`** names a lorc status line (`lorc (bypass)`) and shows the lorc
+  version. **`orc usage check`** reads `.claude/lorc/usage.json` when ORC's own
+  reading is missing or old.
+- **Fix:** `orc init`, `orc update` and the status-line designer no longer treat
+  a Light ORC status line as ORC's line (`lorc-statusline` contains the text
+  `orc-statusline`).
+
+**What you have to do:** run `orc update` once.
+
 ### v2.2.0 — one graph contract for every coding lane, a graph that reads Vue, and Haiku 5.5 _(2026-10-11)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

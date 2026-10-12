@@ -12,6 +12,7 @@ const path = require("path");
 const ROOT = path.join(__dirname, "..");
 const required = [
   "bin/cli.js",
+  "bin/lorc-bridge.js",
   "package.json",
   "README.md",
   // The `orc ui` web panel (v0.43.0). Named file by file, not covered by a
@@ -55,6 +56,7 @@ const required = [
   "bin/webui/css/panels/docs.css",
   "bin/webui/css/panels/extra.css",
   "bin/webui/css/panels/test.css",
+  "bin/webui/css/panels/lorc.css",
   "bin/webui/css/panels/experiment.css",
   // The client modules (v0.48.1). The <script> order in app.html is the load
   // order and the numeric prefix is that order; 99-boot.js must be last.
@@ -88,6 +90,7 @@ const required = [
   "bin/webui/js/panels/docs.js",
   "bin/webui/js/panels/extra.js",
   "bin/webui/js/panels/test.js",
+  "bin/webui/js/panels/lorc.js",
   "bin/webui/js/90-tour.js",
   "bin/webui/js/91-shortcuts.js",
   "bin/webui/js/99-boot.js",
@@ -110,6 +113,7 @@ const required = [
   "bin/webui/fixtures/handoff.js",
   "bin/webui/fixtures/maintenance.js",
   "bin/webui/fixtures/challenge.js",
+  "bin/webui/fixtures/lorc.js",
   "bin/webui/fixtures/docs.js",
   "bin/webui/fixtures/flow.js",
   "bin/webui/fixtures/crosslink.js",
@@ -124,6 +128,7 @@ const required = [
   // consistent, and without it a wording pass drifts back within two releases.
   "bin/webui/i18n/TERMS.md",
   "bin/webui/i18n/en/common.json",
+  "bin/webui/i18n/en/lorc.json",
   "bin/webui/i18n/en/nav.json",
   "bin/webui/i18n/en/banner.json",
   "bin/webui/i18n/en/overview.json",
@@ -151,6 +156,7 @@ const required = [
   "bin/webui/i18n/en/experiment.json",
   "bin/webui/i18n/en/tour.json",
   "bin/webui/i18n/id/common.json",
+  "bin/webui/i18n/id/lorc.json",
   "bin/webui/i18n/id/nav.json",
   "bin/webui/i18n/id/banner.json",
   "bin/webui/i18n/id/overview.json",
@@ -231,6 +237,13 @@ const required = [
   // /orc-fix. A publish that drops it leaves the lane naming a command that
   // crashes, and no fix ever reaches the review card.
   "bin/fix.js",
+  // v2.3.0 — the data halves moved out of bin/cli.js so Light ORC can copy them.
+  // `orc wiki status/sync/resolve` and every freshness reader require it.
+  "bin/wiki-core.js",
+  // `orc pattern status/show` and `orc export` require it.
+  "bin/pattern-core.js",
+  // `orc rules`, `orc rules slice` and `orc rules lint` require it.
+  "bin/rules-core.js",
 
   // The two DATED data files (v0.50.0). Both ship inside the package and both
   // are load-bearing on absence rather than on content: without the catalog

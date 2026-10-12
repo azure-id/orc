@@ -97,6 +97,8 @@ async function boot() {
   // v2.0.0 W7 — a waiting habit proposal is ONE quiet dot on the Behaviour rail
   // link. It is the only place outside that panel that shows habit state.
   behaviourRailDot();
+  // v2.3.0 — the Light ORC rail item stays hidden unless lorc is installed.
+  lorcRailShow();
 
   // First run for THIS project → the tour. Fixture mode is excluded: a tour of
   // canned data would teach the panel using numbers that are not real.
